@@ -6196,7 +6196,7 @@ function bindEvents() {
     const cursor = event.target.selectionStart || state.query.length;
     render();
     const search = document.getElementById("global-search");
-    search?.focus();
+    search?.focus({ preventScroll: true });
     search?.setSelectionRange(cursor, cursor);
   });
 
@@ -6520,7 +6520,13 @@ function bindLiveField(id, apply) {
     if (isCheckbox) return;
     const fresh = document.getElementById(id);
     if (fresh) {
-      fresh.focus();
+      // render() just tore down and rebuilt the whole subtree, so `fresh`
+      // is a brand-new element even though it looks identical — a plain
+      // focus() on a "new" node makes the browser treat it as a fresh
+      // focus target and auto-scroll it into view, which on every single
+      // keystroke reads as the whole screen jumping while typing.
+      // preventScroll keeps the caret/typing working with none of that.
+      fresh.focus({ preventScroll: true });
       // Some input types (email, number, ...) don't support the selection
       // API at all and throw on setSelectionRange — without this guard the
       // exception aborts the handler before the cursor is restored, so the
@@ -6557,7 +6563,7 @@ function bindAuthEvents() {
       const id = button.dataset.togglePassword;
       state.auth.visiblePasswordFields[id] = !state.auth.visiblePasswordFields[id];
       render();
-      document.getElementById(id)?.focus();
+      document.getElementById(id)?.focus({ preventScroll: true });
     });
   });
 
