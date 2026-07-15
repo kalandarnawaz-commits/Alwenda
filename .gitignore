@@ -1,6 +1,5 @@
 node_modules/
 dist/
-env.js
 .DS_Store
 server/node_modules/
 server/.env
