@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.js"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/main.js",
+    "src/services/auth/supabaseClient.js",
+    "src/data/mockData.js"
+  ]
+}

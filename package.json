@@ -1,0 +1,21 @@
+{
+  "name": "alwenda-city-super-app-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-ready MVP foundation for Alwenda, an AI-powered city super app.",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "build": "mkdir -p dist && cp index.html dist/ && cp -R src dist/ && cp -R locales dist/ && cp manifest.json dist/ && cp sw.js dist/ && ([ -f env.js ] && cp env.js dist/ || true)",
+    "serve": "python3 -m http.server 4173 --directory dist",
+    "test": "node --test 'test/**/*.test.js'",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "typescript": "^7.0.2"
+  }
+}

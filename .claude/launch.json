@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "alwenda-dev",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "/Users/apple/Projects/alwenda/.claude/devserver.py",
+        "/Users/apple/Projects/alwenda",
+        "5173"
+      ],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "alwenda-dist-serve",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "/Users/apple/Projects/alwenda/.claude/devserver.py",
+        "/Users/apple/Projects/alwenda/dist",
+        "4173"
+      ],
+      "port": 4173
+    }
+  ]
+}

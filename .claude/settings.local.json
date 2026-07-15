@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rli \"alwenda\" /Users/apple/.claude/projects/ 2>/dev/null; echo \"---\"; cat \"/Users/apple/Documents/Codex/2026-07-05/build-a-production-ready-mvp-for/README.md\")",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -n \"completeOnboarding\\(\" \"/Users/apple/Projects/alwenda/src/main.js\")",
+      "Bash(sed -i '' 's/production-sprint-19/production-sprint-20/g' index.html src/main.js)",
+      "Bash(rsync -av --exclude node_modules --exclude .git --exclude dist src/ \"/Users/apple/Projects/alwenda/src/\")",
+      "Bash(rsync -av index.html \"/Users/apple/Projects/alwenda/index.html\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
