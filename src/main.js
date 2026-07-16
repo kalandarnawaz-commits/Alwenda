@@ -90,7 +90,7 @@ import {
   completeUserProfile,
   AUTH_CALLBACK_PATH
 } from "./services/auth/supabaseClient.js?v=auth-redirect-fix-1";
-import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-1";
+import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-2";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
@@ -3347,6 +3347,7 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
     state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
     state.alwenChat.input = "";
     trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
+    if (result.createdHelpRequest) applyAlwenCreatedHelpRequest(result.createdHelpRequest);
   } catch (error) {
     const code = error?.code || "";
     state.alwenChat.status = "error";
@@ -4332,6 +4333,27 @@ function submitHelpRequest() {
   state.helpRequestPosted = request;
   state.helpRequestError = null;
   render();
+}
+
+/** Mirrors submitHelpRequest()'s request shape so a request Alwen creates
+ * (after the user confirms it in chat — see the create_hire_request tool in
+ * supabase/functions/alwen-chat) shows up in Hire/Need Help exactly like a
+ * manually posted one, not as a second, differently-shaped kind of card. */
+function applyAlwenCreatedHelpRequest(created) {
+  const matchedCategory = professionalCategories.find((item) => item.value.toLowerCase() === String(created.category || "").toLowerCase());
+  const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === created.urgency);
+  const request = {
+    id: created.id,
+    title: created.description,
+    area: created.area || created.city || city.name || "Vilnius",
+    budget: null,
+    urgency: t(matchedUrgency?.[1] || "needHelp.urgencyFlexible"),
+    status: t("status.open"),
+    quotes: [],
+    category: matchedCategory ? t(matchedCategory.labelKey) : created.category
+  };
+  helpRequests.unshift(request);
+  trackEvent("help_request_posted", { hasCategory: Boolean(matchedCategory), urgency: created.urgency, source: "alwen" });
 }
 
 function resetHelpRequestDraft() {

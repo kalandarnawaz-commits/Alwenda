@@ -68,7 +68,8 @@ export async function sendAlwenMessage({ message, language = "en", city = "Vilni
 
     return {
       answer: payload.answer,
-      conversationId: payload.conversationId || conversationId || null
+      conversationId: payload.conversationId || conversationId || null,
+      createdHelpRequest: payload.createdHelpRequest || null
     };
   } catch (error) {
     if (error instanceof AlwenChatError) throw error;

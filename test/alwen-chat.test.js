@@ -51,3 +51,26 @@ test("Alwen Edge Function requires auth, secret env key, and OpenAI Responses AP
   assert.match(source, /If the user writes in Lithuanian, answer in Lithuanian/);
   assert.ok(!source.includes("console.log(OPENAI_API_KEY"));
 });
+
+test("Alwen Edge Function only recommends Alwenda's own features", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /never send them to an outside site/);
+  assert.match(source, /Skelbiu\.lt/);
+});
+
+test("Alwen Edge Function persists conversation history and only creates a hire request after confirmation", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /from\("alwen_conversations"\)/);
+  assert.match(source, /from\("alwen_messages"\)/);
+  assert.match(source, /create_hire_request/);
+  assert.match(source, /only call this AFTER the user has explicitly confirmed/i);
+  assert.match(source, /from\("help_requests"\)/);
+  assert.match(source, /requester_user_id: authData\.user\.id/);
+});
+
+test("help_requests migration exists with RLS scoped to the requester", async () => {
+  const source = await readRepoFile("supabase/migrations/202607160001_alwen_help_requests.sql");
+  assert.match(source, /create table if not exists public\.help_requests/);
+  assert.match(source, /enable row level security/);
+  assert.match(source, /auth\.uid\(\) = requester_user_id/);
+});
