@@ -65,7 +65,7 @@ import {
   formatCurrency,
   formatDistanceMeters,
   SUPPORTED_LANGUAGES
-} from "./i18n/i18n.js?v=i18n-refactor-4";
+} from "./i18n/i18n.js?v=i18n-refactor-5";
 import { fetchOverpassCategory, IMPORT_CATEGORIES } from "./services/dataImport/overpassClient.js?v=data-import-3";
 import { queryLandmarksVilnius } from "./services/dataImport/wikidataClient.js?v=data-import-2";
 import { fetchPublicServicesPlaceholder } from "./services/dataImport/openDataClient.js?v=data-import-2";
