@@ -522,19 +522,32 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
     return;
   }
 
-  const profiles = await ensureUserProfiles();
-  const account = mapSupabaseUserToAccount(profiles.user || session.user, profiles);
-  state.auth.user = account;
+  // Being signed in is defined purely by having a real Supabase Auth
+  // session — never by whether the profile sync below succeeds. This runs
+  // on every reload and every token refresh, so treating a transient
+  // network blip or database hiccup there as "sign the user out" meant a
+  // fully-authenticated user could get bounced back to the login screen at
+  // any moment for a reason that had nothing to do with their session
+  // actually being invalid.
   state.auth.status = "signedIn";
+  state.auth.user = mapSupabaseUserToAccount(session.user);
   state.auth.authError = null;
   state.hasOnboarded = true;
   writeLocalStorage(ONBOARDED_KEY, true);
 
-  if (!account.profileComplete) {
-    resetProfileDraftFromUser(account);
-    state.auth.authView = "completeProfile";
-    state.activeView = "auth";
-    return;
+  try {
+    const profiles = await ensureUserProfiles();
+    const account = mapSupabaseUserToAccount(profiles.user || session.user, profiles);
+    state.auth.user = account;
+
+    if (!account.profileComplete) {
+      resetProfileDraftFromUser(account);
+      state.auth.authView = "completeProfile";
+      state.activeView = "auth";
+      return;
+    }
+  } catch (error) {
+    console.warn("[auth] Profile sync failed; staying signed in with basic account info.", error);
   }
 
   if (state.activeView === "auth" || state.activeView === "welcomeSequence") {
