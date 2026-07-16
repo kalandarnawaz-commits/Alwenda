@@ -202,8 +202,22 @@ export async function ensureUserProfiles() {
 /** Creates a real row in the listings table — published immediately, since
  * this is a direct "Publish" action, not a draft-then-publish flow. RLS
  * ("Owners create listings") already enforces owner_user_id = auth.uid(),
- * so there's nothing to check client-side beyond having a signed-in user. */
-export async function createListing({ title, description, category, priceAmount, priceCurrency, pricePeriod, neighbourhood }) {
+ * so there's nothing to check client-side beyond having a signed-in user.
+ * condition/pickupAvailable/deliveryAvailable have no dedicated columns —
+ * they live in the existing free-form `metadata` jsonb column. */
+export async function createListing({
+  title,
+  description,
+  category,
+  priceAmount,
+  priceCurrency,
+  pricePeriod,
+  neighbourhood,
+  condition,
+  pickupAvailable,
+  deliveryAvailable,
+  tags
+}) {
   const supabase = await getClient();
   const user = await getCurrentUser();
   if (!user) throw new AuthNotConfiguredError();
@@ -222,6 +236,12 @@ export async function createListing({ title, description, category, priceAmount,
       price_period: pricePeriod || null,
       location_label: neighbourhood || null,
       neighbourhood: neighbourhood || null,
+      tags: tags && tags.length ? tags : [],
+      metadata: {
+        ...(condition ? { condition } : {}),
+        pickupAvailable: Boolean(pickupAvailable),
+        deliveryAvailable: Boolean(deliveryAvailable)
+      },
       published_at: now
     })
     .select("*")
@@ -231,6 +251,44 @@ export async function createListing({ title, description, category, priceAmount,
   return data;
 }
 
+/** Uploads a photo the user attached in the create-listing form into the
+ * (public, owner-write-only) listing-photos storage bucket and links it via
+ * a listing_images row — both already covered by RLS scoped to the listing
+ * owner. Path is "<user_id>/<listing_id>/<uuid>.<ext>", matching the storage
+ * policies' expectation that the first path segment is the uploader's own
+ * user id. */
+export async function uploadListingPhoto({ listingId, file, sortOrder = 0 }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const storagePath = `${user.id}/${listingId}/${crypto.randomUUID()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage.from("listing-photos").upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await supabase
+    .from("listing_images")
+    .insert({ listing_id: listingId, storage_path: storagePath, sort_order: sortOrder })
+    .select("id, storage_path, sort_order")
+    .single();
+  if (error) throw error;
+
+  return { ...data, publicUrl: supabase.storage.from("listing-photos").getPublicUrl(storagePath).data.publicUrl };
+}
+
+export async function fetchListingImages(listingId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("listing_images")
+    .select("id, storage_path, sort_order")
+    .eq("listing_id", listingId)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data || []).map((row) => ({ ...row, publicUrl: supabase.storage.from("listing-photos").getPublicUrl(row.storage_path).data.publicUrl }));
+}
+
 export async function fetchMyListings() {
   const supabase = await getClient();
   const user = await getCurrentUser();
@@ -238,7 +296,11 @@ export async function fetchMyListings() {
 
   const { data, error } = await supabase.from("listings").select("*").eq("owner_user_id", user.id).order("created_at", { ascending: false });
   if (error) throw error;
-  return data || [];
+
+  const withImages = await Promise.all(
+    (data || []).map(async (listing) => ({ ...listing, images: await fetchListingImages(listing.id).catch(() => []) }))
+  );
+  return withImages;
 }
 
 export async function completeUserProfile({ displayName, profession, avatarUrl }) {

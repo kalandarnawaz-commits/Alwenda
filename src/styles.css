@@ -8642,6 +8642,43 @@ body {
   gap: 12px;
 }
 
+.create-listing-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.create-listing-photo-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.create-listing-photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.create-listing-photo-thumb button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.72);
+  color: white;
+  font-size: 0.9rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
 .auth-field label {
   color: var(--muted);
   font-size: 0.8rem;

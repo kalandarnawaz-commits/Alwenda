@@ -251,6 +251,7 @@
     "similarNearby": "Ähnliches in der Nähe",
     "filter": "Filter",
     "clear": "Löschen",
+    "remove": "Entfernen",
     "view": "Ansehen",
     "reserve": "Reservieren",
     "manage": "Verwalten",
@@ -1080,7 +1081,15 @@
     "missingTitleError": "Bitte zuerst einen Titel eingeben.",
     "genericError": "Inserat konnte nicht veröffentlicht werden. Bitte erneut versuchen.",
     "myListingsTitle": "Meine Inserate",
-    "signInHint": "Damit Käufer und Mieter wissen, an wen sie sich wenden können."
+    "signInHint": "Damit Käufer und Mieter wissen, an wen sie sich wenden können.",
+    "optional": "optional",
+    "conditionUnspecified": "Nicht angegeben",
+    "pickupAvailableLabel": "Abholung möglich",
+    "deliveryAvailableLabel": "Lieferung möglich",
+    "tagsLabel": "Tags (optional)",
+    "tagsPlaceholder": "z. B. Fahrrad, Mountainbike, Trek",
+    "photosLabel": "Fotos (optional)",
+    "addPhotosCta": "Fotos hinzufügen"
   },
   "booking": {
     "bookingSheetTitle": "{name} buchen",

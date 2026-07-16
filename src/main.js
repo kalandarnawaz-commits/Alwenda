@@ -90,8 +90,9 @@ import {
   completeUserProfile,
   createListing,
   fetchMyListings,
+  uploadListingPhoto,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=cdn-retry-1";
+} from "./services/auth/supabaseClient.js?v=listing-photos-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
@@ -168,7 +169,19 @@ const state = {
   helpRequestDraft: { text: "", urgency: "flexible" },
   helpRequestPosted: null,
   helpRequestError: null,
-  listingDraft: { title: "", description: "", category: "buy-sell", priceAmount: "", pricePeriod: "one_time", neighbourhood: "" },
+  listingDraft: {
+    title: "",
+    description: "",
+    category: "buy-sell",
+    priceAmount: "",
+    pricePeriod: "one_time",
+    neighbourhood: "",
+    condition: "",
+    pickupAvailable: false,
+    deliveryAvailable: false,
+    tags: "",
+    photoFiles: []
+  },
   listingSubmitStatus: "idle",
   listingSubmitError: null,
   myListings: [],
@@ -1690,6 +1703,14 @@ function listingTitle(item) {
 function listingMeta(item) {
   if (item.meta) return item.meta;
   return item.metaKey ? t(item.metaKey) : "";
+}
+
+/** Mock listings always have every field (distance, response time,
+ * reputation); real ones often don't, and joining those with a fixed
+ * " · " template leaves a dangling separator ("Vilnius · ") instead of
+ * just omitting the missing part. */
+function joinNonEmpty(parts, separator = " · ") {
+  return parts.filter(Boolean).join(separator);
 }
 
 function categoryLabel(type) {
@@ -4047,6 +4068,8 @@ const LISTING_PRICE_PERIODS = [
   ["month", "createListing.pricePerMonth"],
   ["quote", "createListing.priceQuote"]
 ];
+const LISTING_CONDITION_OPTIONS = ["new", "likeNew", "good", "fair", "used"];
+const LISTING_MAX_PHOTOS = 6;
 
 /** The real "create a listing" form — manual counterpart to Alwen drafting
  * one conversationally (see create_marketplace_listing in
@@ -4112,6 +4135,53 @@ function renderCreateListingForm() {
         <div class="auth-field">
           <label for="listing-neighbourhood">${t("createListing.neighbourhoodLabel")}</label>
           <input id="listing-neighbourhood" name="neighbourhood" value="${escapeHtml(draft.neighbourhood)}" placeholder="${city.name}" />
+        </div>
+
+        <div class="auth-field">
+          <label for="listing-condition">${t("field.condition")} (${t("createListing.optional")})</label>
+          <select id="listing-condition" data-role="listing-condition">
+            <option value="" ${draft.condition === "" ? "selected" : ""}>${t("createListing.conditionUnspecified")}</option>
+            ${LISTING_CONDITION_OPTIONS.map((value) => `<option value="${value}" ${draft.condition === value ? "selected" : ""}>${t(`marketplace.condition.${value}`)}</option>`).join("")}
+          </select>
+        </div>
+
+        <label class="settings-toggle-row">
+          <span>${t("createListing.pickupAvailableLabel")}</span>
+          <input type="checkbox" id="listing-pickup" ${draft.pickupAvailable ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("createListing.deliveryAvailableLabel")}</span>
+          <input type="checkbox" id="listing-delivery" ${draft.deliveryAvailable ? "checked" : ""} />
+        </label>
+
+        <div class="auth-field">
+          <label for="listing-tags">${t("createListing.tagsLabel")}</label>
+          <input id="listing-tags" name="tags" value="${escapeHtml(draft.tags)}" placeholder="${t("createListing.tagsPlaceholder")}" maxlength="200" />
+        </div>
+
+        <div class="auth-field">
+          <label>${t("createListing.photosLabel")}</label>
+          ${
+            draft.photoFiles.length
+              ? `<div class="create-listing-photo-grid">${draft.photoFiles
+                  .map(
+                    (file, index) => `
+                <div class="create-listing-photo-thumb">
+                  <img src="${URL.createObjectURL(file)}" alt="" />
+                  <button type="button" data-role="remove-listing-photo" data-index="${index}" aria-label="${t("common.remove")}">×</button>
+                </div>`
+                  )
+                  .join("")}</div>`
+              : ""
+          }
+          ${
+            draft.photoFiles.length < LISTING_MAX_PHOTOS
+              ? `<label class="claim-file-label">
+                   <span>${t("createListing.addPhotosCta")}</span>
+                   <input type="file" accept="image/*" multiple data-role="listing-photos-input" />
+                 </label>`
+              : ""
+          }
         </div>
 
         ${state.listingSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.listingSubmitError)}</p>` : ""}
@@ -4180,18 +4250,15 @@ function renderMarketplaceListing(item) {
       <div class="market-card-body">
         <div class="seller-row" role="button" tabindex="0" ${personAttrs}>
           <img src="${item.sellerAvatar}" alt="" />
-          <div><strong>${item.seller}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong><span>${item.distance} · ${item.area}${item.commute ? ` · ${item.commute}` : ""}${item.verifiedSeller ? ` · ${t("common.verifiedSeller")}` : ""}</span></div>
+          <div><strong>${item.seller}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong><span>${joinNonEmpty([item.distance, item.area, item.commute, item.verifiedSeller ? t("common.verifiedSeller") : null])}</span></div>
         </div>
         <span class="badge">${categoryLabel(item.type)}</span>
         ${item.workMode ? `<span class="badge badge-workmode">${item.workMode}</span>` : ""}
         <h3>${listingTitle(item)}</h3>
         <div class="price-row"><strong>${item.price}</strong></div>
         <p>${listingMeta(item)}</p>
-        <div class="ai-price-pill">${icon("spark")}<span>${item.aiMatch ? `${item.aiMatch} · ${item.aiPrice}` : item.aiPrice}</span></div>
-        <div class="trust-row visual-trust">
-          <span>${item.popularity}</span>
-          <span>${item.aiInsight}</span>
-        </div>
+        ${item.aiPrice || item.aiMatch ? `<div class="ai-price-pill">${icon("spark")}<span>${joinNonEmpty([item.aiMatch, item.aiPrice])}</span></div>` : ""}
+        ${item.popularity || item.aiInsight ? `<div class="trust-row visual-trust">${item.popularity ? `<span>${item.popularity}</span>` : ""}${item.aiInsight ? `<span>${item.aiInsight}</span>` : ""}</div>` : ""}
         <div class="market-actions"><button type="button" ${personAttrs}>${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button></div>
       </div>
     </article>
@@ -4226,8 +4293,14 @@ function renderListingDetail() {
     <section class="section-shell listing-detail-shell">
       <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
 
-      <div class="business-gallery-rail listing-gallery-rail">${gallery.map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`).join("")}</div>
-      ${gallery.length === 1 ? `<p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>` : ""}
+      ${
+        gallery.filter(Boolean).length
+          ? `<div class="business-gallery-rail listing-gallery-rail">${gallery
+              .filter(Boolean)
+              .map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`)
+              .join("")}</div>`
+          : `<p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>`
+      }
 
       <div class="screen-heading">
         <span class="badge category-chip">${categoryLabel(item.type)}</span>
@@ -4236,7 +4309,7 @@ function renderListingDetail() {
       </div>
 
       <div class="business-detail-strip">
-        <p class="business-detail-line">${pinIcon()}${escapeHtml(item.area)} · ${escapeHtml(item.distance)}</p>
+        <p class="business-detail-line">${pinIcon()}${joinNonEmpty([escapeHtml(item.area), escapeHtml(item.distance)])}</p>
         ${item.condition ? `<p class="business-detail-line">${t("field.condition")}: ${t(`marketplace.condition.${item.condition}`)}</p>` : ""}
       </div>
 
@@ -4258,7 +4331,10 @@ function renderListingDetail() {
         <img src="${item.sellerAvatar}" alt="" />
         <div>
           <strong>${escapeHtml(item.seller)}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong>
-          <span>${t("common.responseTime")}: ${t(`marketplace.responseTime.${item.sellerResponseTime}`)} · ${t("profile.reputation.overallReputation")} ${item.sellerReputation}</span>
+          <span>${joinNonEmpty([
+            item.sellerResponseTime ? `${t("common.responseTime")}: ${t(`marketplace.responseTime.${item.sellerResponseTime}`)}` : null,
+            item.sellerReputation != null ? `${t("profile.reputation.overallReputation")} ${item.sellerReputation}` : null
+          ])}</span>
         </div>
       </div>
       <button type="button" class="settings-row-button" ${sellerAttrs}>${t("common.viewProfile")}</button>
@@ -4539,26 +4615,35 @@ function formatListingPrice(priceAmount, pricePeriod, currency = "EUR") {
 function shapeListingForDisplay(created) {
   const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === created.category) || "buy-sell";
   const user = state.auth.user;
-  const isOwnListing = user && String(created.owner_user_id || user.id) === String(user.id);
+  const metadata = created.metadata || {};
+  const images = (created.images || []).map((img) => img.publicUrl);
   return {
     id: created.id,
     sellerId: created.owner_user_id || user?.id,
     type: uiCategory,
     title: created.title,
     meta: created.description || "",
+    description: created.description || "",
     area: created.neighbourhood || created.location_label || city.name,
     price: formatListingPrice(created.price_amount, created.price_period, created.price_currency),
     status: t("status.published"),
-    image: "",
-    gallery: [],
-    seller: isOwnListing ? user?.name || "" : "",
-    sellerAvatar: isOwnListing ? user?.avatar || "" : "",
+    condition: metadata.condition || null,
+    // Every field below reflects real, known data only — no fabricated
+    // "usually replies within an hour"/reputation-100 placeholders. A
+    // brand-new listing genuinely doesn't have a response-time track
+    // record yet, so that line is omitted entirely rather than invented;
+    // reputation is the user's real (currently always-0-until-earned)
+    // public_profiles.reputation_score, not a made-up number.
+    image: images[0] || "",
+    gallery: images,
+    seller: user?.name || "",
+    sellerAvatar: user?.avatar || "",
     sellerPhone: null,
-    sellerResponseTime: "fast",
-    sellerReputation: 100,
-    pickupAvailable: false,
-    deliveryAvailable: false,
-    verifiedSeller: isOwnListing ? Boolean(user?.emailVerified) : false,
+    sellerResponseTime: null,
+    sellerReputation: user?.publicProfile?.reputation_score ?? 0,
+    pickupAvailable: Boolean(metadata.pickupAvailable),
+    deliveryAvailable: Boolean(metadata.deliveryAvailable),
+    verifiedSeller: Boolean(user?.emailVerified),
     distance: "",
     popularity: "",
     aiPrice: "",
@@ -4615,11 +4700,45 @@ async function submitListingForm() {
       category: LISTING_CATEGORY_TO_DB[draft.category] || "buy_sell",
       priceAmount: draft.priceAmount ? Number(draft.priceAmount) : null,
       pricePeriod: draft.priceAmount ? draft.pricePeriod : null,
-      neighbourhood: draft.neighbourhood.trim()
+      neighbourhood: draft.neighbourhood.trim(),
+      condition: draft.condition || null,
+      pickupAvailable: draft.pickupAvailable,
+      deliveryAvailable: draft.deliveryAvailable,
+      tags: draft.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
     });
+
+    // The listing itself already exists at this point regardless of what
+    // happens next — a photo upload failing shouldn't undo that or block
+    // the user from seeing their (photo-less) listing; it's only ever
+    // logged, never surfaced as the whole submission having failed.
+    if (draft.photoFiles.length) {
+      const uploads = await Promise.allSettled(
+        draft.photoFiles.map((file, index) => uploadListingPhoto({ listingId: created.id, file, sortOrder: index }))
+      );
+      created.images = uploads.filter((result) => result.status === "fulfilled").map((result) => result.value);
+      uploads
+        .filter((result) => result.status === "rejected")
+        .forEach((result) => console.warn("[listings] Photo upload failed", result.reason));
+    }
+
     applyCreatedListing(created);
     state.listingSubmitStatus = "success";
-    state.listingDraft = { title: "", description: "", category: "buy-sell", priceAmount: "", pricePeriod: "one_time", neighbourhood: "" };
+    state.listingDraft = {
+      title: "",
+      description: "",
+      category: "buy-sell",
+      priceAmount: "",
+      pricePeriod: "one_time",
+      neighbourhood: "",
+      condition: "",
+      pickupAvailable: false,
+      deliveryAvailable: false,
+      tags: "",
+      photoFiles: []
+    };
     state.activeView = "listingDetail";
     state.selectedListingId = created.id;
   } catch (error) {
@@ -7022,11 +7141,34 @@ function bindEvents() {
   bindLiveField("listing-neighbourhood", (value) => {
     state.listingDraft.neighbourhood = value;
   });
+  bindLiveField("listing-tags", (value) => {
+    state.listingDraft.tags = value;
+  });
   document.querySelector('[data-role="listing-category"]')?.addEventListener("change", (event) => {
     state.listingDraft.category = event.target.value;
   });
   document.querySelector('[data-role="listing-price-period"]')?.addEventListener("change", (event) => {
     state.listingDraft.pricePeriod = event.target.value;
+  });
+  document.querySelector('[data-role="listing-condition"]')?.addEventListener("change", (event) => {
+    state.listingDraft.condition = event.target.value;
+  });
+  document.getElementById("listing-pickup")?.addEventListener("change", (event) => {
+    state.listingDraft.pickupAvailable = event.target.checked;
+  });
+  document.getElementById("listing-delivery")?.addEventListener("change", (event) => {
+    state.listingDraft.deliveryAvailable = event.target.checked;
+  });
+  document.querySelector('[data-role="listing-photos-input"]')?.addEventListener("change", (event) => {
+    const incoming = Array.from(event.target.files || []);
+    state.listingDraft.photoFiles = [...state.listingDraft.photoFiles, ...incoming].slice(0, LISTING_MAX_PHOTOS);
+    render();
+  });
+  document.querySelectorAll('[data-role="remove-listing-photo"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      state.listingDraft.photoFiles = state.listingDraft.photoFiles.filter((_, index) => index !== Number(button.dataset.index));
+      render();
+    });
   });
   document.querySelector('[data-role="create-listing-form"]')?.addEventListener("submit", (event) => {
     event.preventDefault();

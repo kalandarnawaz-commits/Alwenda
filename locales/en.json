@@ -251,6 +251,7 @@
     "similarNearby": "Similar nearby",
     "filter": "Filter",
     "clear": "Clear",
+    "remove": "Remove",
     "view": "View",
     "reserve": "Reserve",
     "manage": "Manage",
@@ -1080,7 +1081,15 @@
     "missingTitleError": "Add a title first.",
     "genericError": "Could not publish your listing. Please try again.",
     "myListingsTitle": "My Listings",
-    "signInHint": "So buyers and renters know who to contact."
+    "signInHint": "So buyers and renters know who to contact.",
+    "optional": "optional",
+    "conditionUnspecified": "Not specified",
+    "pickupAvailableLabel": "Pickup available",
+    "deliveryAvailableLabel": "Delivery available",
+    "tagsLabel": "Tags (optional)",
+    "tagsPlaceholder": "e.g. bike, mountain, trek",
+    "photosLabel": "Photos (optional)",
+    "addPhotosCta": "Add photos"
   },
   "booking": {
     "bookingSheetTitle": "Book {name}",

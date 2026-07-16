@@ -7,6 +7,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 const HELP_REQUEST_URGENCIES = ["today", "thisWeek", "flexible"];
 const LISTING_CATEGORIES = ["buy_sell", "rentals", "jobs", "local_services", "vehicles", "property"];
 const LISTING_PRICE_PERIODS = ["one_time", "hour", "day", "month", "quote"];
+const LISTING_CONDITIONS = ["new", "likeNew", "good", "fair", "used"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,7 +107,15 @@ const tools = [
         },
         priceAmount: { type: "number", description: "The asking price as a plain number, e.g. 150. Omit if the user wants to ask for quotes instead." },
         pricePeriod: { type: "string", enum: LISTING_PRICE_PERIODS, description: "one_time for a sale, hour/day/month for a rental rate, quote if no fixed price." },
-        area: { type: "string", description: "Neighbourhood or area if the user mentioned one, otherwise omit." }
+        area: { type: "string", description: "Neighbourhood or area if the user mentioned one, otherwise omit." },
+        condition: { type: "string", enum: LISTING_CONDITIONS, description: "Only for physical items being sold — omit for rentals/jobs/services." },
+        pickupAvailable: { type: "boolean", description: "True if the user said the buyer can pick it up in person." },
+        deliveryAvailable: { type: "boolean", description: "True if the user said they can deliver it." },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "A few short keywords buyers might search for, e.g. ['bike', 'mountain', 'trek']. Omit if nothing obvious."
+        }
       },
       required: ["title", "description", "category"],
       additionalProperties: false
@@ -311,6 +320,8 @@ Deno.serve(async (req) => {
       const priceAmount = typeof args.priceAmount === "number" && Number.isFinite(args.priceAmount) && args.priceAmount >= 0 ? args.priceAmount : null;
       const pricePeriod = typeof args.pricePeriod === "string" && LISTING_PRICE_PERIODS.includes(args.pricePeriod) ? args.pricePeriod : priceAmount ? "one_time" : null;
       const area = typeof args.area === "string" && args.area.trim() ? args.area.trim().slice(0, 120) : null;
+      const condition = typeof args.condition === "string" && LISTING_CONDITIONS.includes(args.condition) ? args.condition : null;
+      const tags = Array.isArray(args.tags) ? args.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 10) : [];
 
       let toolOutput: string;
       if (title && description) {
@@ -326,9 +337,15 @@ Deno.serve(async (req) => {
             price_period: pricePeriod,
             location_label: area,
             neighbourhood: area,
+            tags,
+            metadata: {
+              ...(condition ? { condition } : {}),
+              pickupAvailable: Boolean(args.pickupAvailable),
+              deliveryAvailable: Boolean(args.deliveryAvailable)
+            },
             published_at: new Date().toISOString()
           })
-          .select("id, title, description, category, price_amount, price_currency, price_period, neighbourhood, location_label")
+          .select("id, title, description, category, price_amount, price_currency, price_period, neighbourhood, location_label, metadata, tags")
           .single();
 
         if (insertError || !inserted) {

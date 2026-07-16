@@ -251,6 +251,7 @@
     "similarNearby": "Panašu netoliese",
     "filter": "Filtras",
     "clear": "Išvalyti",
+    "remove": "Pašalinti",
     "view": "Peržiūrėti",
     "reserve": "Rezervuoti",
     "manage": "Tvarkyti",
@@ -1080,7 +1081,15 @@
     "missingTitleError": "Pirmiausia įveskite pavadinimą.",
     "genericError": "Nepavyko paskelbti skelbimo. Bandykite dar kartą.",
     "myListingsTitle": "Mano skelbimai",
-    "signInHint": "Kad pirkėjai ir nuomininkai žinotų, į ką kreiptis."
+    "signInHint": "Kad pirkėjai ir nuomininkai žinotų, į ką kreiptis.",
+    "optional": "neprivaloma",
+    "conditionUnspecified": "Nenurodyta",
+    "pickupAvailableLabel": "Galima atsiimti",
+    "deliveryAvailableLabel": "Galimas pristatymas",
+    "tagsLabel": "Žymos (neprivaloma)",
+    "tagsPlaceholder": "pvz., dviratis, kalnų, trek",
+    "photosLabel": "Nuotraukos (neprivaloma)",
+    "addPhotosCta": "Pridėti nuotraukų"
   },
   "booking": {
     "bookingSheetTitle": "Rezervuoti: {name}",

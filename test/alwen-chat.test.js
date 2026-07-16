@@ -88,3 +88,25 @@ test("Alwen chat client passes through createdHelpRequest and createdListing", a
   assert.match(source, /createdHelpRequest: payload\.createdHelpRequest \|\| null/);
   assert.match(source, /createdListing: payload\.createdListing \|\| null/);
 });
+
+test("create_marketplace_listing tool supports condition, pickup/delivery, and tags", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /condition: \{ type: "string", enum: LISTING_CONDITIONS/);
+  assert.match(source, /pickupAvailable: \{ type: "boolean"/);
+  assert.match(source, /deliveryAvailable: \{ type: "boolean"/);
+  assert.match(source, /tags: \{\s*type: "array"/);
+});
+
+test("listing photo storage migration creates a public bucket with owner-scoped write policies", async () => {
+  const source = await readRepoFile("supabase/migrations/202607170001_listing_photos_storage.sql");
+  assert.match(source, /insert into storage\.buckets \(id, name, public\)/);
+  assert.match(source, /values \('listing-photos', 'listing-photos', true\)/);
+  assert.match(source, /\(storage\.foldername\(name\)\)\[1\] = auth\.uid\(\)::text/);
+});
+
+test("supabaseClient exposes real listing photo upload/fetch, not a mock", async () => {
+  const source = await readRepoFile("src/services/auth/supabaseClient.js");
+  assert.match(source, /export async function uploadListingPhoto/);
+  assert.match(source, /supabase\.storage\.from\("listing-photos"\)\.upload/);
+  assert.match(source, /export async function fetchListingImages/);
+});
