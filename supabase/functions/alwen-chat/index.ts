@@ -86,24 +86,45 @@ const tools = [
   }
 ];
 
+const OPENAI_TIMEOUT_MS = 20000;
+
+// This confirm-then-create flow can make this call twice in one request
+// (once to decide whether to call create_hire_request, once more with the
+// tool's result to get the final confirmation text), and a plain fetch()
+// has no timeout of its own — if OpenAI ever stalls, the whole request
+// would otherwise hang indefinitely with no feedback to the user instead
+// of failing with a clear, bounded error.
 async function callResponses(input: unknown[]) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ model: "gpt-4.1-mini", input, tools, max_output_tokens: 700 })
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    console.error("[alwen-chat] OpenAI request failed", {
-      status: response.status,
-      type: payload?.error?.type || "unknown"
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ model: "gpt-4.1-mini", input, tools, max_output_tokens: 700 }),
+      signal: controller.signal
     });
-    throw new Error("OPENAI_REQUEST_FAILED");
+    const payload = await response.json();
+    if (!response.ok) {
+      console.error("[alwen-chat] OpenAI request failed", {
+        status: response.status,
+        type: payload?.error?.type || "unknown"
+      });
+      throw new Error("OPENAI_REQUEST_FAILED");
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[alwen-chat] OpenAI request timed out", { timeoutMs: OPENAI_TIMEOUT_MS });
+      throw new Error("OPENAI_REQUEST_FAILED");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return payload;
 }
 
 function extractAnswerText(payload: { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> }): string {
@@ -163,18 +184,18 @@ Deno.serve(async (req) => {
   if (message.length > MAX_MESSAGE_LENGTH) return safeError(`Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`, 400);
 
   try {
-    const { data: existingConversation } = await supabase.from("alwen_conversations").select("id").eq("id", conversationId).maybeSingle();
-    if (!existingConversation) {
-      await supabase.from("alwen_conversations").insert({ id: conversationId, user_id: authData.user.id, title: message.slice(0, 80) });
-    }
-
-    const { data: priorMessages } = await supabase
-      .from("alwen_messages")
-      .select("role, content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true });
-
-    await supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "user", content: message });
+    // These two reads don't depend on each other (a brand-new conversation
+    // just has no prior messages yet either way), so running them together
+    // instead of one-after-another saves a full round trip off the top of
+    // every request.
+    const [{ data: existingConversation }, { data: priorMessages }] = await Promise.all([
+      supabase.from("alwen_conversations").select("id").eq("id", conversationId).maybeSingle(),
+      supabase
+        .from("alwen_messages")
+        .select("role, content")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+    ]);
 
     const input: unknown[] = [
       { role: "system", content: systemPrompt(language, city) },
@@ -182,7 +203,19 @@ Deno.serve(async (req) => {
       { role: "user", content: message }
     ];
 
+    // Persisting this turn doesn't need to finish before we ask OpenAI —
+    // there's nothing in `input` that depends on these writes completing —
+    // so let it run concurrently with the (much slower) model call instead
+    // of adding its latency on top.
+    const persistUserTurn = Promise.all([
+      existingConversation
+        ? Promise.resolve()
+        : supabase.from("alwen_conversations").insert({ id: conversationId, user_id: authData.user.id, title: message.slice(0, 80) }),
+      supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "user", content: message })
+    ]);
+
     let payload = await callResponses(input);
+    await persistUserTurn;
     const functionCall = (payload.output || []).find((item: { type?: string }) => item.type === "function_call") as
       | { type: string; call_id: string; name: string; arguments: string }
       | undefined;

@@ -90,7 +90,7 @@ import {
   completeUserProfile,
   AUTH_CALLBACK_PATH
 } from "./services/auth/supabaseClient.js?v=auth-redirect-fix-1";
-import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-2";
+import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-3";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
