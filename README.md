@@ -73,15 +73,13 @@ Row Level Security should allow authenticated users to read public profiles, ups
 
 For the production database schema, RLS matrix, release/cache runbook, observability foundation, and Supabase migration notes, see `docs/production-foundation.md`. The migration file is `supabase/migrations/202607150001_production_foundation.sql`.
 
-## Backend (Alwen server)
+## Backend (Alwen chat)
 
-The frontend above is a zero-build static app and stays that way — it never talks to OpenAI, and never holds a service-role Supabase key. Anything that needs a secret key lives in `server/`, a separate Node/Express app:
+The frontend above is a zero-build static app and stays that way — it never talks to OpenAI, and never holds a service-role Supabase key or the OpenAI key. The secret-holding logic lives in a Supabase Edge Function, `supabase/functions/alwen-chat/index.ts`, deployed to the connected Supabase project.
+
+The function requires a Supabase access token (`Authorization: Bearer <token>`) and responds with a clear "not configured" error — not a fake reply — if `OPENAI_API_KEY` is missing from its Edge Function secrets. Deploy/update it with:
 
 ```bash
-cd server
-npm install
-cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_ANON_KEY, OPENAI_API_KEY
-npm run dev             # http://localhost:8787
+supabase functions deploy alwen-chat
+supabase secrets set OPENAI_API_KEY=sk-...
 ```
-
-`GET /api/health` reports whether Supabase and Alwen (OpenAI) are configured, without requiring auth. `POST /api/alwen/chat` requires a Supabase access token (`Authorization: Bearer <token>`) and responds with a clear "not configured" error — not a fake reply — if `OPENAI_API_KEY` is missing. See `server/alwenAgent.js` and `server/tools/` for the Alwen agent and its tools.
