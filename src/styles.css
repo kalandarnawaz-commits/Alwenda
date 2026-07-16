@@ -2291,7 +2291,7 @@ body.has-open-sheet {
   padding: 16px;
 }
 
-.achievement-grid article > span {
+.achievement-grid article > span:not(.achievement-date) {
   display: grid;
   place-items: center;
   width: 42px;
