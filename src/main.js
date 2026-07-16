@@ -121,6 +121,7 @@ const state = {
   activeSheet: null,
   headerSolid: false,
   alwenOpen: false,
+  quickTranslateOpen: false,
   alwenChat: {
     input: "",
     lastMessage: "",
@@ -2104,6 +2105,7 @@ function renderShell() {
       </nav>
       ${renderTytOrb()}
       ${renderAlwenDock()}
+      ${state.activeView !== "translate" ? renderQuickTranslateDock() : ""}
       ${renderSheet()}
     </div>
   `;
@@ -3259,11 +3261,6 @@ function renderTytSheet() {
 }
 
 function renderAlwenDock() {
-  // The compact voice-translate card is skipped when the full Translate
-  // screen is already open — otherwise the same data-translate-* controls
-  // would exist twice in the DOM at once and the singular-selector bindings
-  // in bindEvents() would only ever reach the first copy.
-  const showQuickTranslate = state.activeView !== "translate";
   const chat = state.alwenChat;
   const isLoading = chat.status === "loading";
   const canRetry = chat.status === "error" && chat.lastMessage;
@@ -3278,8 +3275,6 @@ function renderAlwenDock() {
           </div>
           <button data-alwen-toggle aria-label="${t("common.close")}">×</button>
         </div>
-
-        ${showQuickTranslate ? renderAlwenQuickTranslate() : ""}
 
         <p class="alwen-panel-intro">${t("alwen.alwenDockHint")}</p>
         <form class="alwen-chat-form" data-alwen-chat-form>
@@ -3411,6 +3406,31 @@ function renderAlwenQuickTranslate() {
 
       <button type="button" class="alwen-quick-translate-open" data-view="translate">${t("translate.openFullTranslator")}</button>
     </div>
+  `;
+}
+
+/** Always-reachable real-time voice translation shortcut, pinned to the top
+ * right — separate from the Alwen assistant dock (bottom right) so a user
+ * mid-conversation with someone doesn't have to open the whole Alwen chat
+ * panel just to translate a sentence. Reuses renderAlwenQuickTranslate()'s
+ * language pickers/mic/result markup and its existing data-translate-*
+ * bindings — only the surrounding shell (a top-right dock instead of being
+ * nested in the Alwen panel) is new. Hidden on the full Translate screen for
+ * the same reason the old embedded copy was: two copies of the same
+ * data-translate-* controls in the DOM at once would break the
+ * singular-selector bindings in bindEvents(). */
+function renderQuickTranslateDock() {
+  return `
+    <aside class="quick-translate-dock ${state.quickTranslateOpen ? "is-open" : ""}" aria-label="${t("translate.quickTranslate")}">
+      <button class="quick-translate-orb" data-quick-translate-toggle aria-expanded="${state.quickTranslateOpen ? "true" : "false"}" aria-label="${t("translate.quickTranslate")}" title="${t("translate.quickTranslate")}">${icon(state.translateRecording ? "stop" : "recordMic")}</button>
+      <div class="quick-translate-panel" role="dialog" aria-label="${t("translate.quickTranslate")}">
+        <div class="quick-translate-panel-head">
+          <strong>${t("translate.quickTranslate")}</strong>
+          <button data-quick-translate-toggle aria-label="${t("common.close")}">×</button>
+        </div>
+        ${renderAlwenQuickTranslate()}
+      </div>
+    </aside>
   `;
 }
 
@@ -6365,6 +6385,7 @@ function bindEvents() {
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.alwenOpen = false;
+      state.quickTranslateOpen = false;
       if (button.dataset.category) state.category = button.dataset.category;
       if (button.dataset.seeAllCategory) {
         state.exploreCategory = button.dataset.seeAllCategory;
@@ -6382,6 +6403,14 @@ function bindEvents() {
   document.querySelectorAll("[data-alwen-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
       state.alwenOpen = !state.alwenOpen;
+      state.activeSheet = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-quick-translate-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.quickTranslateOpen = !state.quickTranslateOpen;
       state.activeSheet = null;
       render();
     });

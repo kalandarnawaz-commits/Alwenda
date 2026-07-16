@@ -6353,6 +6353,96 @@ body {
   line-height: 1.5;
 }
 
+/* Real-time voice translate shortcut — same fixed-FAB-plus-popover pattern
+   as .alwen-dock/.alwen-orb/.alwen-panel above, just pinned top right (below
+   the header) instead of bottom right, and the panel drops down instead of
+   up since there's no room above it. */
+.quick-translate-dock {
+  position: fixed;
+  top: calc(80px + env(safe-area-inset-top));
+  right: max(16px, calc((100vw - 1200px) / 2 + 16px));
+  z-index: 65;
+  display: grid;
+  justify-items: end;
+  width: min(380px, calc(100vw - 24px));
+  height: 48px;
+  pointer-events: none;
+}
+
+.quick-translate-orb {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: #111111;
+  color: white;
+  box-shadow: 0 18px 48px rgba(17, 17, 17, 0.24);
+  pointer-events: auto;
+}
+
+.quick-translate-orb svg {
+  width: 22px;
+  height: 22px;
+}
+
+.quick-translate-panel {
+  position: absolute;
+  right: 0;
+  top: 58px;
+  display: none;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(58vh, 430px);
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 28px 90px rgba(28, 25, 20, 0.22);
+  backdrop-filter: blur(24px);
+  pointer-events: auto;
+}
+
+.quick-translate-dock.is-open .quick-translate-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-translate-panel-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quick-translate-panel-head strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+
+.quick-translate-panel-head button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 850;
+}
+
+@media (max-width: 480px) {
+  .quick-translate-orb {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 .alwen-chat-form {
   display: grid;
   gap: 8px;
