@@ -6450,10 +6450,12 @@ function bindEvents() {
     state.query = event.target.value;
     state.category = "all";
     const cursor = event.target.selectionStart || state.query.length;
-    render();
-    const search = document.getElementById("global-search");
-    search?.focus({ preventScroll: true });
-    search?.setSelectionRange(cursor, cursor);
+    scheduleLiveFieldRender("global-search", () => {
+      const search = document.getElementById("global-search");
+      if (!search) return;
+      search.focus({ preventScroll: true });
+      search.setSelectionRange(cursor, cursor);
+    });
   });
 
   document.querySelectorAll("[data-sheet]").forEach((button) => {
@@ -6785,6 +6787,33 @@ function bindEvents() {
   bindPublicProfileEvents();
 }
 
+/** render() rebuilds the *entire* #app subtree (see render(), below), which
+ * tears down and recreates whatever input is currently focused. Doing that
+ * synchronously on every keystroke — even with preventScroll on the
+ * refocus() — forces a real blur+focus cycle on the actual DOM node each
+ * letter, which on mobile briefly dismisses and reopens the on-screen
+ * keyboard, reading as the whole screen jumping while typing. Coalescing
+ * rapid keystrokes so the (expensive, focus-destroying) render only runs
+ * once typing actually pauses keeps the keyboard — and the layout — stable
+ * while the user is actively typing, at the cost of dependent UI (character
+ * counts, live validation) updating a beat after the keystroke instead of
+ * on it. Keyed per field so typing in one field never resets another's
+ * pending render. */
+const liveFieldRenderTimers = new Map();
+const LIVE_FIELD_RENDER_DEBOUNCE_MS = 200;
+
+function scheduleLiveFieldRender(key, afterRender) {
+  clearTimeout(liveFieldRenderTimers.get(key));
+  liveFieldRenderTimers.set(
+    key,
+    setTimeout(() => {
+      liveFieldRenderTimers.delete(key);
+      render();
+      afterRender();
+    }, LIVE_FIELD_RENDER_DEBOUNCE_MS)
+  );
+}
+
 function bindLiveField(id, apply) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -6792,28 +6821,29 @@ function bindLiveField(id, apply) {
   el.addEventListener(isCheckbox ? "change" : "input", (event) => {
     const cursor = isCheckbox ? null : event.target.selectionStart;
     apply(isCheckbox ? event.target.checked : event.target.value);
-    render();
-    if (isCheckbox) return;
-    const fresh = document.getElementById(id);
-    if (fresh) {
+    if (isCheckbox) {
+      render();
+      return;
+    }
+    scheduleLiveFieldRender(id, () => {
+      const fresh = document.getElementById(id);
+      if (!fresh) return;
       // render() just tore down and rebuilt the whole subtree, so `fresh`
       // is a brand-new element even though it looks identical — a plain
       // focus() on a "new" node makes the browser treat it as a fresh
-      // focus target and auto-scroll it into view, which on every single
-      // keystroke reads as the whole screen jumping while typing.
+      // focus target and auto-scroll it into view.
       // preventScroll keeps the caret/typing working with none of that.
       fresh.focus({ preventScroll: true });
       // Some input types (email, number, ...) don't support the selection
       // API at all and throw on setSelectionRange — without this guard the
       // exception aborts the handler before the cursor is restored, so the
-      // caret silently resets to the start on every keystroke and typed
-      // characters appear to build up in reverse.
+      // caret silently resets to the start once the debounced render fires.
       try {
         fresh.setSelectionRange(cursor, cursor);
       } catch {
         /* Selection API unsupported for this input type — focus() above is enough. */
       }
-    }
+    });
   });
 }
 
