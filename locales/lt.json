@@ -580,11 +580,45 @@
       "publicProfileContextCommunity": "Paskelbė Bendruomenėje",
       "publicProfileContextMarketplace": "Parduoda Rinkoje",
       "publicProfileContextHire": "Specialistas skiltyje Samdyti",
-      "publicProfileContextReview": "Paliko atsiliepimą"
+      "publicProfileContextReview": "Paliko atsiliepimą",
+      "activeListings": "Aktyvūs skelbimai"
+    },
+    "identity": {
+      "memberSince": "Narys nuo {date}",
+      "memberDefaultRole": "Alwenda narys",
+      "emailVerified": "El. paštas patvirtintas",
+      "phoneVerified": "Telefonas patvirtintas",
+      "identityVerified": "Tapatybė patvirtinta"
+    },
+    "completeness": {
+      "title": "Profilio užpildymas"
+    },
+    "trust": {
+      "title": "Pasitikėjimas ir patvirtinimas",
+      "hint": "Ką kiti naudotojai mato prieš nuspręsdami su jumis bendrauti.",
+      "buildingTrust": "Kuriamas pasitikėjimas",
+      "noVerificationYet": "Kol kas nėra patvirtinimų — patvirtinkite el. paštą ar telefoną, kad pradėtumėte.",
+      "howCalculated": "Kaip skaičiuojamas pasitikėjimas",
+      "factorIdentity": "Tapatybės ir telefono patvirtinimas",
+      "factorTransactions": "Užbaigti prekyvietės sandoriai",
+      "factorReviews": "Atsiliepimai iš tikrų sąveikų",
+      "factorResponse": "Kaip greitai atsakote",
+      "factorCommunity": "Bendruomenės indėlis"
+    },
+    "activity": {
+      "title": "Naujausia veikla",
+      "published": "Paskelbta",
+      "empty": "Kol kas nėra užbaigtos veiklos."
     },
     "achievements": {
       "achievements": "Pasiekimai",
-      "achievementsHint": "Pasitikėjimo signalai, kuriuos galima pajusti iš karto."
+      "achievementsHint": "Pasitikėjimo signalai, kuriuos galima pajusti iš karto.",
+      "verifiedIdentityTitle": "Patvirtinta tapatybė",
+      "verifiedIdentityDetail": "Patvirtintas tikras el. pašto adresas.",
+      "firstListingTitle": "Pirmas skelbimas",
+      "firstListingDetail": "Paskelbtas tikras skelbimas Prekyvietėje.",
+      "businessOwnerTitle": "Verslo savininkas",
+      "businessOwnerDetail": "Valdo patvirtintą verslą Alwenda."
     },
     "reputation": {
       "reputationTimeline": "Reputacijos eiga",

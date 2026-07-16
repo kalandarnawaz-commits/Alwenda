@@ -6068,23 +6068,13 @@ select:focus-visible {
   background: transparent !important;
 }
 
-.alwen-dock {
-  position: fixed !important;
-  display: grid !important;
-  justify-items: end !important;
-  width: min(360px, calc(100vw - 24px)) !important;
-  height: 56px !important;
-  right: max(14px, calc((100vw - 1200px) / 2 + 14px)) !important;
-  bottom: calc(94px + env(safe-area-inset-bottom)) !important;
-  z-index: 60 !important;
-  pointer-events: none !important;
-}
-
+/* An earlier .alwen-dock rule (position/display/width/height/right/bottom/
+   z-index: 60/pointer-events) used to live here — every one of those
+   properties is redeclared !important further down (the real, active
+   .alwen-dock rule, z-index 65), so it had zero effect and was dead
+   code. Keeping .alwen-orb's position: relative, which nothing else sets. */
 .alwen-orb {
   position: relative !important;
-  width: 56px !important;
-  height: 56px !important;
-  pointer-events: auto !important;
 }
 
 .alwen-panel {
@@ -6911,6 +6901,8 @@ body {
 }
 
 .profile-list button {
+  display: grid;
+  gap: 4px;
   min-height: 56px;
   border-radius: 18px;
   font-weight: 850;
@@ -7156,9 +7148,12 @@ body {
     border-radius: 24px !important;
   }
 
-  .bottom-nav {
-    z-index: 80 !important;
-  }
+  /* No mobile-specific z-index bump here anymore — it used to push
+     .bottom-nav to 80, above .tyt-orb (75) and .alwen-dock/
+     .quick-translate-dock (65), inverting the desktop stacking order
+     (nav 70 < orb 75) and letting the nav bar's own background render
+     over those floating buttons wherever they overlap on narrow
+     screens. Falls back to the base rule's z-index: 70 instead. */
 }
 
 /* Create page command centre polish. */
@@ -9114,6 +9109,137 @@ body {
   background-size: cover;
   background-color: var(--surface-soft);
   flex-shrink: 0;
+}
+
+/* ============================================================
+   Identity hero (Profile redesign) — a compact identity card
+   replacing the old oversized cover-photo hero.
+   ============================================================ */
+.identity-hero {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 30px 20px 22px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 24px);
+  box-shadow: var(--shadow-soft);
+}
+
+.identity-hero .avatar-frame.identity-avatar,
+.identity-hero .identity-avatar .profile-portrait,
+.identity-hero .identity-avatar .public-profile-initials {
+  width: 84px;
+  height: 84px;
+}
+
+.identity-hero .identity-avatar {
+  margin-bottom: 6px;
+}
+
+.identity-hero h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1.2;
+}
+
+.identity-role {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.identity-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.identity-badges {
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.identity-edit-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.profile-completeness {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 16px);
+  background: var(--surface);
+}
+
+.profile-completeness-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.profile-completeness-row strong {
+  color: var(--ink);
+}
+
+.profile-completeness-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.profile-completeness-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(52, 211, 153, 0.9);
+}
+
+.trust-headline {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.trust-details {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.trust-details summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.trust-details ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.achievement-date {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .profile-quick-actions {

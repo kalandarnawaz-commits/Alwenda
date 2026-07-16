@@ -580,11 +580,45 @@
       "publicProfileContextCommunity": "Posted in Community",
       "publicProfileContextMarketplace": "Selling on Marketplace",
       "publicProfileContextHire": "Professional on Hire",
-      "publicProfileContextReview": "Left a review"
+      "publicProfileContextReview": "Left a review",
+      "activeListings": "Active listings"
+    },
+    "identity": {
+      "memberSince": "Member since {date}",
+      "memberDefaultRole": "Alwenda member",
+      "emailVerified": "Email verified",
+      "phoneVerified": "Phone verified",
+      "identityVerified": "Identity verified"
+    },
+    "completeness": {
+      "title": "Profile completeness"
+    },
+    "trust": {
+      "title": "Trust & verification",
+      "hint": "What other users see before deciding to engage with you.",
+      "buildingTrust": "Building trust",
+      "noVerificationYet": "No verifications yet — verify your email or phone to start.",
+      "howCalculated": "How trust is calculated",
+      "factorIdentity": "Identity and phone verification",
+      "factorTransactions": "Completed marketplace transactions",
+      "factorReviews": "Reviews from real interactions",
+      "factorResponse": "How quickly you respond",
+      "factorCommunity": "Community contributions"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "published": "Published",
+      "empty": "No completed activity yet."
     },
     "achievements": {
       "achievements": "Achievements",
-      "achievementsHint": "Trust signals people can feel at a glance."
+      "achievementsHint": "Trust signals people can feel at a glance.",
+      "verifiedIdentityTitle": "Verified Identity",
+      "verifiedIdentityDetail": "Confirmed a real, verified email address.",
+      "firstListingTitle": "First Listing",
+      "firstListingDetail": "Published a real listing on Marketplace.",
+      "businessOwnerTitle": "Business Owner",
+      "businessOwnerDetail": "Owns a claimed business on Alwenda."
     },
     "reputation": {
       "reputationTimeline": "Reputation timeline",

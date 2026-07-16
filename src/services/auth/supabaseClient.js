@@ -303,6 +303,25 @@ export async function fetchMyListings() {
   return withImages;
 }
 
+/** For a public profile's "Active listings" section — anyone's published
+ * listings are readable by RLS regardless of who's asking, so no auth
+ * check is needed here (unlike fetchMyListings, which is about the
+ * signed-in user's own listings). Returns [] harmlessly for a mock
+ * seller id (not a real UUID) rather than erroring. */
+export async function fetchListingsByOwner(ownerId, limit = 3) {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("listings")
+    .select("id, title, category, price_amount, price_period, price_currency, status")
+    .eq("owner_user_id", ownerId)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return data || [];
+}
+
 export async function completeUserProfile({ displayName, profession, avatarUrl }) {
   const supabase = await getClient();
   const user = await getCurrentUser();

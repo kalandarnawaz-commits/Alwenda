@@ -580,11 +580,45 @@
       "publicProfileContextCommunity": "In der Community gepostet",
       "publicProfileContextMarketplace": "Verkauft auf dem Marktplatz",
       "publicProfileContextHire": "Fachkraft bei Beauftragen",
-      "publicProfileContextReview": "Hat eine Bewertung hinterlassen"
+      "publicProfileContextReview": "Hat eine Bewertung hinterlassen",
+      "activeListings": "Aktive Inserate"
+    },
+    "identity": {
+      "memberSince": "Mitglied seit {date}",
+      "memberDefaultRole": "Alwenda-Mitglied",
+      "emailVerified": "E-Mail verifiziert",
+      "phoneVerified": "Telefon verifiziert",
+      "identityVerified": "Identität verifiziert"
+    },
+    "completeness": {
+      "title": "Profilvollständigkeit"
+    },
+    "trust": {
+      "title": "Vertrauen & Verifizierung",
+      "hint": "Was andere Nutzer sehen, bevor sie sich für eine Interaktion entscheiden.",
+      "buildingTrust": "Vertrauen wird aufgebaut",
+      "noVerificationYet": "Noch keine Verifizierungen — bestätige deine E-Mail oder Telefonnummer, um zu starten.",
+      "howCalculated": "Wie Vertrauen berechnet wird",
+      "factorIdentity": "Identitäts- und Telefonverifizierung",
+      "factorTransactions": "Abgeschlossene Marktplatz-Transaktionen",
+      "factorReviews": "Bewertungen aus echten Interaktionen",
+      "factorResponse": "Wie schnell du antwortest",
+      "factorCommunity": "Beiträge zur Community"
+    },
+    "activity": {
+      "title": "Letzte Aktivität",
+      "published": "Veröffentlicht",
+      "empty": "Noch keine abgeschlossene Aktivität."
     },
     "achievements": {
       "achievements": "Erfolge",
-      "achievementsHint": "Vertrauenssignale, die man auf einen Blick spürt."
+      "achievementsHint": "Vertrauenssignale, die man auf einen Blick spürt.",
+      "verifiedIdentityTitle": "Verifizierte Identität",
+      "verifiedIdentityDetail": "Eine echte, verifizierte E-Mail-Adresse bestätigt.",
+      "firstListingTitle": "Erstes Inserat",
+      "firstListingDetail": "Ein echtes Inserat im Marktplatz veröffentlicht.",
+      "businessOwnerTitle": "Unternehmensinhaber",
+      "businessOwnerDetail": "Besitzt ein bestätigtes Unternehmen auf Alwenda."
     },
     "reputation": {
       "reputationTimeline": "Zeitleiste des Rufs",

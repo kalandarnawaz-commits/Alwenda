@@ -6,7 +6,6 @@ import {
   alwenCapabilities,
   alwenCityCompanionPlan,
   alwenListingDraft,
-  alwenProfileConversation,
   alwenWorkspace,
   alwenWorkflows,
   alwenRecommendations,
@@ -41,13 +40,10 @@ import {
   notifications,
   offers,
   professionalCategories,
-  profileAchievements,
   profileReviews,
   proactiveBriefing,
   reservations,
   reputationProfile,
-  reputationSignals,
-  reputationTimeline,
   SEED_CITY_META,
   serviceProfessionals,
   smartAutocompleteExamples,
@@ -91,8 +87,9 @@ import {
   createListing,
   fetchMyListings,
   uploadListingPhoto,
+  fetchListingsByOwner,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=listing-photos-1";
+} from "./services/auth/supabaseClient.js?v=identity-redesign-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
@@ -300,6 +297,19 @@ function publicProfileAttrs({ id, name, avatar, area, category, rating, reviews,
   ].join(" ");
 }
 
+/** Populates the "Active listings" section with the person's real,
+ * published listings — harmless no-op for a mock person (fetchListingsByOwner
+ * swallows the "not a real UUID" error and returns []). Fire-and-forget;
+ * bails if the user has already navigated to a different profile by the
+ * time it resolves. */
+async function refreshPublicProfileListings(id) {
+  if (!id) return;
+  const items = await fetchListingsByOwner(id);
+  if (state.publicProfile?.id !== id) return;
+  state.publicProfile.listings = items;
+  render();
+}
+
 function openPublicProfile(dataset) {
   state.publicProfile = {
     id: dataset.personId || "",
@@ -315,11 +325,13 @@ function openPublicProfile(dataset) {
     responseTime: dataset.personResponseTime || "",
     price: dataset.personPrice || "",
     availability: dataset.personAvailability || "",
-    distance: dataset.personDistance || ""
+    distance: dataset.personDistance || "",
+    listings: []
   };
   state.activeSheet = null;
   state.activeView = "publicProfile";
   trackEvent("public_profile_viewed", { context: state.publicProfile.context });
+  refreshPublicProfileListings(state.publicProfile.id);
   render();
 }
 
@@ -361,8 +373,10 @@ function openPublicProfileById(id) {
     responseTime: person.responseTime || "",
     price: person.price || "",
     availability: person.availability || "",
-    distance: person.distance || ""
+    distance: person.distance || "",
+    listings: []
   };
+  refreshPublicProfileListings(state.publicProfile.id);
   return true;
 }
 
@@ -5783,6 +5797,68 @@ const PUBLIC_PROFILE_CONTEXT_HINT = {
   review: "profile.public.publicProfileContextReview"
 };
 
+/** Everything below reads only real, currently-tracked fields — Supabase
+ * Auth's own email/phone verification flags, public_profiles.verification_
+ * status, real listing rows the user actually created. There is no reviews/
+ * completed-job/response-time tracking anywhere in this app yet (see
+ * supabase/migrations — the reviews table exists but nothing ever queries
+ * it), so those simply aren't shown rather than being invented. */
+
+function profileVerificationBadges(user) {
+  const badges = [];
+  if (user.emailVerified) badges.push({ icon: "verify", labelKey: "profile.identity.emailVerified" });
+  if (user.phoneVerified) badges.push({ icon: "verify", labelKey: "profile.identity.phoneVerified" });
+  if (user.publicProfile?.verification_status === "verified") badges.push({ icon: "verify", labelKey: "profile.identity.identityVerified" });
+  return badges;
+}
+
+function profileMemberSince(user) {
+  return user.createdAt ? formatDate(user.createdAt, { year: "numeric", month: "long" }) : null;
+}
+
+function profilePrimaryRoleLabel(user) {
+  return user.role && user.role.trim() ? escapeHtml(user.role.trim()) : t("profile.identity.memberDefaultRole");
+}
+
+/** A simple, honest completeness check — not a trust score. Each item is
+ * something the user directly controls and can see reflected immediately. */
+function profileCompletenessPercent(user) {
+  const checks = [Boolean(user.avatar), Boolean(user.role && user.role.trim()), Boolean(user.emailVerified), state.myListings.length > 0 || ownedBusinesses().length > 0];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+/** Derived from real, verifiable conditions only, recomputed on every
+ * render rather than stored — each one names exactly what earned it and
+ * links back to a real timestamp instead of a fabricated "earned" date. */
+function deriveRealAchievements(user) {
+  const achievements = [];
+  if (user.emailVerified) {
+    achievements.push({ icon: "verify", titleKey: "profile.achievements.verifiedIdentityTitle", detailKey: "profile.achievements.verifiedIdentityDetail", date: profileMemberSince(user) });
+  }
+  if (state.myListings.length > 0) {
+    const earliest = [...state.myListings].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))[0];
+    achievements.push({
+      icon: "tag",
+      titleKey: "profile.achievements.firstListingTitle",
+      detailKey: "profile.achievements.firstListingDetail",
+      date: earliest.created_at ? formatDate(earliest.created_at, { year: "numeric", month: "long" }) : null
+    });
+  }
+  if (ownedBusinesses().length > 0) {
+    achievements.push({ icon: "shop", titleKey: "profile.achievements.businessOwnerTitle", detailKey: "profile.achievements.businessOwnerDetail", date: profileMemberSince(user) });
+  }
+  return achievements.slice(0, 3);
+}
+
+/** "Recent activity" is real listing-creation events — genuine things the
+ * user actually did — not a fabricated completed-job/transaction timeline. */
+function deriveRealActivity() {
+  return [...state.myListings]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 3)
+    .map((item) => ({ title: item.title, date: item.created_at ? formatDate(item.created_at, { day: "numeric", month: "short" }) : "" }));
+}
+
 function renderPublicProfile() {
   const person = state.publicProfile;
   if (!person) return renderProfileSignedOut();
@@ -5827,6 +5903,28 @@ function renderPublicProfile() {
         <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
+      ${
+        person.listings?.length
+          ? `<div class="profile-visual-section">
+               <div class="section-title"><div><h2>${t("profile.public.activeListings")}</h2></div></div>
+               <div class="my-business-list">
+                 ${person.listings
+                   .map(
+                     (item) => `
+                   <button type="button" class="my-business-row" data-view="listingDetail" data-listing-id="${item.id}">
+                     <div>
+                       <strong>${escapeHtml(item.title)}</strong>
+                       <span>${categoryLabel(Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === item.category) || "buy-sell")} · ${formatListingPrice(item.price_amount, item.price_period, item.price_currency)}</span>
+                     </div>
+                     ${icon("arrow")}
+                   </button>`
+                   )
+                   .join("")}
+               </div>
+             </div>`
+          : ""
+      }
+
       ${skillsList.length ? `
         <div class="profile-visual-section">
           <div class="section-title"><div><h2>${t("profile.reputation.skillsExpertiseTitle")}</h2></div></div>
@@ -5859,42 +5957,92 @@ function renderProfileSignedOut() {
 function renderProfile() {
   if (state.auth.status !== "signedIn") return renderProfileSignedOut();
   const user = state.auth.user;
+  const badges = profileVerificationBadges(user);
+  const memberSince = profileMemberSince(user);
+  const completeness = profileCompletenessPercent(user);
+  const achievements = deriveRealAchievements(user);
+  const activity = deriveRealActivity();
+  const savedCount = state.savedPlaceIds.length + state.savedListingIds.length;
+
   return `
-    <section class="section-shell profile-panel">
-      <div class="profile-hero premium-profile-hero" style="background-image: url('${reputationProfile.cover}')">
-        <button type="button" class="profile-settings-button" data-view="settings" aria-label="${t("settings.settingsTitle")}">${icon("ops")}</button>
-        <div class="profile-glass">
-          <span class="avatar-frame">
-            ${user.avatar ? `<img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
-            ${BrandLogo({ variant: "icon", tone: "light", className: "avatar-watermark avatar-watermark-dark" })}
-            ${BrandLogo({ variant: "icon", tone: "dark", className: "avatar-watermark avatar-watermark-light" })}
-          </span>
-          <div>
-            <p class="eyebrow">${t("nav.profile")}</p>
-            <h1>${escapeHtml(user.name)}</h1>
-            <p class="profile-tagline">${t("common.profileTagline")}</p>
-            <p>${user.role ? escapeHtml(user.role) : t(reputationProfile.roleKey)} · ${city.name}</p>
-            <div class="profile-badges">
-              <span>${icon("star")}★★★★★</span>
-              ${user.emailVerified ? `<span>${icon("verify")}${t("status.verified")}</span>` : ""}
-              <span>${reputationProfile.overall} ${t("profile.reputation.overallReputation")}</span>
-            </div>
-          </div>
-        </div>
+    <section class="section-shell profile-panel identity-profile">
+      <div class="identity-hero">
+        <button type="button" class="identity-edit-button" data-settings-edit-profile="true" aria-label="${t("profile.quickActions.editProfileAction")}">${icon("ops")}</button>
+        <span class="avatar-frame identity-avatar">
+          ${user.avatar ? `<img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
+        </span>
+        <h1>${escapeHtml(user.name)}</h1>
+        <p class="identity-role">${profilePrimaryRoleLabel(user)}</p>
+        <p class="identity-meta">${joinNonEmpty([escapeHtml(user.publicProfile?.city || city.name), memberSince ? t("profile.identity.memberSince", { date: memberSince }) : null])}</p>
+        ${badges.length ? `<div class="quote-list identity-badges">${badges.map((badge) => `<span class="verified-chip">${icon(badge.icon)}${t(badge.labelKey)}</span>`).join("")}</div>` : ""}
       </div>
+
+      ${
+        completeness < 100
+          ? `<div class="profile-completeness">
+               <div class="profile-completeness-row"><span>${t("profile.completeness.title")}</span><strong>${completeness}%</strong></div>
+               <div class="profile-completeness-bar"><span style="width:${completeness}%"></span></div>
+             </div>`
+          : ""
+      }
+
       ${renderProfileQuickActions()}
       ${renderMyListings()}
       ${renderMyBusinesses()}
-      ${renderReputationProfile()}
-      ${renderProfileAchievements()}
-      ${renderProfileReviews()}
-      ${renderReputationTimeline()}
-      ${renderAlwenProfileBuilder()}
+
+      <div class="settings-section trust-section">
+        <div class="section-title"><div><h2>${t("profile.trust.title")}</h2><p>${t("profile.trust.hint")}</p></div></div>
+        <p class="trust-headline">${t("profile.trust.buildingTrust")}</p>
+        ${
+          badges.length
+            ? `<div class="quote-list identity-badges">${badges.map((badge) => `<span class="verified-chip">${icon(badge.icon)}${t(badge.labelKey)}</span>`).join("")}</div>`
+            : `<p class="settings-section-hint">${t("profile.trust.noVerificationYet")}</p>`
+        }
+        <details class="trust-details">
+          <summary>${t("profile.trust.howCalculated")}</summary>
+          <ul>
+            <li>${t("profile.trust.factorIdentity")}</li>
+            <li>${t("profile.trust.factorTransactions")}</li>
+            <li>${t("profile.trust.factorReviews")}</li>
+            <li>${t("profile.trust.factorResponse")}</li>
+            <li>${t("profile.trust.factorCommunity")}</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-title"><div><h2>${t("profile.activity.title")}</h2></div></div>
+        ${
+          activity.length
+            ? `<div class="timeline-list">${activity.map((item) => `<article><span>${item.date}</span><div><h3>${escapeHtml(item.title)}</h3><p>${t("profile.activity.published")}</p></div></article>`).join("")}</div>`
+            : `<p class="settings-section-hint">${t("profile.activity.empty")}</p>`
+        }
+      </div>
+
+      ${
+        achievements.length
+          ? `<div class="settings-section">
+               <div class="section-title"><div><h2>${t("profile.achievements.achievements")}</h2></div></div>
+               <div class="achievement-grid">
+                 ${achievements
+                   .map(
+                     (item) => `
+                   <article>
+                     <span>${icon(item.icon)}</span>
+                     <h3>${t(item.titleKey)}</h3>
+                     <p>${t(item.detailKey)}</p>
+                     ${item.date ? `<span class="achievement-date">${item.date}</span>` : ""}
+                   </article>`
+                   )
+                   .join("")}
+               </div>
+             </div>`
+          : ""
+      }
+
       <div class="profile-list">
-        <article><strong>${state.savedPlaceIds.length}</strong><span>${t("profile.savedPlaces")}</span></article>
-        <article><strong>4</strong><span>${t("profile.activeRequests")}</span></article>
-        <article><strong>3</strong><span>${t("common.localOffers")}</span></article>
-        <button data-view="settings">${t("settings.settingsTitle")}</button>
+        <button type="button" data-view="savedPlaces"><strong>${savedCount}</strong><span>${t("profile.savedPlaces")}</span></button>
+        <button type="button" data-view="settings">${t("settings.settingsTitle")}</button>
       </div>
     </section>
   `;
@@ -5922,108 +6070,6 @@ function renderProfileQuickActions() {
         </button>
       `).join("")}
     </div>
-  `;
-}
-
-function renderProfileAchievements() {
-  return `
-    <section class="profile-visual-section">
-      <div class="section-title"><div><h2>${t("profile.achievements.achievements")}</h2><p>${t("profile.achievements.achievementsHint")}</p></div></div>
-      <div class="achievement-grid">
-        ${profileAchievements.map((item) => `
-          <article>
-            <span>${item.icon}</span>
-            <h3>${t(item.titleKey)}</h3>
-            <p>${t(item.detailKey)}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderProfileReviews() {
-  return `
-    <section class="profile-visual-section">
-      <div class="section-title"><div><h2>${t("common.reviews")}</h2><p>${t("common.profileReviewsHint")}</p></div></div>
-      <div class="review-grid">
-        ${profileReviews.map((review) => `
-          <article>
-            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
-              <img src="${review.avatar}" alt="" />
-              <div><strong>${review.author}</strong><span>${"★".repeat(review.rating)}</span></div>
-            </div>
-            <p>${t(review.textKey)}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderReputationTimeline() {
-  return `
-    <section class="profile-visual-section">
-      <div class="section-title"><div><h2>${t("profile.reputation.reputationTimeline")}</h2><p>${t("profile.reputation.reputationTimelineHint")}</p></div></div>
-      <div class="timeline-list">
-        ${reputationTimeline.map((item) => `
-          <article>
-            <span>${t(item.dateKey)}</span>
-            <div><h3>${t(item.titleKey)}</h3><p>${t(item.detailKey)}</p></div>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-const PROFILE_FIELD_ICON = {
-  name: "profile",
-  languages: "translate",
-  interests: "heart",
-  skills: "tool",
-  profession: "briefcase",
-  servicesOffered: "service",
-  favouriteCategories: "tag",
-  homeCity: "pin",
-  currentCity: "pin",
-  verificationProgress: "verify"
-};
-
-function conversationBubble(speaker, text) {
-  const isYou = speaker === "you";
-  return `
-    <p class="${isYou ? "conversation-you" : "conversation-alwen"}">
-      <span class="conversation-avatar">${isYou ? t("common.you").slice(0, 1) : icon("spark")}</span>
-      <span class="conversation-bubble">
-        <strong>${isYou ? t("common.you") : "Alwen"}</strong>
-        <span>${text}</span>
-      </span>
-    </p>
-  `;
-}
-
-function renderAlwenProfileBuilder() {
-  const profileRows = Object.entries(alwenProfileConversation.generatedProfile);
-  return `
-    <section class="alwen-card profile-builder">
-      <div class="section-title">
-        <div><h2>${t("alwen.alwenProfileTitle")}</h2><p>${t("alwen.alwenProfileHint")}</p></div>
-      </div>
-      <div class="conversation">
-        ${conversationBubble("alwen", alwenProfileConversation.opening)}
-        ${alwenProfileConversation.replies.map((reply, index) => conversationBubble(index ? "alwen" : "you", reply)).join("")}
-      </div>
-      <div class="draft-grid">
-        ${profileRows.map(([label, value]) => `
-          <article>
-            <span class="tile-icon">${icon(PROFILE_FIELD_ICON[label] || "spark")}</span>
-            <strong>${Array.isArray(value) ? value.join(", ") : value}</strong>
-            <span>${label.replace(/([A-Z])/g, " $1")}</span>
-          </article>
-        `).join("")}
-      </div>
-    </section>
   `;
 }
 
@@ -6078,17 +6124,6 @@ function renderMyBusinesses() {
   `;
 }
 
-const REPUTATION_HEADLINE_ICON = ["trust", "people", "calendar"];
-
-const SIGNAL_ICON = {
-  "Verified Identity": "verify",
-  "Verified Skills": "tool",
-  "Completion Rate": "star",
-  "Neighbour Rating": "heart",
-  "Business Rating": "briefcase",
-  "Recommendation %": "spark"
-};
-
 function reputationTile(iconName, label, value, detail, toneClass) {
   return `
     <article${toneClass ? ` class="tone-${toneClass}"` : ""}>
@@ -6097,59 +6132,6 @@ function reputationTile(iconName, label, value, detail, toneClass) {
       <strong>${value}</strong>
       ${detail ? `<p>${detail}</p>` : ""}
     </article>
-  `;
-}
-
-function renderReputationProfile() {
-  const headlineStats = [
-    ["profile.reputation.overallReputation", reputationProfile.overall],
-    ["community.communityScore", reputationProfile.communityScore],
-    ["profile.reputation.responseTime", reputationProfile.responseTime]
-  ];
-  const trustSignals = reputationSignals.filter((signal) =>
-    ["Verified Identity", "Verified Skills", "Completion Rate"].includes(signal.label)
-  );
-  const impactSignals = reputationSignals.filter((signal) =>
-    ["Neighbour Rating", "Business Rating", "Recommendation %"].includes(signal.label)
-  );
-
-  return `
-    <div class="reputation-card">
-      <div class="section-title">
-        <div><h2>${t("profile.reputation.portableTrust")}</h2><p>${t("profile.reputation.portableTrustHint")}</p></div>
-      </div>
-      <div class="reputation-grid reputation-grid-headline">
-        ${headlineStats.map(([key, value], index) => reputationTile(REPUTATION_HEADLINE_ICON[index], t(key), value)).join("")}
-      </div>
-
-      <div class="profile-narrative-section">
-        <h3>${icon("verify")}${t("profile.reputation.trustVerificationTitle")}</h3>
-        <div class="signal-grid">
-          ${trustSignals.map((signal) => reputationTile(SIGNAL_ICON[signal.label] || "spark", t(signal.labelKey), signal.valueKey ? t(signal.valueKey) : signal.value, t(signal.detailKey))).join("")}
-        </div>
-        <div class="quote-list">${reputationProfile.verificationBadgeKeys.map((badgeKey) => `<span class="verified-chip">${icon("verify")}${t(badgeKey)}</span>`).join("")}</div>
-      </div>
-
-      <div class="profile-narrative-section">
-        <h3>${icon("tool")}${t("profile.reputation.skillsExpertiseTitle")}</h3>
-        <p>${t("profile.reputation.skillsExpertiseStory").replace("{languages}", reputationProfile.languagesSpokenKeys.map((key) => t(key)).join(", "))}</p>
-        <div class="quote-list">${reputationProfile.verifiedSkillKeys.map((skillKey) => `<span>${t(skillKey)}</span>`).join("")}</div>
-      </div>
-
-      <div class="profile-narrative-section">
-        <h3>${icon("people")}${t("community.communityImpactTitle")}</h3>
-        <p>${t("community.communityImpactStory")
-          .replace("{answers}", reputationProfile.helpfulAnswers)
-          .replace("{jobs}", reputationProfile.successfulJobs)
-          .replace("{transactions}", reputationProfile.completedTransactions)
-          .replace("{recommendations}", reputationProfile.neighbourRecommendations)}</p>
-        <div class="signal-grid">
-          ${impactSignals.map((signal) => reputationTile(SIGNAL_ICON[signal.label] || "spark", t(signal.labelKey), signal.valueKey ? t(signal.valueKey) : signal.value, t(signal.detailKey))).join("")}
-        </div>
-      </div>
-
-      <div class="quote-list">${reputationProfile.localExpertBadgeKeys.map((badgeKey) => `<span>${t(badgeKey)}</span>`).join("")} <span>${t("profile.reputation.contributionStreakValue").replace("{count}", reputationProfile.contributionStreakCount)}</span></div>
-    </div>
   `;
 }
 
