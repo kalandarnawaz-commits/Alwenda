@@ -52,7 +52,7 @@ import {
   serviceProfessionals,
   smartAutocompleteExamples,
   trendingMarketplace
-} from "./data/mockData.js?v=production-sprint-20";
+} from "./data/mockData.js?v=production-sprint-24";
 import { integrations } from "./services/integrationPlaceholders.js";
 import {
   t,
@@ -63,8 +63,9 @@ import {
   formatDate,
   formatNumber,
   formatCurrency,
+  formatDistanceMeters,
   SUPPORTED_LANGUAGES
-} from "./i18n/i18n.js?v=i18n-refactor-3";
+} from "./i18n/i18n.js?v=i18n-refactor-4";
 import { fetchOverpassCategory, IMPORT_CATEGORIES } from "./services/dataImport/overpassClient.js?v=data-import-3";
 import { queryLandmarksVilnius } from "./services/dataImport/wikidataClient.js?v=data-import-2";
 import { fetchPublicServicesPlaceholder } from "./services/dataImport/openDataClient.js?v=data-import-2";
@@ -76,7 +77,6 @@ import { enrichWithGooglePlacePhotos, isGooglePlacesConfigured } from "./service
 import {
   isSupabaseConfigured,
   signInWithOAuthProvider,
-  signUpWithEmail,
   signInWithEmail,
   resetPasswordForEmail,
   updatePassword,
@@ -86,8 +86,10 @@ import {
   onAuthStateChange,
   signOutSupabase,
   mapSupabaseUserToAccount,
-  updateUserMetadata
+  ensureUserProfiles,
+  completeUserProfile
 } from "./services/auth/supabaseClient.js?v=production-sprint-1";
+import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
@@ -118,17 +120,25 @@ const state = {
   activeSheet: null,
   headerSolid: false,
   alwenOpen: false,
+  alwenChat: {
+    input: "",
+    lastMessage: "",
+    answer: "",
+    conversationId: null,
+    status: "idle",
+    error: null
+  },
   selectedBusinessId: null,
+  selectedListingId: null,
   selectedPlaceId: null,
   savedPlaceIds: [],
   auth: {
-    status: "signedOut", // "signedOut" | "signedIn"
+    status: "checking", // "checking" | "signedOut" | "signedIn"
     user: null,
     pendingVerification: null,
     authView: "login", // which auth screen renders while signed out: login | register | forgotPassword | verifyCode | completeProfile | resetPassword
     authError: null,
     authNotice: null, // informational (non-error) message, e.g. "check your email to confirm your account"
-    devCode: null, // the code this preview build generated, shown inline since there is no real email/SMS provider wired up yet
     passwordRecoveryActive: false // set true when Supabase reports a PASSWORD_RECOVERY session (user followed the reset-password email link)
   },
   hasOnboarded: false,
@@ -149,6 +159,7 @@ const state = {
   helpfulPostIds: [],
   savedPostIds: [],
   savedListingIds: [],
+  reportedListings: [],
   hireCategory: null,
   helpRequestDraft: { text: "", urgency: "flexible" },
   helpRequestPosted: null,
@@ -193,23 +204,12 @@ const IMPORT_SOURCE_LABELS = {
 const IMPORT_MODE_RADIUS = { nearby: 2000, district: 5000, citywide: 9000 };
 
 /* ============================================================
-   AUTHENTICATION — local-session only.
-   There is no backend, database, or registered OAuth/SMS provider in this
-   project, so "Sign in with Apple/Google" and phone OTP cannot be real
-   integrations here. This module implements complete, working UI flows
-   backed by a local session stored in localStorage on this device, with
-   every account/session function isolated below so a real backend call
-   can be dropped in later without touching the view layer. Passwords are
-   validated client-side for shape only and are never persisted anywhere —
-   there is nothing secure to check them against without a backend, so
-   storing them would be pure theatre. Email/phone "verification" uses a
-   real code-entry flow; since no email/SMS provider is wired up, the code
-   is surfaced in the UI itself (clearly labelled as a preview-build
-   behaviour) so the flow is fully testable end to end.
+   AUTHENTICATION — Supabase only.
+   Auth state is restored from Supabase Auth, profile completion is read
+   from private_profiles.onboarding_complete, and the frontend never
+   fabricates a successful OAuth/email/phone login.
    ============================================================ */
 
-const AUTH_SESSION_KEY = "alwenda:session";
-const AUTH_ACCOUNTS_KEY = "alwenda:accounts";
 const ONBOARDED_KEY = "alwenda:onboarded";
 const SETTINGS_KEY = "alwenda:settings";
 const LANGUAGE_KEY = "alwenda:language";
@@ -259,9 +259,10 @@ function ownedBusinesses() {
  * "member since" date, or language list for a name that's just a string
  * in an array.
  */
-function publicProfileAttrs({ name, avatar, area, category, rating, reviews, verified, context, skills, responseTime, price, availability, distance }) {
+function publicProfileAttrs({ id, name, avatar, area, category, rating, reviews, verified, context, skills, responseTime, price, availability, distance }) {
   return [
     'data-public-profile="true"',
+    `data-person-id="${escapeHtml(id || "")}"`,
     `data-person-name="${escapeHtml(name || "")}"`,
     `data-person-avatar="${escapeHtml(avatar || "")}"`,
     `data-person-area="${escapeHtml(area || "")}"`,
@@ -280,6 +281,7 @@ function publicProfileAttrs({ name, avatar, area, category, rating, reviews, ver
 
 function openPublicProfile(dataset) {
   state.publicProfile = {
+    id: dataset.personId || "",
     name: dataset.personName || "",
     avatar: dataset.personAvatar || "",
     area: dataset.personArea || "",
@@ -298,6 +300,49 @@ function openPublicProfile(dataset) {
   state.activeView = "publicProfile";
   trackEvent("public_profile_viewed", { context: state.publicProfile.context });
   render();
+}
+
+/** Looks a person up by the stable id introduced alongside publicProfileAttrs
+ * (see mockData.js: sellerId, authorId, review id, pro-<id>) so a public
+ * profile URL can be rehydrated after a refresh or a shared link, not just
+ * reached by clicking through the app in the same session. Same "no shared
+ * person table" caveat as publicProfileAttrs above — each source is checked
+ * independently, not merged into one identity. */
+function findPersonById(id) {
+  if (!id) return null;
+  const pro = serviceProfessionals.find((item) => `pro-${item.id}` === id);
+  if (pro) return { id, name: pro.name, area: pro.area, category: t(pro.categoryKey), rating: pro.rating, reviews: pro.reviews, verified: pro.verified, context: "hire", skills: pro.skills, responseTime: pro.responseTime, price: pro.price, availability: pro.availability, distance: pro.distance };
+  const review = profileReviews.find((item) => item.id === id);
+  if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
+  const post = feedPosts.find((item) => item.authorId === id);
+  if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: post.categoryKey ? t(post.categoryKey) : "", context: "community" };
+  const listing = listings.find((item) => item.sellerId === id);
+  if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
+  const offer = offers.find((item) => `offer-${item.id}` === id);
+  if (offer) return { id, name: offer.vendor, area: offer.area, context: "marketplace" };
+  return null;
+}
+
+function openPublicProfileById(id) {
+  const person = findPersonById(id);
+  if (!person) return false;
+  state.publicProfile = {
+    id: person.id || "",
+    name: person.name || "",
+    avatar: person.avatar || "",
+    area: person.area || "",
+    category: person.category || "",
+    rating: person.rating || "",
+    reviews: person.reviews || "",
+    verified: Boolean(person.verified),
+    context: person.context || "",
+    skills: (person.skills || []).join(", "),
+    responseTime: person.responseTime || "",
+    price: person.price || "",
+    availability: person.availability || "",
+    distance: person.distance || ""
+  };
+  return true;
 }
 
 function initials(name) {
@@ -430,104 +475,78 @@ function enforceRateLimit(action, identifier, options) {
   return result;
 }
 
-/** "Remember me" unchecked uses sessionStorage instead of localStorage —
- * the session then only survives this tab, not future visits. */
-function readSessionStorage(key) {
-  try {
-    const raw = window.sessionStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSessionStorage(key, value) {
-  try {
-    if (value == null) window.sessionStorage.removeItem(key);
-    else window.sessionStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* sessionStorage unavailable — same acceptable degradation as above. */
-  }
-}
-
-function loadLocalAccounts() {
-  return readLocalStorage(AUTH_ACCOUNTS_KEY) || [];
-}
-
-function saveLocalAccount(account) {
-  const accounts = loadLocalAccounts().filter((existing) => existing.id !== account.id);
-  accounts.push(account);
-  writeLocalStorage(AUTH_ACCOUNTS_KEY, accounts);
-  return account;
-}
-
-function findAccountByEmail(email) {
-  const normalised = String(email || "").trim().toLowerCase();
-  return loadLocalAccounts().find((account) => account.email?.toLowerCase() === normalised) || null;
-}
-
-function findAccountByPhone(phone) {
-  const normalised = String(phone || "").replace(/\s+/g, "");
-  return loadLocalAccounts().find((account) => account.phone?.replace(/\s+/g, "") === normalised) || null;
-}
-
-function persistSession(rememberMe = true) {
-  const value = state.auth.status === "signedIn" ? { userId: state.auth.user?.id } : null;
-  if (rememberMe) {
-    writeLocalStorage(AUTH_SESSION_KEY, value);
-    writeSessionStorage(AUTH_SESSION_KEY, null);
-  } else {
-    writeSessionStorage(AUTH_SESSION_KEY, value);
-    writeLocalStorage(AUTH_SESSION_KEY, null);
-  }
-}
-
 function hydrateAuthFromStorage() {
   state.hasOnboarded = Boolean(readLocalStorage(ONBOARDED_KEY));
   const storedSettings = readLocalStorage(SETTINGS_KEY);
   if (storedSettings) state.settings = { ...state.settings, ...storedSettings };
-  // When Supabase is configured, session restore is real (see hydrateSupabaseAuth
-  // below) instead of this local-simulation localStorage read.
-  if (isSupabaseConfigured()) return;
-  const session = readSessionStorage(AUTH_SESSION_KEY) || readLocalStorage(AUTH_SESSION_KEY);
-  if (!session?.userId) return;
-  const account = loadLocalAccounts().find((existing) => existing.id === session.userId);
-  if (account) {
+}
+
+function applySignedOutState() {
+  state.auth.status = "signedOut";
+  state.auth.user = null;
+  state.auth.pendingVerification = null;
+  if (state.activeView === "auth" && !state.auth.authView) state.auth.authView = "login";
+}
+
+async function applySupabaseSession(session, event = "INITIAL_SESSION") {
+  if (event === "PASSWORD_RECOVERY") {
+    state.auth.passwordRecoveryActive = true;
+    state.auth.resetDraft = { password: "", confirmPassword: "" };
     state.auth.status = "signedIn";
-    state.auth.user = account;
-  } else {
-    writeLocalStorage(AUTH_SESSION_KEY, null);
-    writeSessionStorage(AUTH_SESSION_KEY, null);
+    state.auth.authView = "resetPassword";
+    state.activeView = "auth";
+    return;
+  }
+
+  if (!session?.user) {
+    applySignedOutState();
+    return;
+  }
+
+  const profiles = await ensureUserProfiles();
+  const account = mapSupabaseUserToAccount(profiles.user || session.user, profiles);
+  state.auth.user = account;
+  state.auth.status = "signedIn";
+  state.auth.authError = null;
+  state.hasOnboarded = true;
+  writeLocalStorage(ONBOARDED_KEY, true);
+
+  if (!account.profileComplete) {
+    resetProfileDraftFromUser(account);
+    state.auth.authView = "completeProfile";
+    state.activeView = "auth";
+    return;
+  }
+
+  if (state.activeView === "auth" || state.activeView === "welcomeSequence") {
+    state.activeView = "home";
   }
 }
 
-/** Real session restore + live sync via Supabase, replacing the local
- * hydrateAuthFromStorage() localStorage read when a project is configured.
- * Also detects a PASSWORD_RECOVERY session (user followed the reset-password
- * email link) and routes straight to the reset-password screen. */
+/** Real session restore + live sync via Supabase Auth. There is no local
+ * fallback: when Supabase is not configured, users remain signed out and
+ * auth actions show a configuration error instead of fabricating profiles. */
 async function hydrateSupabaseAuth() {
-  if (!isSupabaseConfigured()) return;
-  const session = await getCurrentSession();
-  if (session?.user) {
-    state.auth.user = mapSupabaseUserToAccount(session.user);
-    state.auth.status = "signedIn";
+  if (!isSupabaseConfigured()) {
+    applySignedOutState();
+    return;
   }
-  await onAuthStateChange((changedSession, event) => {
-    if (event === "PASSWORD_RECOVERY") {
-      state.auth.passwordRecoveryActive = true;
-      state.auth.resetDraft = { password: "", confirmPassword: "" };
-      goToAuthView("resetPassword");
-      return;
-    }
-    if (changedSession?.user) {
-      state.auth.user = mapSupabaseUserToAccount(changedSession.user);
-      state.auth.status = "signedIn";
-    } else if (event === "SIGNED_OUT") {
-      state.auth.user = null;
-      state.auth.status = "signedOut";
-    }
-    render();
-  });
+
+  try {
+    await applySupabaseSession(await getCurrentSession());
+    await onAuthStateChange(async (changedSession, event) => {
+      try {
+        await applySupabaseSession(changedSession, event);
+      } catch (error) {
+        state.auth.authError = error?.message || t("auth.authErrorGeneric");
+        applySignedOutState();
+      }
+      render();
+    });
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorGeneric");
+    applySignedOutState();
+  }
 }
 
 function persistSettings() {
@@ -550,11 +569,117 @@ function bindThemeListener() {
   });
 }
 
-const DEEP_LINK_VIEWS = new Set(["home", "explore", "marketplace", "community", "contribute", "profile", "hire", "needHelp", "settings", "businessDashboard", "savedPlaces", "create", "legalTerms"]);
+/* "ops" (internal admin/city-import dashboard) is deliberately absent —
+   no customer-facing route should ever advertise it. It stays reachable by
+   a directly-typed URL for internal use (there's no backend role system in
+   this app to gate it against), it's just never in this public registry
+   and never linked from anywhere in the UI. */
+const DEEP_LINK_VIEWS = new Set([
+  "alwen",
+  "home",
+  "explore",
+  "marketplace",
+  "listings",
+  "listingDetail",
+  "create",
+  "community",
+  "contribute",
+  "hire",
+  "needHelp",
+  "businesses",
+  "businessProfile",
+  "businessClaim",
+  "offers",
+  "reservations",
+  "translate",
+  "profile",
+  "auth",
+  "onboarding",
+  "settings",
+  "notifications",
+  "messages",
+  "businessDashboard",
+  "savedPlaces",
+  "publicProfile",
+  "legalTerms",
+  "legalPrivacy"
+]);
 
-function applyDeepLinkFromUrl() {
-  const view = new URLSearchParams(window.location.search).get("view");
-  if (view && DEEP_LINK_VIEWS.has(view)) state.activeView = view;
+/* Views whose deep link needs a companion ?id= to mean anything — read
+   from and written to the URL alongside `view` by syncStateFromUrl /
+   syncUrlToState below. */
+const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim"]);
+
+/* A directly-typed URL for these still works (syncStateFromUrl honors
+   them below) so the internal Ops/city-import tooling stays runnable —
+   but they're excluded from DEEP_LINK_VIEWS so nothing in the UI ever
+   turns them into a visible/shareable link (syncUrlToState only writes
+   views that are in DEEP_LINK_VIEWS). */
+const INTERNAL_URL_VIEWS = new Set(["ops", "cityImport"]);
+
+let suppressNextUrlPush = false;
+let lastPushedUrlKey = null;
+
+function currentDeepLinkId() {
+  if (state.activeView === "publicProfile") return state.publicProfile?.id || null;
+  if (state.activeView === "businessProfile") return state.selectedBusinessId != null ? String(state.selectedBusinessId) : null;
+  if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
+  if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
+  return null;
+}
+
+/** Reads `view` (+ `id` for the views that need one) from the current URL
+ * into state. Shared by boot and by the popstate handler below, so a
+ * refresh and a Back/Forward tap both resolve the same way. */
+function syncStateFromUrl() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const authError = searchParams.get("error_description") || hashParams.get("error_description") || searchParams.get("error") || hashParams.get("error");
+  if (authError) {
+    state.auth.authError = authError;
+    state.auth.authView = "login";
+    state.activeView = "auth";
+    return;
+  }
+  const view = searchParams.get("view");
+  if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
+  state.activeView = view;
+  const id = searchParams.get("id");
+  if (!id || !ID_LINKED_VIEWS.has(view)) return;
+  if (view === "publicProfile") openPublicProfileById(id);
+  else if (view === "businessProfile") state.selectedBusinessId = Number(id);
+  else if (view === "listingDetail") state.selectedListingId = Number(id);
+  else if (view === "businessClaim") state.selectedPlaceId = id;
+}
+
+/** Keeps the address bar in sync with in-app navigation so browser Back/
+ * Forward and page refresh both work, and item-level views (a listing, a
+ * profile, a claim) are shareable. Called once at the end of every
+ * render() — comparing against the last-pushed key means it's a no-op on
+ * renders that don't actually change the "page" (typing in search, etc). */
+function syncUrlToState() {
+  if (suppressNextUrlPush) {
+    suppressNextUrlPush = false;
+    lastPushedUrlKey = `${state.activeView}:${currentDeepLinkId() || ""}`;
+    return;
+  }
+  if (!DEEP_LINK_VIEWS.has(state.activeView)) return;
+  const id = currentDeepLinkId();
+  const key = `${state.activeView}:${id || ""}`;
+  if (key === lastPushedUrlKey) return;
+  lastPushedUrlKey = key;
+  const params = new URLSearchParams();
+  params.set("view", state.activeView);
+  if (id) params.set("id", id);
+  history.pushState({ view: state.activeView, id }, "", `${window.location.pathname}?${params.toString()}`);
+}
+
+function bindHistoryNavigation() {
+  window.addEventListener("popstate", () => {
+    suppressNextUrlPush = true;
+    syncStateFromUrl();
+    render();
+  });
 }
 
 function registerServiceWorker() {
@@ -563,9 +688,18 @@ function registerServiceWorker() {
      session hydration), so the document's load event has already fired
      by this point — registering immediately instead of waiting on a
      "load" listener that would never fire again. */
-  navigator.serviceWorker.register("./sw.js").catch(() => {
-    /* Offline caching is a progressive enhancement — the app works fine without it. */
-  });
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((registration) => {
+      /* The browser's own update check is throttled (roughly once per
+         navigation, at most every 24h otherwise) — forcing one here means
+         a release that shipped since the last visit is detected on this
+         load instead of waiting on that schedule. */
+      registration.update().catch(() => {});
+    })
+    .catch(() => {
+      /* Offline caching is a progressive enhancement — the app works fine without it. */
+    });
 }
 
 let deferredInstallPrompt = null;
@@ -594,16 +728,12 @@ async function promptInstall() {
   render();
 }
 
-function generateDevCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
 function resetAuthDrafts() {
   state.auth.authError = null;
   state.auth.authNotice = null;
   state.auth.loginMode = "email";
-  state.auth.loginDraft = { email: "", password: "", phone: "", rememberMe: true };
-  state.auth.registerDraft = { name: "", email: "", phone: "", password: "", confirmPassword: "", agreeTerms: false };
+  state.auth.loginDraft = { email: "", phone: "" };
+  state.auth.registerDraft = { name: "", email: "", phone: "", agreeTerms: false };
   state.auth.forgotDraft = { email: "" };
   state.auth.verifyDraft = { code: "" };
   state.auth.resetDraft = { password: "", confirmPassword: "" };
@@ -619,13 +749,6 @@ function goToAuthView(view) {
   render();
 }
 
-const AUTH_AVATAR_PRESETS = [
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=240&q=80",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=240&q=80",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=240&q=80"
-];
-
 /** Turns a rate-limit result into the shared "too many attempts" error
  * message and applies it, so every gated auth action reports it the same way. */
 function applyRateLimitError(result) {
@@ -635,96 +758,43 @@ function applyRateLimitError(result) {
 
 async function submitRegister() {
   const draft = state.auth.registerDraft;
-  if (!draft.name.trim()) return void (state.auth.authError = t("auth.authErrorName"));
   if (!isValidEmail(draft.email)) return void (state.auth.authError = t("auth.authErrorEmail"));
-  if (!isValidPassword(draft.password)) return void (state.auth.authError = t("auth.authErrorPassword"));
-  if (draft.password !== draft.confirmPassword) return void (state.auth.authError = t("auth.authErrorPasswordMatch"));
   if (!draft.agreeTerms) return void (state.auth.authError = t("auth.authErrorTerms"));
 
   const rateLimit = enforceRateLimit("register", draft.email, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
 
-  if (isSupabaseConfigured()) {
-    try {
-      await signUpWithEmail({ email: draft.email.trim(), password: draft.password, name: draft.name.trim() });
-      state.auth.authError = null;
-      state.auth.authNotice = t("auth.authCheckEmailToConfirm");
-      trackEvent("sign_up_started", { provider: "email" });
-      goToAuthView("login");
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorEmailTaken");
-      render();
-    }
-    return;
+  if (!isSupabaseConfigured()) return void (state.auth.authError = t("auth.authErrorProviderNotConfigured"));
+
+  try {
+    await signInWithEmail({ email: draft.email.trim() });
+    state.auth.authError = null;
+    state.auth.authNotice = t("auth.authCheckEmailForSignIn");
+    trackEvent("sign_up_started", { provider: "email" });
+    goToAuthView("login");
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorEmailTaken");
+    render();
   }
-
-  if (findAccountByEmail(draft.email)) return void (state.auth.authError = t("auth.authErrorEmailTaken"));
-
-  const account = {
-    id: `local:${Date.now()}`,
-    name: draft.name.trim(),
-    email: draft.email.trim(),
-    phone: draft.phone.trim() || null,
-    avatar: AUTH_AVATAR_PRESETS[0],
-    role: "",
-    provider: "email",
-    emailVerified: false,
-    phoneVerified: false,
-    profileComplete: false,
-    createdAt: new Date().toISOString()
-  };
-  saveLocalAccount(account);
-  state.auth.user = account;
-  state.auth.pendingVerification = { method: "email", target: account.email, purpose: "register" };
-  state.auth.devCode = generateDevCode();
-  state.auth.verifyDraft = { code: "" };
-  state.auth.authError = null;
-  trackEvent("sign_up_started", { provider: "email" });
-  goToAuthView("verifyCode");
 }
 
 async function submitLoginEmail() {
   const draft = state.auth.loginDraft;
   if (!isValidEmail(draft.email)) return void (state.auth.authError = t("auth.authErrorEmail"));
-  if (!draft.password) return void (state.auth.authError = t("auth.authErrorPasswordRequired"));
 
   const rateLimit = enforceRateLimit("login-email", draft.email, { maxAttempts: 5, windowMs: 5 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
 
-  if (isSupabaseConfigured()) {
-    try {
-      const data = await signInWithEmail({ email: draft.email.trim(), password: draft.password });
-      const account = mapSupabaseUserToAccount(data.user);
-      state.auth.user = account;
-      state.auth.status = "signedIn";
-      state.auth.authError = null;
-      trackEvent("sign_in", { provider: "email" });
-      if (!account.profileComplete) {
-        resetProfileDraftFromUser(account);
-        goToAuthView("completeProfile");
-      } else {
-        state.activeView = "profile";
-        render();
-      }
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorNoAccount");
-      render();
-    }
-    return;
-  }
+  if (!isSupabaseConfigured()) return void (state.auth.authError = t("auth.authErrorProviderNotConfigured"));
 
-  const account = findAccountByEmail(draft.email);
-  if (!account) return void (state.auth.authError = t("auth.authErrorNoAccount"));
-  state.auth.user = account;
-  state.auth.status = "signedIn";
-  state.auth.authError = null;
-  persistSession(draft.rememberMe);
-  trackEvent("sign_in", { provider: "email" });
-  state.activeView = account.profileComplete ? "profile" : "profile";
-  if (!account.profileComplete) {
-    resetProfileDraftFromUser(account);
-    goToAuthView("completeProfile");
-  } else {
+  try {
+    await signInWithEmail({ email: draft.email.trim() });
+    state.auth.authError = null;
+    state.auth.authNotice = t("auth.authCheckEmailForSignIn");
+    trackEvent("sign_in_started", { provider: "email" });
+    render();
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorNoAccount");
     render();
   }
 }
@@ -736,27 +806,17 @@ async function submitLoginPhone() {
   const rateLimit = enforceRateLimit("login-phone", draft.phone, { maxAttempts: 5, windowMs: 5 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
 
-  if (isSupabaseConfigured()) {
-    try {
-      await signInWithPhoneOtp(draft.phone.trim());
-      state.auth.pendingVerification = { method: "phone", target: draft.phone.trim(), purpose: "login", real: true };
-      state.auth.authError = null;
-      goToAuthView("verifyCode");
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorNoAccount");
-      render();
-    }
-    return;
-  }
+  if (!isSupabaseConfigured()) return void (state.auth.authError = t("auth.authErrorProviderNotConfigured"));
 
-  const account = findAccountByPhone(draft.phone);
-  if (!account) return void (state.auth.authError = t("auth.authErrorNoAccount"));
-  state.auth.user = account;
-  state.auth.pendingVerification = { method: "phone", target: account.phone, purpose: "login" };
-  state.auth.devCode = generateDevCode();
-  state.auth.verifyDraft = { code: "" };
-  state.auth.authError = null;
-  goToAuthView("verifyCode");
+  try {
+    await signInWithPhoneOtp(draft.phone.trim());
+    state.auth.pendingVerification = { method: "phone", target: draft.phone.trim(), purpose: "login", real: true };
+    state.auth.authError = null;
+    goToAuthView("verifyCode");
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorNoAccount");
+    render();
+  }
 }
 
 async function submitForgotPassword() {
@@ -766,27 +826,17 @@ async function submitForgotPassword() {
   const rateLimit = enforceRateLimit("forgot-password", draft.email, { maxAttempts: 3, windowMs: 15 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
 
-  if (isSupabaseConfigured()) {
-    try {
-      await resetPasswordForEmail(draft.email.trim());
-      state.auth.authError = null;
-      state.auth.authNotice = t("auth.authCheckEmailForReset");
-      goToAuthView("login");
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorNoAccount");
-      render();
-    }
-    return;
-  }
+  if (!isSupabaseConfigured()) return void (state.auth.authError = t("auth.authErrorProviderNotConfigured"));
 
-  const account = findAccountByEmail(draft.email);
-  if (!account) return void (state.auth.authError = t("auth.authErrorNoAccount"));
-  state.auth.user = account;
-  state.auth.pendingVerification = { method: "email", target: account.email, purpose: "resetPassword" };
-  state.auth.devCode = generateDevCode();
-  state.auth.verifyDraft = { code: "" };
-  state.auth.authError = null;
-  goToAuthView("verifyCode");
+  try {
+    await resetPasswordForEmail(draft.email.trim());
+    state.auth.authError = null;
+    state.auth.authNotice = t("auth.authCheckEmailForReset");
+    goToAuthView("login");
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorNoAccount");
+    render();
+  }
 }
 
 async function submitVerifyCode() {
@@ -796,50 +846,16 @@ async function submitVerifyCode() {
   const rateLimit = enforceRateLimit("verify-code", pending?.target, { maxAttempts: 5, windowMs: 5 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
 
-  if (pending?.real) {
-    try {
-      const data = await verifyPhoneOtp({ phone: pending.target, token: draft.code.trim() });
-      const account = mapSupabaseUserToAccount(data.user);
-      state.auth.user = account;
-      state.auth.status = "signedIn";
-      state.auth.authError = null;
-      trackEvent(pending.purpose === "login" ? "sign_in" : "sign_up_verified", { method: "phone" });
-      if (!account.profileComplete) {
-        resetProfileDraftFromUser(account);
-        goToAuthView("completeProfile");
-      } else {
-        render();
-      }
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorCode");
-      render();
-    }
-    return;
-  }
+  if (!pending?.real) return void (state.auth.authError = t("auth.authErrorCode"));
 
-  if (draft.code.trim() !== state.auth.devCode) return void (state.auth.authError = t("auth.authErrorCode"));
-  const account = state.auth.user;
-  if (!account) return void (state.auth.authError = t("auth.authErrorCode"));
-
-  if (pending?.method === "email") account.emailVerified = true;
-  if (pending?.method === "phone") account.phoneVerified = true;
-  saveLocalAccount(account);
-  state.auth.authError = null;
-  state.auth.devCode = null;
-
-  if (pending?.purpose === "resetPassword") {
-    state.auth.resetDraft = { password: "", confirmPassword: "" };
-    goToAuthView("resetPassword");
-    return;
-  }
-
-  state.auth.status = "signedIn";
-  persistSession();
-  trackEvent(pending?.purpose === "login" ? "sign_in" : "sign_up_verified", { method: pending?.method || "email" });
-  if (!account.profileComplete) {
-    resetProfileDraftFromUser(account);
-    goToAuthView("completeProfile");
-  } else {
+  try {
+    const data = await verifyPhoneOtp({ phone: pending.target, token: draft.code.trim() });
+    await applySupabaseSession(data.session, "SIGNED_IN");
+    state.auth.authError = null;
+    trackEvent("sign_in", { method: "phone" });
+    render();
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorCode");
     render();
   }
 }
@@ -863,43 +879,34 @@ async function submitResetPassword() {
     return;
   }
 
-  // Password intentionally not persisted — see module note above.
   state.auth.authError = null;
   goToAuthView("login");
 }
 
 function resetProfileDraftFromUser(account) {
-  state.auth.profileDraft = { name: account.name || "", role: account.role || "", avatar: account.avatar || AUTH_AVATAR_PRESETS[0] };
+  state.auth.profileDraft = { name: account?.name || "", role: account?.role || "", avatar: account?.avatar || "" };
 }
 
 async function submitCompleteProfile() {
   const draft = state.auth.profileDraft;
   if (!draft.name.trim()) return void (state.auth.authError = t("auth.authErrorName"));
   const account = state.auth.user;
-  const isFirstCompletion = !account.profileComplete;
-  account.name = draft.name.trim();
-  account.role = draft.role.trim();
-  account.avatar = draft.avatar;
-  account.profileComplete = true;
+  if (!account) return void (state.auth.authError = t("auth.authErrorGeneric"));
 
-  if (account.isSupabaseAccount) {
-    try {
-      await updateUserMetadata({ name: account.name, role: account.role, avatar_url: account.avatar });
-    } catch (error) {
-      state.auth.authError = error?.message || t("auth.authErrorName");
-      render();
-      return;
-    }
-  } else {
-    saveLocalAccount(account);
-  }
-
-  state.auth.authError = null;
-  trackEvent("profile_completed", {});
-  if (isFirstCompletion) {
-    startWelcomeSequence();
-  } else {
-    state.activeView = "profile";
+  try {
+    const profiles = await completeUserProfile({
+      displayName: draft.name.trim(),
+      profession: draft.role.trim(),
+      avatarUrl: draft.avatar || account.avatar || null
+    });
+    state.auth.user = mapSupabaseUserToAccount(profiles.user, profiles);
+    state.auth.status = "signedIn";
+    state.auth.authError = null;
+    trackEvent("profile_completed", {});
+    state.activeView = "home";
+    render();
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorName");
     render();
   }
 }
@@ -933,7 +940,7 @@ function advanceWelcomeSequence() {
 
 async function signInWithProvider(provider) {
   if (!isSupabaseConfigured()) {
-    state.auth.authError = t("auth.authErrorProviderNotConfigured");
+    state.auth.authError = provider === "google" ? "Google sign-in is not configured for this build." : t("auth.authErrorProviderNotConfigured");
     render();
     return;
   }
@@ -961,8 +968,7 @@ async function signOut(scope = "local") {
   state.auth.pendingVerification = null;
   resetAuthDrafts();
   state.auth.authView = "login";
-  persistSession();
-  state.activeView = "home";
+  state.activeView = "auth";
   render();
 }
 
@@ -973,9 +979,7 @@ function completeOnboarding() {
 }
 
 function formatDistance(meters) {
-  if (meters == null || !Number.isFinite(meters)) return "";
-  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
+  return formatDistanceMeters(meters);
 }
 
 function distanceFromCenter(item) {
@@ -1104,6 +1108,16 @@ function sharePost(post) {
     return;
   }
   navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+function shareListing(item) {
+  const title = t(item.titleKey);
+  const url = `${window.location.origin}${window.location.pathname}?view=listingDetail&id=${item.id}`;
+  if (navigator.share) {
+    navigator.share({ title, text: `${title} — ${item.price}`, url }).catch(() => {});
+    return;
+  }
+  navigator.clipboard?.writeText(url).catch(() => {});
 }
 
 async function fetchCategoryEntities(source, category, radius) {
@@ -1807,11 +1821,11 @@ function renderPlaceDetailSheet(item) {
             : ""
         }
         <div class="place-detail-footer">
-          <span class="imported-source-meta">${t("business.sourceLabel")}: ${friendlySourceLabel(item)} · ${claimStatusLabel(item)}</span>
+          <span class="imported-source-meta">${t("business.sourceLabel")}: ${friendlySourceLabel(item)}</span>
           <div class="place-footer-actions">
             <button type="button" class="icon-action ${isPlaceSaved(item) ? "is-active" : ""}" data-action="toggle-save" data-place-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
             <button type="button" class="icon-action" data-action="share-place" data-place-id="${item.id}" aria-label="${t("common.share")}">${icon("arrow")}</button>
-            <button type="button" class="claim-subtle" data-view="ops">${t("business.claim.ownThisBusiness")}</button>
+            <button type="button" class="claim-subtle" data-view="businessClaim" data-place-id="${item.id}">${t("business.claim.ownThisBusiness")}</button>
           </div>
         </div>
       </section>
@@ -1884,7 +1898,8 @@ function routeForQuery() {
   if (/(assemble|ikea|somebody|plumber|cleaner|electrician|babysitter|babysitter tonight|tutor|tax advisor|photographer|lawyer|accountant|driver|airport pickup|pickup|mechanic|repair|book a cleaner|hire)/.test(q)) return "hire";
   if (/(earn|€100|100 today|make money|paid task|contribution points|dog walking|programming|consulting|knowledge sharing)/.test(q)) return "contribute";
   if (/(sell|iphone|bicycle|bike|lost wallet|wallet|apartment|bedroom|under 900|job|vehicle|business for sale)/.test(q)) return "marketplace";
-  if (/(new italian restaurant|business owner|opening in vilnius|claim business|city import)/.test(q)) return "ops";
+  if (/(claim business)/.test(q)) return "businessClaim";
+  if (/(new italian restaurant|business owner|opening in vilnius)/.test(q)) return "businesses";
   if (/(profile|account|what brings|skills|profession)/.test(q)) return "profile";
   if (/(just moved|moved to|settling|first week|plan my move)/.test(q)) return "home";
   if (/(remind|watch|track|monitor|notify me|tell me when|priority|workspace|alwen)/.test(q)) return "alwen";
@@ -1921,8 +1936,7 @@ const EXPLORE_SORTERS = {
   },
   recentlyUpdated: (a, b) => (b.lastUpdated || "").localeCompare(a.lastUpdated || ""),
   category: (a, b) => a.category.localeCompare(b.category) || (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity),
-  hasPhoto: (a, b) => Number(HAS_PHOTO_STATUSES.has(b.photoStatus)) - Number(HAS_PHOTO_STATUSES.has(a.photoStatus)) || (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity),
-  unclaimed: (a, b) => Number(b.claimStatus === "Unclaimed") - Number(a.claimStatus === "Unclaimed") || (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity)
+  hasPhoto: (a, b) => Number(HAS_PHOTO_STATUSES.has(b.photoStatus)) - Number(HAS_PHOTO_STATUSES.has(a.photoStatus)) || (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity)
 };
 
 function filteredImportedBusinesses() {
@@ -2076,7 +2090,7 @@ function renderShell() {
         <div class="top-controls">
           <button class="header-icon ${notifications.some((item) => item.unread) ? "has-unread" : ""}" data-view="notifications" aria-label="${t("notification.notificationCentre")}">${icon("bell")}</button>
           <button class="header-icon" data-sheet="language" aria-label="${t("settings.language")}">${icon("translate")}</button>
-          <button class="header-avatar ${state.auth.status === "signedIn" ? "" : "header-avatar-guest"}" data-view="profile" aria-label="${t("nav.profile")}">${state.auth.status === "signedIn" ? `<img src="${state.auth.user.avatar}" alt="" />` : icon("profile")}</button>
+          <button class="header-avatar ${state.auth.status === "signedIn" ? "" : "header-avatar-guest"}" data-view="profile" aria-label="${t("nav.profile")}">${state.auth.status === "signedIn" && state.auth.user.avatar ? `<img src="${escapeHtml(state.auth.user.avatar)}" alt="" />` : icon("profile")}</button>
         </div>
       </header>
       <main class="main">
@@ -2164,12 +2178,8 @@ function renderLogin() {
       ${mode === "email"
         ? `
           ${authField({ id: "login-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
-          ${authField({ id: "login-password", label: t("common.passwordLabel"), type: "password", value: draft.password, placeholder: t("common.passwordPlaceholder") })}
-          <label class="auth-checkbox-row">
-            <input id="login-remember" type="checkbox" ${draft.rememberMe ? "checked" : ""} />
-            <span>${t("common.rememberMeLabel")}</span>
-          </label>
-          <button type="submit" class="auth-primary-button">${t("common.signInCta")}</button>
+          <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
+          <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
           <button type="button" class="auth-link" data-auth-view="forgotPassword">${t("common.forgotPasswordLink")}</button>
         `
         : `
@@ -2187,16 +2197,13 @@ function renderRegister() {
   const body = `
     ${renderOAuthButtons()}
     <form class="auth-form" data-auth-form="register">
-      ${authField({ id: "register-name", label: t("common.nameLabel"), value: draft.name, placeholder: t("common.namePlaceholder") })}
       ${authField({ id: "register-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
-      ${authField({ id: "register-phone", label: `${t("common.phoneLabel")} ${t("common.optionalSuffix")}`, type: "tel", value: draft.phone, placeholder: t("common.phonePlaceholder") })}
-      ${authField({ id: "register-password", label: t("common.passwordLabel"), type: "password", value: draft.password, placeholder: t("common.passwordPlaceholder") })}
-      ${authField({ id: "register-confirm", label: t("common.confirmPasswordLabel"), type: "password", value: draft.confirmPassword, placeholder: t("common.confirmPasswordPlaceholder") })}
       <label class="auth-checkbox-row">
         <input id="register-terms" type="checkbox" ${draft.agreeTerms ? "checked" : ""} />
         <span>${t("common.agreeTermsLabel")}</span>
       </label>
-      <button type="submit" class="auth-primary-button">${t("common.createAccountCta")}</button>
+      <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
+      <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
     </form>
     <p class="auth-footer-line">${t("common.alreadyHaveAccount")} <button type="button" class="auth-link" data-auth-view="login">${t("common.signIn")}</button></p>
   `;
@@ -2226,7 +2233,6 @@ function renderVerifyCode() {
       ${authField({ id: "verify-code", label: t("common.codeLabel"), type: "text", value: draft.code, placeholder: "000000", extra: 'inputmode="numeric" maxlength="6" class="auth-code-input"' })}
       <button type="submit" class="auth-primary-button">${t("auth.verifyCta")}</button>
     </form>
-    <p class="auth-dev-hint">${t("auth.verifyCodeDevHint").replace("{code}", state.auth.devCode || "")}</p>
   `;
   return renderAuthShell(t("common.appName"), title, hint, body);
 }
@@ -2245,20 +2251,14 @@ function renderResetPassword() {
 
 function renderCompleteProfile() {
   const draft = state.auth.profileDraft;
-  const isCustomAvatar = draft.avatar && !AUTH_AVATAR_PRESETS.includes(draft.avatar);
   const body = `
     <form class="auth-form" data-auth-form="completeProfile">
       <div class="auth-avatar-picker">
-        ${isCustomAvatar ? `
+        ${draft.avatar ? `
           <span class="auth-avatar-option is-selected">
             <img src="${escapeHtml(draft.avatar)}" alt="" />
           </span>
         ` : ""}
-        ${AUTH_AVATAR_PRESETS.map((url) => `
-          <button type="button" class="auth-avatar-option ${draft.avatar === url ? "is-selected" : ""}" data-auth-avatar="${url}" aria-label="${t("common.chooseAvatarLabel")}">
-            <img src="${url}" alt="" />
-          </button>
-        `).join("")}
         <label class="auth-avatar-option auth-avatar-upload" aria-label="${t("common.uploadImage")}">
           ${icon("camera")}
           <input type="file" accept="image/*" data-role="profile-avatar-input" hidden />
@@ -2280,6 +2280,10 @@ function renderAuthFlow() {
   if (view === "resetPassword") return renderResetPassword();
   if (view === "completeProfile") return renderCompleteProfile();
   return renderLogin();
+}
+
+function renderAuthLoading() {
+  return renderAuthShell(t("common.appName"), t("auth.authCheckingSession"), t("auth.authCheckingSessionHint"), "");
 }
 
 function renderSettings() {
@@ -2304,7 +2308,7 @@ function renderSettings() {
         <div class="settings-section">
           <h3>${t("settings.settingsAccount")}</h3>
           <div class="settings-account-row">
-            <img src="${escapeHtml(user.avatar)}" alt="" />
+            ${user.avatar ? `<img src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="settings-account-avatar">${icon("profile")}</span>`}
             <div>
               <strong>${escapeHtml(user.name)}</strong>
               <span>${escapeHtml(user.email)}${user.emailVerified ? ` · ${t("status.verified")}` : ""}</span>
@@ -2352,7 +2356,11 @@ function renderSettings() {
           <p>${t("settings.legal.legalShortSummary")}</p>
           <button type="button" class="settings-row-button" data-view="legalTerms">${t("settings.legal.legalReadFullTerms")}</button>
         </details>
-        <details class="settings-legal-item"><summary>${t("settings.settingsPrivacyPolicy")}</summary><p>${t("settings.legal.legalPlaceholderBody")}</p></details>
+        <details class="settings-legal-item">
+          <summary>${t("settings.settingsPrivacyPolicy")}</summary>
+          <p>${t("settings.legal.privacyShortSummary")}</p>
+          <button type="button" class="settings-row-button" data-view="legalPrivacy">${t("settings.legal.privacyReadFullPolicy")}</button>
+        </details>
       </div>
 
       ${user ? `
@@ -2403,7 +2411,37 @@ function renderLegalTerms() {
         <h3>15. ${t("legalTerms.contactTitle")}</h3>
         <p>${t("legalTerms.contactLegalLabel")}: legal@alwenda.com</p>
         <p>${t("legalTerms.contactSupportLabel")}: support@alwenda.com</p>
-        <button type="button" class="settings-row-button" data-view="settings">${t("legalTerms.privacyLinkLabel")}</button>
+        <button type="button" class="settings-row-button" data-view="legalPrivacy">${t("legalTerms.privacyLinkLabel")}</button>
+      </div>
+    </section>
+  `;
+}
+
+/** Same English-only-body rule as renderLegalTerms() above, and the same
+ * reason: this describes what the app actually does with user data today,
+ * so getting it right matters more than having it in every language. */
+function renderLegalPrivacy() {
+  const sections = t("legalPrivacy.sections");
+  return `
+    <section class="section-shell settings-shell">
+      <button type="button" class="back-button" data-view="settings">${icon("arrow")}${t("common.back")}</button>
+      <div class="screen-heading">
+        <p class="eyebrow">${t("legalPrivacy.eyebrow")}</p>
+        <h1>${t("legalPrivacy.title")}</h1>
+        <p>${t("legalPrivacy.pilotNote")}</p>
+        <p class="settings-section-hint">${t("legalPrivacy.englishOnlyNote")}</p>
+      </div>
+      ${(Array.isArray(sections) ? sections : []).map((section) => `
+        <div class="settings-section">
+          <h3>${escapeHtml(section.title)}</h3>
+          <p>${escapeHtml(section.body)}</p>
+        </div>
+      `).join("")}
+      <div class="settings-section">
+        <h3>14. ${t("legalPrivacy.contactTitle")}</h3>
+        <p>${t("legalPrivacy.contactPrivacyLabel")}: privacy@alwenda.com</p>
+        <p>${t("legalPrivacy.contactSupportLabel")}: support@alwenda.com</p>
+        <button type="button" class="settings-row-button" data-view="legalTerms">${t("legalPrivacy.termsLinkLabel")}</button>
       </div>
     </section>
   `;
@@ -2467,6 +2505,19 @@ function renderOnboarding() {
 }
 
 function renderView() {
+  /* "profile" and "settings" are deliberately NOT protected — profile has
+     its own renderProfileSignedOut() guest card (with a working path to
+     Settings), and Settings itself must stay usable without signing in
+     (language, theme, install-app all work for guests) per an explicit,
+     confirmed product decision. Only genuinely personal data screens are
+     gated here. */
+  const protectedViews = new Set(["messages", "notifications", "savedPlaces", "businessDashboard"]);
+  if (state.auth.status === "checking") return renderAuthLoading();
+  if (protectedViews.has(state.activeView) && state.auth.status !== "signedIn") {
+    state.auth.authView = "login";
+    state.activeView = "auth";
+    return renderAuthFlow();
+  }
   const views = {
     alwen: renderAlwenWorkspace,
     home: renderHome,
@@ -2478,8 +2529,10 @@ function renderView() {
     hire: renderHire,
     needHelp: renderNeedHelp,
     listings: renderListings,
+    listingDetail: renderListingDetail,
     businesses: renderBusinesses,
     businessProfile: renderBusinessProfile,
+    businessClaim: renderBusinessClaim,
     offers: renderOffers,
     reservations: renderReservations,
     translate: renderTranslation,
@@ -2490,6 +2543,7 @@ function renderView() {
     auth: renderAuthFlow,
     settings: renderSettings,
     legalTerms: renderLegalTerms,
+    legalPrivacy: renderLegalPrivacy,
     onboarding: renderOnboarding,
     businessDashboard: renderBusinessDashboard,
     savedPlaces: renderSavedPlaces,
@@ -2637,7 +2691,7 @@ function renderLocalEconomyScores() {
         <div><h2>${t("alwenWorkspace.localEconomyScores")}</h2><p>${t("alwenWorkspace.localEconomyScoresHint")}</p></div>
       </div>
       <div class="score-grid">
-        ${contributionScores.map((score) => `<article><strong>${score.value}</strong><span>${score.label}</span></article>`).join("")}
+        ${contributionScores.map((score) => `<article><strong>${score.value}</strong><span>${t(score.labelKey)}</span></article>`).join("")}
       </div>
     </section>
   `;
@@ -2807,7 +2861,7 @@ function renderTrendingMarketplace() {
           <span>${categoryLabel(item.type)}</span>
           <h3>${t(item.titleKey)}</h3>
           <div class="mini-price-line"><strong>${item.price}</strong><em>${t(item.signalKey)}</em></div>
-          <p>${item.area} · 2.4 km away</p>
+          <p>${item.area} · ${t("common.distanceAway", { distance: formatDistance(item.distanceMeters) })}</p>
         </article>
       `).join("")
     )
@@ -3209,6 +3263,9 @@ function renderAlwenDock() {
   // would exist twice in the DOM at once and the singular-selector bindings
   // in bindEvents() would only ever reach the first copy.
   const showQuickTranslate = state.activeView !== "translate";
+  const chat = state.alwenChat;
+  const isLoading = chat.status === "loading";
+  const canRetry = chat.status === "error" && chat.lastMessage;
   return `
     <aside class="alwen-dock ${state.alwenOpen ? "is-open" : ""}" aria-label="${t("common.tellAlwen")}">
       <button class="alwen-orb" data-alwen-toggle aria-expanded="${state.alwenOpen ? "true" : "false"}" aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
@@ -3224,6 +3281,28 @@ function renderAlwenDock() {
         ${showQuickTranslate ? renderAlwenQuickTranslate() : ""}
 
         <p class="alwen-panel-intro">${t("alwen.alwenDockHint")}</p>
+        <form class="alwen-chat-form" data-alwen-chat-form>
+          <label for="alwen-chat-input">${t("alwen.alwenChatLabel")}</label>
+          <div class="alwen-chat-compose">
+            <textarea id="alwen-chat-input" name="message" maxlength="2000" rows="3" placeholder="${t("alwen.alwenChatPlaceholder")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
+            <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
+          </div>
+        </form>
+        ${chat.status === "success" ? `
+          <div class="alwen-chat-answer" role="status">
+            <strong>${t("alwen.alwenChatAnswerLabel")}</strong>
+            <p>${escapeHtml(chat.answer)}</p>
+          </div>
+        ` : ""}
+        ${chat.status === "error" ? `
+          <div class="alwen-chat-error" role="alert">
+            <p>${escapeHtml(chat.error || t("alwen.alwenChatGenericError"))}</p>
+            <div>
+              ${canRetry ? `<button type="button" data-alwen-retry>${t("alwen.alwenChatRetry")}</button>` : ""}
+              ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
+            </div>
+          </div>
+        ` : ""}
         <div class="alwen-mode-row">
           <button type="button" data-alwen-upload="image">${icon("uploadImageMode")}${t("common.uploadImage")}</button>
           <button type="button" data-alwen-upload="document">${icon("uploadDocumentMode")}${t("common.uploadDocument")}</button>
@@ -3234,6 +3313,56 @@ function renderAlwenDock() {
       </div>
     </aside>
   `;
+}
+
+async function submitAlwenChat(message = state.alwenChat.input || state.alwenChat.lastMessage) {
+  const trimmed = String(message || "").trim();
+  state.alwenChat.input = trimmed;
+  state.alwenChat.lastMessage = trimmed;
+  state.alwenChat.answer = "";
+  state.alwenChat.error = null;
+
+  if (!trimmed) {
+    state.alwenChat.status = "error";
+    state.alwenChat.error = t("alwen.alwenChatEmptyError");
+    render();
+    return;
+  }
+
+  if (state.auth.status !== "signedIn") {
+    state.alwenChat.status = "error";
+    state.alwenChat.error = t("alwen.alwenChatSignedOutError");
+    render();
+    return;
+  }
+
+  state.alwenChat.status = "loading";
+  render();
+
+  try {
+    const result = await sendAlwenMessage({
+      message: trimmed,
+      language: getCurrentLanguage(),
+      city: city.name || "Vilnius",
+      conversationId: state.alwenChat.conversationId
+    });
+    state.alwenChat.status = "success";
+    state.alwenChat.answer = result.answer;
+    state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
+    state.alwenChat.input = "";
+    trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
+  } catch (error) {
+    const code = error?.code || "";
+    state.alwenChat.status = "error";
+    state.alwenChat.error =
+      code === "unauthenticated"
+        ? t("alwen.alwenChatExpiredError")
+        : code === "provider_config_missing"
+          ? t("alwen.alwenChatMissingKeyError")
+          : error?.message || t("alwen.alwenChatGenericError");
+    trackEvent("alwen_chat_failed", { code: code || "unknown" });
+  }
+  render();
 }
 
 /** One-touch voice translator, promoted to the top of the global Alwen
@@ -3461,7 +3590,7 @@ function renderPulse(post) {
   const savesCount = (post.saves || 0) + (isSaved ? 1 : 0);
   return `
     <article class="pulse-card visual-pulse-card social-post-card">
-      <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: post.categoryKey ? t(post.categoryKey) : "", context: "community" })}>
+      <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: post.categoryKey ? t(post.categoryKey) : "", context: "community" })}>
         <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
         <div>
           <strong>${post.author}</strong>
@@ -3650,7 +3779,6 @@ function renderExplore() {
           <option value="recentlyUpdated" ${state.exploreSort === "recentlyUpdated" ? "selected" : ""}>${t("import.sort.sortRecentlyUpdated")}</option>
           <option value="category" ${state.exploreSort === "category" ? "selected" : ""}>${t("import.sort.sortCategory")}</option>
           <option value="hasPhoto" ${state.exploreSort === "hasPhoto" ? "selected" : ""}>${t("import.sort.sortHasPhoto")}</option>
-          <option value="unclaimed" ${state.exploreSort === "unclaimed" ? "selected" : ""}>${t("import.sort.sortUnclaimed")}</option>
         </select>
       </label>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", shown.length).replace("{total}", imported.length)}</p>
@@ -3751,14 +3879,29 @@ function renderMarketplace() {
 }
 
 const CONTRIBUTION_SCORE_ICON = {
-  Reputation: "trust",
-  Trust: "verify",
-  "Contribution points": "spark",
-  "Marketplace score": "tag",
-  "Professional score": "briefcase",
-  "Community score": "people",
-  "Translation score": "translate",
-  "Business score": "city"
+  reputation: "trust",
+  trust: "verify",
+  contributionPoints: "spark",
+  marketplaceScore: "tag",
+  professionalScore: "briefcase",
+  communityScore: "people",
+  translationScore: "translate",
+  businessScore: "city"
+};
+
+/** Groups the economy stat tiles into three visual tiers so the grid
+ * reads as categorized signal instead of nine identical black badges.
+ * Keyed by the stable `id` (not the translated label) so switching
+ * language doesn't break the lookup. */
+const CONTRIBUTION_SCORE_TONE = {
+  reputation: "mint",
+  trust: "mint",
+  contributionPoints: "mint",
+  marketplaceScore: "gold",
+  professionalScore: "gold",
+  businessScore: "gold",
+  communityScore: "sky",
+  translationScore: "sky"
 };
 
 const CONTRIBUTION_ACTION_ICON = {
@@ -3780,7 +3923,7 @@ function renderContribute() {
       </div>
       ${renderAiSearch("contribute")}
       <div class="score-grid">
-        ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.label] || "spark", score.label, score.value)).join("")}
+        ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.id] || "spark", t(score.labelKey), score.value, undefined, CONTRIBUTION_SCORE_TONE[score.id])).join("")}
         ${reputationTile(streakTile.icon, streakTile.label, streakTile.value)}
       </div>
       ${renderEarningOpportunities()}
@@ -3800,7 +3943,7 @@ function renderContributionAction(action) {
       <h3>${t(action.titleKey)}</h3>
       <p>${action.description}</p>
       <div class="quote-list">${action.connects.map((item) => `<span>${item}</span>`).join("")}</div>
-      <button>${t("common.startContributing")}</button>
+      <button type="button" data-view="alwen">${t("common.startContributing")}</button>
     </article>
   `;
 }
@@ -3854,9 +3997,9 @@ function renderAlwenListingCreator() {
 
 function renderMarketplaceListing(item) {
   const isSaved = state.savedListingIds.includes(item.id);
-  const personAttrs = publicProfileAttrs({ name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
+  const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
-    <article class="market-card visual-market-card is-${item.cardSize || "compact"}">
+    <article class="market-card visual-market-card is-${item.cardSize || "compact"}" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
       <div class="market-photo" style="background-image: url('${item.image}')">
         <button type="button" class="favourite-float ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
@@ -3881,8 +4024,88 @@ function renderMarketplaceListing(item) {
   `;
 }
 
+/** Full listing detail — the card above only ever showed a teaser (photo,
+ * truncated title, price) with no way to see the rest. Reuses the same
+ * gallery-rail / detail-strip / actions-row markup pattern as
+ * renderBusinessProfile above so it reads as the same "detail screen"
+ * family rather than a one-off layout. Deep-linkable via WP0's routing
+ * (?view=listingDetail&id=<id>), survives refresh/back per that same
+ * mechanism. */
+function renderListingDetail() {
+  const item = listings.find((listing) => listing.id === state.selectedListingId);
+  if (!item) {
+    return `
+      <section class="section-shell listing-detail-shell">
+        <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
+        ${renderEmptyState(t("common.noResults"), "search")}
+      </section>
+    `;
+  }
+
+  const gallery = item.gallery && item.gallery.length ? item.gallery : [item.image];
+  const isSaved = state.savedListingIds.includes(item.id);
+  const isReported = state.reportedListings.includes(item.id);
+  const sellerAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
+  const hasFulfilment = item.pickupAvailable || item.deliveryAvailable;
+
+  return `
+    <section class="section-shell listing-detail-shell">
+      <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
+
+      <div class="business-gallery-rail listing-gallery-rail">${gallery.map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`).join("")}</div>
+      ${gallery.length === 1 ? `<p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>` : ""}
+
+      <div class="screen-heading">
+        <span class="badge category-chip">${categoryLabel(item.type)}</span>
+        <h1>${t(item.titleKey)}</h1>
+        <p class="price-row"><strong>${item.price}</strong></p>
+      </div>
+
+      <div class="business-detail-strip">
+        <p class="business-detail-line">${pinIcon()}${escapeHtml(item.area)} · ${escapeHtml(item.distance)}</p>
+        ${item.condition ? `<p class="business-detail-line">${t("field.condition")}: ${t(`marketplace.condition.${item.condition}`)}</p>` : ""}
+      </div>
+
+      <div class="section-title"><h2>${t("marketplace.listingDetail.aboutListing")}</h2></div>
+      <p>${item.descriptionKey ? t(item.descriptionKey) : t(item.metaKey)}</p>
+
+      ${
+        hasFulfilment
+          ? `<div class="section-title"><h2>${t("marketplace.listingDetail.fulfilment")}</h2></div>
+             <div class="business-detail-strip">
+               <p class="business-detail-line">${t("field.pickup")}: ${item.pickupAvailable ? t("marketplace.listingDetail.pickupAvailable") : t("marketplace.listingDetail.notOffered")}</p>
+               <p class="business-detail-line">${t("field.deliveryOptions")}: ${item.deliveryAvailable ? t("marketplace.listingDetail.deliveryAvailable") : t("marketplace.listingDetail.notOffered")}</p>
+             </div>`
+          : ""
+      }
+
+      <div class="section-title"><h2>${t("common.contactSeller")}</h2></div>
+      <div class="seller-row" role="button" tabindex="0" ${sellerAttrs}>
+        <img src="${item.sellerAvatar}" alt="" />
+        <div>
+          <strong>${escapeHtml(item.seller)}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong>
+          <span>${t("common.responseTime")}: ${t(`marketplace.responseTime.${item.sellerResponseTime}`)} · ${t("profile.reputation.overallReputation")} ${item.sellerReputation}</span>
+        </div>
+      </div>
+      <button type="button" class="settings-row-button" ${sellerAttrs}>${t("common.viewProfile")}</button>
+
+      <div class="business-profile-actions listing-detail-actions">
+        <button type="button" data-view="messages">${t("common.message")}</button>
+        ${
+          item.sellerPhone
+            ? `<a class="directions-btn" href="tel:${item.sellerPhone}" title="${t("marketplace.listingDetail.callOpensPhone")}">${t("common.call")}</a>`
+            : `<button type="button" disabled>${t("common.call")}</button>`
+        }
+        <button type="button" class="${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}">${t("common.favourite")}</button>
+        <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
+        <button type="button" data-action="report-listing" data-listing-id="${item.id}" ${isReported ? "disabled" : ""}>${isReported ? t("marketplace.listingDetail.reportedConfirmation") : t("common.reportPersonCta")}</button>
+      </div>
+    </section>
+  `;
+}
+
 function renderProfessional(item) {
-  const personAttrs = publicProfileAttrs({ name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
+  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
   return `
     <article class="pro-card">
       <div class="pro-card-identity" role="button" tabindex="0" ${personAttrs}>
@@ -4045,7 +4268,7 @@ function renderInlineProSuggestions(category) {
       <p class="inline-pro-suggestions-label">${t("needHelp.instantMatchesFound").replace("{count}", matches.length).replace("{category}", categoryName)}</p>
       <div class="inline-pro-suggestions-list">
         ${top.map((item) => {
-          const personAttrs = publicProfileAttrs({ name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
+          const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
           return `
             <button type="button" class="inline-pro-chip" ${personAttrs}>
               <span class="inline-pro-avatar">${initials(item.name)}</span>
@@ -4207,6 +4430,20 @@ function businessTypeLabel(type) {
   return key ? t(key) : type;
 }
 
+const OPENING_HOURS_DAY_LABEL_KEY = {
+  "Mon–Fri": "field.days.monFri",
+  "Mon–Sat": "field.days.monSat",
+  Sat: "field.days.sat",
+  "Sat–Sun": "field.days.satSun",
+  "Tue–Sun": "field.days.tueSun",
+  "Every day": "field.days.everyDay"
+};
+
+function openingHoursDayLabel(days) {
+  const key = OPENING_HOURS_DAY_LABEL_KEY[days];
+  return key ? t(key) : days;
+}
+
 function renderBusinessProfile() {
   const item = businesses.find((business) => business.id === state.selectedBusinessId) || businesses[0];
   const gallery = [item.image, ...(item.gallery || [])];
@@ -4237,7 +4474,7 @@ function renderBusinessProfile() {
       <div class="business-profile-actions">
         <button type="button" data-view="reservations">${t("common.bookNow")}</button>
         ${renderDirectionsButton(item)}
-        ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${t("common.call")}</a>` : ""}
+        ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>` : ""}
         <button type="button" data-view="messages">${t("common.message")}</button>
       </div>
       ${
@@ -4249,14 +4486,14 @@ function renderBusinessProfile() {
       ${
         item.openingHours
           ? `<div class="section-title"><h2>${t("field.openingHours")}</h2></div>
-             <div class="business-hours-list">${item.openingHours.map((row) => `<div class="business-hours-row"><span>${row.days}</span><strong>${row.hours}</strong></div>`).join("")}</div>`
+             <div class="business-hours-list">${item.openingHours.map((row) => `<div class="business-hours-row"><span>${openingHoursDayLabel(row.days)}</span><strong>${row.hours}</strong></div>`).join("")}</div>`
           : ""
       }
       <div class="section-title"><h2>${t("common.reviews")}</h2></div>
       <div class="review-grid">
         ${profileReviews.map((review) => `
           <article>
-            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ name: review.author, avatar: review.avatar, context: "review" })}>
+            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
               <img src="${review.avatar}" alt="" />
               <div><strong>${review.author}</strong><span>${"★".repeat(review.rating)}</span></div>
             </div>
@@ -4361,7 +4598,7 @@ function renderOffers() {
               <span>${offer.expires}</span>
               <h3>${offer.value}</h3>
               <p>${t(offer.titleKey)}</p>
-              <small>${offer.vendor} · ${offer.area}</small>
+              <small role="button" tabindex="0" ${publicProfileAttrs({ id: `offer-${offer.id}`, name: offer.vendor, area: offer.area, context: "marketplace" })}>${offer.vendor} · ${offer.area}</small>
               <button>${t("business.claim.claimOffer")}</button>
             </article>`
           )
@@ -5138,6 +5375,7 @@ function renderPublicProfile() {
 
   return `
     <section class="section-shell profile-panel">
+      <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
       <div class="public-profile-identity">
         <span class="avatar-frame public-profile-avatar">
           ${person.avatar ? `<img class="profile-portrait" src="${escapeHtml(person.avatar)}" alt="" />` : `<span class="public-profile-initials">${escapeHtml(initials(person.name))}</span>`}
@@ -5200,7 +5438,7 @@ function renderProfile() {
         <button type="button" class="profile-settings-button" data-view="settings" aria-label="${t("settings.settingsTitle")}">${icon("ops")}</button>
         <div class="profile-glass">
           <span class="avatar-frame">
-            <img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />
+            ${user.avatar ? `<img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
             ${BrandLogo({ variant: "icon", tone: "light", className: "avatar-watermark avatar-watermark-dark" })}
             ${BrandLogo({ variant: "icon", tone: "dark", className: "avatar-watermark avatar-watermark-light" })}
           </span>
@@ -5228,7 +5466,6 @@ function renderProfile() {
         <article><strong>${state.savedPlaceIds.length}</strong><span>${t("profile.savedPlaces")}</span></article>
         <article><strong>4</strong><span>${t("profile.activeRequests")}</span></article>
         <article><strong>3</strong><span>${t("common.localOffers")}</span></article>
-        <button data-view="ops">${t("common.openOps")}</button>
         <button data-view="settings">${t("settings.settingsTitle")}</button>
       </div>
     </section>
@@ -5284,7 +5521,7 @@ function renderProfileReviews() {
       <div class="review-grid">
         ${profileReviews.map((review) => `
           <article>
-            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ name: review.author, avatar: review.avatar, context: "review" })}>
+            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
               <img src="${review.avatar}" alt="" />
               <div><strong>${review.author}</strong><span>${"★".repeat(review.rating)}</span></div>
             </div>
@@ -5395,9 +5632,9 @@ const SIGNAL_ICON = {
   "Recommendation %": "spark"
 };
 
-function reputationTile(iconName, label, value, detail) {
+function reputationTile(iconName, label, value, detail, toneClass) {
   return `
-    <article>
+    <article${toneClass ? ` class="tone-${toneClass}"` : ""}>
       <span class="tile-icon">${icon(iconName)}</span>
       <span>${label}</span>
       <strong>${value}</strong>
@@ -5803,16 +6040,6 @@ function renderPlacePhoto(item) {
   `;
 }
 
-/** Kept for admin/internal contexts (Ops import preview) — public place
- * cards no longer surface this as a prominent badge, only as small print
- * next to the subtle claim CTA. */
-function claimStatusLabel(item) {
-  if (item.claimStatus === "Unclaimed") return `${t("status.unclaimed")} · ${t("status.openData")}`;
-  if (item.claimStatus === "Claim pending") return t("status.claimPending");
-  if (item.claimStatus === "Claimed") return t("status.claimed");
-  return item.claimStatus;
-}
-
 /** Every record here really is sourced from OpenStreetMap/Wikidata/etc.,
  * and small-print source metadata is still shown — but the raw label
  * ("OpenStreetMap / Overpass API") reads as an internal API name, not a
@@ -5836,7 +6063,7 @@ function renderDirectionsButton(item) {
 
 function renderPlaceActionButtons(item) {
   const primary = [renderDirectionsButton(item)];
-  if (item.phone) primary.push(`<a class="directions-btn" data-place-id="${item.id}" href="tel:${item.phone}">${t("common.call")}</a>`);
+  if (item.phone) primary.push(`<a class="directions-btn" data-place-id="${item.id}" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>`);
   if (item.website) primary.push(`<a class="directions-btn" data-place-id="${item.id}" href="${item.website}" target="_blank" rel="noopener noreferrer">${t("common.website")}</a>`);
 
   const secondary = categoryActionsFor(item)
@@ -5865,7 +6092,7 @@ function renderPlaceFooterActions(item) {
       <div class="place-footer-actions">
         <button type="button" class="icon-action ${isPlaceSaved(item) ? "is-active" : ""}" data-action="toggle-save" data-place-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
         <button type="button" class="icon-action" data-action="share-place" data-place-id="${item.id}" aria-label="${t("common.share")}">${icon("arrow")}</button>
-        <button type="button" class="claim-subtle" data-view="ops">${t("business.claim.claimBusiness")}</button>
+        <button type="button" class="claim-subtle" data-view="businessClaim" data-place-id="${item.id}">${t("business.claim.claimBusiness")}</button>
       </div>
     </div>
   `;
@@ -6004,6 +6231,22 @@ function renderBusinessDashboard() {
   `;
 }
 
+/** Standalone, customer-facing claim route — deep-linkable as
+ * ?view=businessClaim&id=<placeId> (see WP0 routing). Previously the only
+ * way to reach renderClaimFlow() below was through the internal Ops/
+ * city-import dashboard, which meant every "Own this business" button in
+ * the app routed ordinary customers into an unrelated internal admin
+ * screen. This wraps the same real 4-step form in its own section with a
+ * normal back button, same pattern as renderListingDetail/renderBusinessProfile. */
+function renderBusinessClaim() {
+  return `
+    <section class="section-shell business-claim-shell">
+      <button type="button" class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
+      ${renderClaimFlow()}
+    </section>
+  `;
+}
+
 function renderClaimFlow() {
   const place = state.selectedPlaceId ? importedBusinesses.find((business) => business.id === state.selectedPlaceId) : null;
 
@@ -6128,6 +6371,8 @@ function bindEvents() {
         state.exploreStars = "All";
       }
       if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
+      if (button.dataset.listingId) state.selectedListingId = Number(button.dataset.listingId);
+      if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
       render();
       if (isReturningToSameView) window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -6139,6 +6384,16 @@ function bindEvents() {
       state.activeSheet = null;
       render();
     });
+  });
+
+  document.querySelector("[data-alwen-chat-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    submitAlwenChat(formData.get("message"));
+  });
+
+  document.querySelector("[data-alwen-retry]")?.addEventListener("click", () => {
+    submitAlwenChat(state.alwenChat.lastMessage);
   });
 
   document.querySelectorAll("[data-category]").forEach((button) => {
@@ -6262,6 +6517,26 @@ function bindEvents() {
       event.stopPropagation();
       const id = Number(button.dataset.listingId);
       state.savedListingIds = state.savedListingIds.includes(id) ? state.savedListingIds.filter((existing) => existing !== id) : [...state.savedListingIds, id];
+      trackEvent("place_saved", { listingId: id });
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="share-listing"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = Number(button.dataset.listingId);
+      const item = listings.find((listing) => listing.id === id);
+      if (item) shareListing(item);
+      trackEvent("place_shared", { listingId: id });
+    });
+  });
+
+  document.querySelectorAll('[data-action="report-listing"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = Number(button.dataset.listingId);
+      if (!state.reportedListings.includes(id)) state.reportedListings.push(id);
       render();
     });
   });
@@ -6558,22 +6833,6 @@ function bindAuthEvents() {
     button.addEventListener("click", () => signInWithProvider(button.dataset.authProvider));
   });
 
-  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const id = button.dataset.togglePassword;
-      state.auth.visiblePasswordFields[id] = !state.auth.visiblePasswordFields[id];
-      render();
-      document.getElementById(id)?.focus({ preventScroll: true });
-    });
-  });
-
-  document.querySelectorAll("[data-auth-avatar]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.auth.profileDraft.avatar = button.dataset.authAvatar;
-      render();
-    });
-  });
-
   document.querySelector('[data-role="profile-avatar-input"]')?.addEventListener("change", (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -6586,14 +6845,8 @@ function bindAuthEvents() {
   });
 
   bindLiveField("login-email", (value) => (state.auth.loginDraft.email = value));
-  bindLiveField("login-password", (value) => (state.auth.loginDraft.password = value));
   bindLiveField("login-phone", (value) => (state.auth.loginDraft.phone = value));
-  bindLiveField("login-remember", (value) => (state.auth.loginDraft.rememberMe = value));
-  bindLiveField("register-name", (value) => (state.auth.registerDraft.name = value));
   bindLiveField("register-email", (value) => (state.auth.registerDraft.email = value));
-  bindLiveField("register-phone", (value) => (state.auth.registerDraft.phone = value));
-  bindLiveField("register-password", (value) => (state.auth.registerDraft.password = value));
-  bindLiveField("register-confirm", (value) => (state.auth.registerDraft.confirmPassword = value));
   bindLiveField("register-terms", (value) => (state.auth.registerDraft.agreeTerms = value));
   bindLiveField("forgot-email", (value) => (state.auth.forgotDraft.email = value));
   bindLiveField("verify-code", (value) => (state.auth.verifyDraft.code = value.replace(/\D/g, "").slice(0, 6)));
@@ -6660,10 +6913,9 @@ function bindSettingsEvents() {
     render();
   });
   document.querySelector('[data-settings-delete-confirm="true"]')?.addEventListener("click", () => {
-    const accounts = loadLocalAccounts().filter((account) => account.id !== state.auth.user?.id);
-    writeLocalStorage(AUTH_ACCOUNTS_KEY, accounts);
     state.settingsConfirmDelete = false;
-    signOut();
+    state.auth.authNotice = t("auth.authDeleteAccountBackendRequired");
+    signOut("local");
   });
 }
 
@@ -6824,6 +7076,7 @@ function render() {
     window.scrollTo(0, 0);
     lastRenderedView = state.activeView;
   }
+  syncUrlToState();
 }
 
 /** Full-screen photo zoom viewer — deliberately built OUTSIDE the render()
@@ -7009,9 +7262,11 @@ resetAuthDrafts();
 hydrateAuthFromStorage();
 await hydrateSupabaseAuth();
 applyBusinessOverrides();
-applyDeepLinkFromUrl();
+syncStateFromUrl();
+suppressNextUrlPush = true;
 applyTheme();
 bindThemeListener();
+bindHistoryNavigation();
 render();
 bindAiSearchPlaceholderRotation();
 registerServiceWorker();

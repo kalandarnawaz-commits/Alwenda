@@ -6353,6 +6353,84 @@ body {
   line-height: 1.5;
 }
 
+.alwen-chat-form {
+  display: grid;
+  gap: 8px;
+}
+
+.alwen-chat-form label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.alwen-chat-compose {
+  display: grid;
+  gap: 8px;
+}
+
+.alwen-chat-compose textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  padding: 12px;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.alwen-chat-compose button,
+.alwen-chat-error button {
+  min-height: 40px;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-weight: 850;
+}
+
+.alwen-chat-compose button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.alwen-chat-answer,
+.alwen-chat-error {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+}
+
+.alwen-chat-answer {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.alwen-chat-answer strong {
+  font-size: 0.82rem;
+}
+
+.alwen-chat-answer p,
+.alwen-chat-error p {
+  margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.alwen-chat-error {
+  background: rgba(239, 68, 68, 0.09);
+  color: var(--ink);
+}
+
+.alwen-chat-error div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .alwen-mode-row button,
 .alwen-actions button {
   min-height: 38px;
@@ -6746,6 +6824,77 @@ body {
   min-height: 56px;
   border-radius: 18px;
   font-weight: 850;
+}
+
+/* Alwenda Economy stat grid — scoped to .score-grid only, doesn't touch
+   the shared .reputation-grid/.signal-grid/.draft-grid tile system above.
+   Three fixes: (1) a subtle hover-lift + shadow so tiles read as premium
+   cards instead of flat boxes, (2) tinted icon badges grouped by tier
+   (identity/earning/social) via CONTRIBUTION_SCORE_TONE in main.js so
+   nine near-identical black circles become scannable categories, and
+   (3) the last tile (Contribution Streak, always appended after the 8
+   scored tiles) spans the full row as a wide highlight bar instead of
+   sitting stranded alone when 9 tiles don't divide evenly into a row. */
+.score-grid article {
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.score-grid article:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 31, 27, 0.1);
+}
+
+.score-grid article span.tile-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 0.95rem;
+}
+
+.score-grid article.tone-mint span.tile-icon {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.score-grid article.tone-gold span.tile-icon {
+  background: var(--gold);
+  color: var(--ink);
+}
+
+.score-grid article.tone-sky span.tile-icon {
+  background: var(--sky);
+  color: var(--ink);
+}
+
+.score-grid article:last-child {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 2px;
+  padding: 16px 20px !important;
+  background: linear-gradient(135deg, var(--mint), var(--surface));
+}
+
+.score-grid article:last-child span.tile-icon {
+  grid-row: 1 / 3;
+  margin-bottom: 0;
+}
+
+.score-grid article:last-child span:not(.tile-icon) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.score-grid article:last-child strong {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+:root[data-theme="dark"] .score-grid article:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
 /* Chat-style transcript — a distinct avatar + speaker label per turn,

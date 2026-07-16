@@ -125,3 +125,13 @@ export function formatCurrency(amount, currency = "EUR") {
   if (!Number.isFinite(amount)) return "";
   return new Intl.NumberFormat(currentLocaleTag(), { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
+
+/** Locale-aware distance formatting — "m"/"km" are the same abbreviation
+ * across every currently-supported language, but the number itself isn't
+ * (1.6 km in English vs 1,6 km in Lithuanian/German), so this still needs
+ * to go through Intl.NumberFormat rather than a hardcoded .toFixed(). */
+export function formatDistanceMeters(meters) {
+  if (meters == null || !Number.isFinite(meters)) return "";
+  if (meters < 1000) return `${formatNumber(Math.round(meters / 10) * 10)} m`;
+  return `${formatNumber(meters / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+}

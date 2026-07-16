@@ -28,16 +28,22 @@ test("mapSupabaseUserToAccount returns null for a null user and never fabricates
 
 test("mapSupabaseUserToAccount maps a real Supabase user shape onto the app's account shape", async () => {
   const { mapSupabaseUserToAccount } = await import("../src/services/auth/supabaseClient.js");
-  const account = mapSupabaseUserToAccount({
-    id: "uuid-123",
-    email: "user@example.com",
-    phone: null,
-    created_at: "2026-01-01T00:00:00.000Z",
-    email_confirmed_at: "2026-01-02T00:00:00.000Z",
-    phone_confirmed_at: null,
-    user_metadata: { name: "Test User", avatar_url: "https://example.com/a.png" },
-    app_metadata: { provider: "google" }
-  });
+  const account = mapSupabaseUserToAccount(
+    {
+      id: "uuid-123",
+      email: "user@example.com",
+      phone: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      email_confirmed_at: "2026-01-02T00:00:00.000Z",
+      phone_confirmed_at: null,
+      user_metadata: { name: "Test User", avatar_url: "https://example.com/a.png" },
+      app_metadata: { provider: "google" }
+    },
+    {
+      publicProfile: { display_name: "Test User", avatar_url: "https://example.com/a.png", profession: "" },
+      privateProfile: { onboarding_complete: true }
+    }
+  );
   assert.equal(account.id, "uuid-123");
   assert.equal(account.name, "Test User");
   assert.equal(account.email, "user@example.com");

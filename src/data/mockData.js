@@ -273,9 +273,9 @@ export const profileAchievements = [
 ];
 
 export const profileReviews = [
-  { author: "Ieva", rating: 5, textKey: "mock.review.review1Text", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" },
-  { author: "Mantas", rating: 5, textKey: "mock.review.review2Text", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80" },
-  { author: "Austėja", rating: 5, textKey: "mock.review.review3Text", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" }
+  { id: "review-1", author: "Ieva", rating: 5, textKey: "mock.review.review1Text", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" },
+  { id: "review-2", author: "Mantas", rating: 5, textKey: "mock.review.review2Text", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80" },
+  { id: "review-3", author: "Austėja", rating: 5, textKey: "mock.review.review3Text", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" }
 ];
 
 export const reputationTimeline = [
@@ -306,6 +306,7 @@ export const neighbourhoods = [
 export const feedPosts = [
   {
     id: 1,
+    authorId: "community-1",
     author: "Austėja",
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80",
     area: "Užupis",
@@ -322,6 +323,7 @@ export const feedPosts = [
   },
   {
     id: 2,
+    authorId: "community-2",
     author: "Jonas",
     avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=240&q=80",
     area: "Naujamiestis",
@@ -338,6 +340,7 @@ export const feedPosts = [
   },
   {
     id: 3,
+    authorId: "community-3",
     author: "Marta",
     avatar: "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=240&q=80",
     area: "Old Town",
@@ -354,6 +357,7 @@ export const feedPosts = [
   },
   {
     id: 4,
+    authorId: "community-4",
     author: "Rokas",
     avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=240&q=80",
     area: "Žvėrynas",
@@ -370,6 +374,7 @@ export const feedPosts = [
   },
   {
     id: 5,
+    authorId: "community-5",
     author: "Eglė",
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80",
     area: "Antakalnis",
@@ -401,10 +406,10 @@ export const liveAroundYou = [
 ];
 
 export const trendingMarketplace = [
-  { titleKey: "mock.trending.trending1Title", price: "€720", area: "Naujamiestis", type: "buy-sell", signalKey: "mock.trending.trending1Signal", image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.trending.trending2Title", price: "€850/mo", area: "Žvėrynas", type: "rentals", signalKey: "mock.trending.trending2Signal", image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.trending.trending3Title", price: "€7,900", area: "Antakalnis", type: "vehicles", signalKey: "mock.trending.trending3Signal", image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.trending.trending4Title", price: "€50", area: "Paupys", type: "buy-sell", signalKey: "mock.trending.trending4Signal", image: "https://images.unsplash.com/photo-1558997519-83ea9252edf8?auto=format&fit=crop&w=900&q=80" }
+  { titleKey: "mock.trending.trending1Title", price: "€720", area: "Naujamiestis", type: "buy-sell", signalKey: "mock.trending.trending1Signal", image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80", distanceMeters: 1100 },
+  { titleKey: "mock.trending.trending2Title", price: "€850/mo", area: "Žvėrynas", type: "rentals", signalKey: "mock.trending.trending2Signal", image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80", distanceMeters: 2600 },
+  { titleKey: "mock.trending.trending3Title", price: "€7,900", area: "Antakalnis", type: "vehicles", signalKey: "mock.trending.trending3Signal", image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80", distanceMeters: 4800 },
+  { titleKey: "mock.trending.trending4Title", price: "€50", area: "Paupys", type: "buy-sell", signalKey: "mock.trending.trending4Signal", image: "https://images.unsplash.com/photo-1558997519-83ea9252edf8?auto=format&fit=crop&w=900&q=80", distanceMeters: 700 }
 ];
 
 export const earnToday = [
@@ -443,6 +448,8 @@ export const alwenRecommendations = [
 export const listings = [
   {
     id: 101,
+    descriptionKey: "mock.listing.listing101Description",
+    sellerId: "seller-101",
     type: "rentals",
     titleKey: "mock.listing.listing101Title",
     area: "Naujamiestis",
@@ -450,9 +457,14 @@ export const listings = [
     metaKey: "mock.listing.listing101Meta",
     status: "Verified",
     image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80",
-    gallery: ["https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1000&q=80"],
+    gallery: ["https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1000&q=80", "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1000&q=80", "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1000&q=80"],
     seller: "Ieva",
     sellerAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "fast",
+    sellerReputation: 92,
+    pickupAvailable: true,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "1.6 km",
     popularity: "31 saves",
@@ -462,6 +474,8 @@ export const listings = [
   },
   {
     id: 102,
+    descriptionKey: "mock.listing.listing102Description",
+    sellerId: "seller-102",
     type: "services",
     titleKey: "mock.listing.listing102Title",
     area: "Šnipiškės",
@@ -469,8 +483,14 @@ export const listings = [
     metaKey: "mock.listing.listing102Meta",
     status: "Open today",
     image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1000&q=80"],
     seller: "FixLab",
     sellerAvatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: "+370 611 22334",
+    sellerResponseTime: "fast",
+    sellerReputation: 96,
+    pickupAvailable: true,
+    deliveryAvailable: true,
     verifiedSeller: true,
     distance: "2.1 km",
     popularity: "8 booked today",
@@ -480,6 +500,8 @@ export const listings = [
   },
   {
     id: 103,
+    descriptionKey: "mock.listing.listing103Description",
+    sellerId: "seller-103",
     type: "jobs",
     titleKey: "mock.listing.listing103Title",
     area: "Old Town",
@@ -487,8 +509,14 @@ export const listings = [
     metaKey: "mock.listing.listing103Meta",
     status: "Hiring",
     image: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1000&q=80"],
     seller: "Taste Lab",
     sellerAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "sameDay",
+    sellerReputation: 88,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "1.2 km",
     commute: "8 min walk",
@@ -501,6 +529,8 @@ export const listings = [
   },
   {
     id: 110,
+    descriptionKey: "mock.listing.listing110Description",
+    sellerId: "seller-110",
     type: "jobs",
     titleKey: "mock.listing.listing110Title",
     area: "Užupis",
@@ -508,8 +538,14 @@ export const listings = [
     metaKey: "mock.listing.listing110Meta",
     status: "Hiring",
     image: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=1000&q=80"],
     seller: "Northlight Studio",
     sellerAvatar: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "sameDay",
+    sellerReputation: 90,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "3.4 km",
     commute: "14 min by bike",
@@ -522,6 +558,8 @@ export const listings = [
   },
   {
     id: 111,
+    descriptionKey: "mock.listing.listing111Description",
+    sellerId: "seller-111",
     type: "jobs",
     titleKey: "mock.listing.listing111Title",
     area: "EU timezone",
@@ -529,8 +567,14 @@ export const listings = [
     metaKey: "mock.listing.listing111Meta",
     status: "Hiring",
     image: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1000&q=80"],
     seller: "HelpDesk Vilnius",
     sellerAvatar: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "slow",
+    sellerReputation: 84,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "Remote",
     commute: "No commute",
@@ -543,6 +587,8 @@ export const listings = [
   },
   {
     id: 104,
+    descriptionKey: "mock.listing.listing104Description",
+    sellerId: "seller-104",
     type: "events",
     titleKey: "mock.listing.listing104Title",
     area: "Paupys",
@@ -550,8 +596,14 @@ export const listings = [
     metaKey: "mock.listing.listing104Meta",
     status: "This week",
     image: "https://images.unsplash.com/photo-1528909514045-2fa4ac7a08ba?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1000&q=80", "https://images.unsplash.com/photo-1555529771-835f59fc5efe?auto=format&fit=crop&w=1000&q=80"],
     seller: "Paupys Market",
     sellerAvatar: "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "sameDay",
+    sellerReputation: 89,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "2.7 km",
     popularity: "212 interested",
@@ -561,6 +613,9 @@ export const listings = [
   },
   {
     id: 105,
+    descriptionKey: "mock.listing.listing105Description",
+    condition: "good",
+    sellerId: "seller-105",
     type: "buy-sell",
     titleKey: "mock.listing.listing105Title",
     area: "Žvėrynas",
@@ -568,8 +623,14 @@ export const listings = [
     metaKey: "mock.listing.listing105Meta",
     status: "Available",
     image: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1449247709967-d4461a6a6103?auto=format&fit=crop&w=1000&q=80"],
     seller: "Marta",
     sellerAvatar: "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: "+370 622 44556",
+    sellerResponseTime: "fast",
+    sellerReputation: 91,
+    pickupAvailable: true,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "3.4 km",
     popularity: "14 viewed today",
@@ -579,6 +640,9 @@ export const listings = [
   },
   {
     id: 106,
+    descriptionKey: "mock.listing.listing106Description",
+    condition: "likeNew",
+    sellerId: "seller-106",
     type: "vehicles",
     titleKey: "mock.listing.listing106Title",
     area: "Antakalnis",
@@ -586,8 +650,14 @@ export const listings = [
     metaKey: "mock.listing.listing106Meta",
     status: "Available",
     image: "https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=1000&q=80", "https://images.unsplash.com/photo-1541625602330-2277a4c46182?auto=format&fit=crop&w=1000&q=80"],
     seller: "Tomas",
     sellerAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: "+370 633 66778",
+    sellerResponseTime: "fast",
+    sellerReputation: 87,
+    pickupAvailable: true,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "4.8 km",
     popularity: "23 saves",
@@ -597,6 +667,8 @@ export const listings = [
   },
   {
     id: 107,
+    descriptionKey: "mock.listing.listing107Description",
+    sellerId: "seller-107",
     type: "business-listings",
     titleKey: "mock.listing.listing107Title",
     area: "Old Town",
@@ -604,8 +676,14 @@ export const listings = [
     metaKey: "mock.listing.listing107Meta",
     status: "Owner listed",
     image: "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&w=1000&q=80"],
     seller: "Studio Owner",
     sellerAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "slow",
+    sellerReputation: 93,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "0.9 km",
     popularity: "6 buyer chats",
@@ -615,6 +693,8 @@ export const listings = [
   },
   {
     id: 108,
+    descriptionKey: "mock.listing.listing108Description",
+    sellerId: "seller-108",
     type: "property",
     titleKey: "mock.listing.listing108Title",
     area: "Žvėrynas",
@@ -622,8 +702,14 @@ export const listings = [
     metaKey: "mock.listing.listing108Meta",
     status: "AI matched",
     image: "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1000&q=80",
+    gallery: ["https://images.unsplash.com/photo-1502672023488-70e25813eb80?auto=format&fit=crop&w=1000&q=80", "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1000&q=80"],
     seller: "Eika Homes",
     sellerAvatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: "+370 644 88990",
+    sellerResponseTime: "fast",
+    sellerReputation: 95,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "2.0 km",
     popularity: "41 saves",
@@ -633,6 +719,8 @@ export const listings = [
   },
   {
     id: 109,
+    descriptionKey: "mock.listing.listing109Description",
+    sellerId: "seller-109",
     type: "community-requests",
     titleKey: "mock.listing.listing109Title",
     area: "Old Town",
@@ -642,6 +730,11 @@ export const listings = [
     image: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=1000&q=80",
     seller: "Community",
     sellerAvatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=240&q=80",
+    sellerPhone: null,
+    sellerResponseTime: "fast",
+    sellerReputation: 78,
+    pickupAvailable: false,
+    deliveryAvailable: false,
     verifiedSeller: true,
     distance: "0.4 km",
     popularity: "58 neighbours saw this",
@@ -1366,14 +1459,14 @@ export const smartAutocompleteExamples = [
 ];
 
 export const contributionScores = [
-  { label: "Reputation", value: 842 },
-  { label: "Trust", value: 91 },
-  { label: "Contribution points", value: 1260 },
-  { label: "Marketplace score", value: 94 },
-  { label: "Professional score", value: 88 },
-  { label: "Community score", value: 91 },
-  { label: "Translation score", value: 76 },
-  { label: "Business score", value: 83 }
+  { id: "reputation", labelKey: "contribute.scores.reputation", value: 842 },
+  { id: "trust", labelKey: "contribute.scores.trust", value: 91 },
+  { id: "contributionPoints", labelKey: "contribute.scores.contributionPoints", value: 1260 },
+  { id: "marketplaceScore", labelKey: "contribute.scores.marketplaceScore", value: 94 },
+  { id: "professionalScore", labelKey: "contribute.scores.professionalScore", value: 88 },
+  { id: "communityScore", labelKey: "contribute.scores.communityScore", value: 91 },
+  { id: "translationScore", labelKey: "contribute.scores.translationScore", value: 76 },
+  { id: "businessScore", labelKey: "contribute.scores.businessScore", value: 83 }
 ];
 
 export const proactiveBriefing = [

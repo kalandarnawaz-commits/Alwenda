@@ -8,10 +8,10 @@
  * before main.js and sets a global that src/config.js reads safely.
  *
  * env.js itself should never be committed — keep real keys out of git.
- * The Supabase anon key is designed to be exposed client-side (it's the
- * public half of the pair; access control comes from Row Level Security
- * policies configured in your Supabase project, not from keeping this
- * value secret), so this pattern is correct for a static SPA, not a
+ * The Supabase publishable/anon key is designed to be exposed client-side
+ * (it's the public half of the pair; access control comes from Row Level
+ * Security policies configured in your Supabase project, not from keeping
+ * this value secret), so this pattern is correct for a static SPA, not a
  * shortcut.
  *
  * Leave any value as null (or delete env.js entirely) to leave that
@@ -20,5 +20,11 @@
  */
 window.__ALWENDA_ENV__ = {
   SUPABASE_URL: null, // e.g. "https://xxxxxxxxxxxx.supabase.co"
-  SUPABASE_ANON_KEY: null // the "anon" / "public" key from Project Settings → API
+  SUPABASE_PUBLISHABLE_KEY: null, // the publishable/anon key from Project Settings → API
+  APP_ENV: "development", // "development", "staging", "production", or "test"
+  APP_RELEASE_VERSION: "local-dev",
+  PUBLIC_FEATURE_FLAGS: {
+    googleOAuth: true,
+    emailMagicLink: true
+  }
 };

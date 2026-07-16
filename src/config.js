@@ -8,8 +8,32 @@
 const env = typeof window !== "undefined" ? /** @type {any} */ (window).__ALWENDA_ENV__ || {} : {};
 
 export const SUPABASE_URL = env.SUPABASE_URL || null;
-export const SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY || null;
+export const SUPABASE_PUBLISHABLE_KEY = env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || null;
+export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
+export const APP_ENV = env.APP_ENV || "development";
+export const APP_RELEASE_VERSION = env.APP_RELEASE_VERSION || "local-dev";
+export const PUBLIC_FEATURE_FLAGS = Object.freeze(env.PUBLIC_FEATURE_FLAGS || {});
 
 export function isSupabaseConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+export function getRuntimeConfigDiagnostics() {
+  return {
+    appEnv: APP_ENV,
+    releaseVersion: APP_RELEASE_VERSION,
+    supabaseConfigured: isSupabaseConfigured(),
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabasePublishableKey: Boolean(SUPABASE_PUBLISHABLE_KEY),
+    featureFlags: Object.keys(PUBLIC_FEATURE_FLAGS)
+  };
+}
+
+export function validatePublicRuntimeConfig() {
+  const diagnostics = getRuntimeConfigDiagnostics();
+  const warnings = [];
+  if (!diagnostics.hasSupabaseUrl) warnings.push("SUPABASE_URL is missing.");
+  if (!diagnostics.hasSupabasePublishableKey) warnings.push("SUPABASE_PUBLISHABLE_KEY is missing.");
+  if (!["development", "staging", "production", "test"].includes(APP_ENV)) warnings.push(`APP_ENV '${APP_ENV}' is not recognised.`);
+  return { ok: warnings.length === 0, warnings, diagnostics };
 }

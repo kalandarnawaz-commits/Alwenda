@@ -26,7 +26,8 @@ Alwenda is a premium, mobile-first City Operating System foundation. The first l
 - Local places, offers, reservations, profile, translation, and operations screens
 - Modular mock city data and launch-city config
 - Multi-language UI foundation
-- Placeholder modules for maps, AI translation, payments, bookings, auth, and notifications
+- Placeholder modules for maps, AI translation, payments, bookings, and notifications
+- Real Supabase authentication with Google OAuth, email magic links, persistent sessions, sign out, and first-login profile creation
 - Consumer-grade mobile-first layout with bottom navigation and one-handed interactions
 
 ## Run locally
@@ -56,6 +57,21 @@ Then open `http://localhost:5173`.
 ## Expansion model
 
 To launch another city, replace the `city`, `neighbourhoods`, and mock content exports in `src/data/mockData.js`. Later, those exports can become API clients without changing the screen architecture.
+
+## Authentication
+
+The frontend uses Supabase Auth only. Configure `window.__ALWENDA_ENV__` in `env.js` with `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY`. Never place a service-role key in the static frontend.
+
+OAuth redirects return to `/auth/callback`, which loads the same app and lets the Supabase SDK restore the session. New users are routed to profile completion once; returning users go straight to Home.
+
+Expected profile tables:
+
+- `public_profiles`: `user_id`, `display_name`, `avatar_url`, `city`, `profession`, `languages`, `verification_status`, `reputation_score`, `created_at`, `updated_at`
+- `private_profiles`: `user_id`, `contact_email`, `contact_phone`, `preferred_language`, `onboarding_complete`, `notification_preferences`, `created_at`, `updated_at`
+
+Row Level Security should allow authenticated users to read public profiles, upsert only their own public profile row, and read/upsert only their own private profile row. Policies should use `auth.uid() = user_id`; the frontend never supplies or trusts an arbitrary user id for profile ownership.
+
+For the production database schema, RLS matrix, release/cache runbook, observability foundation, and Supabase migration notes, see `docs/production-foundation.md`. The migration file is `supabase/migrations/202607150001_production_foundation.sql`.
 
 ## Backend (Alwen server)
 

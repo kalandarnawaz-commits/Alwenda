@@ -1,5 +1,7 @@
-const CACHE_VERSION = "alwenda-shell-v1";
-const APP_SHELL = ["./", "./index.html", "./manifest.json"];
+const RELEASE_VERSION = "production-foundation-20260715";
+const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
+const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
+const AUTH_CALLBACK_PATH = "/auth/callback";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -18,6 +20,12 @@ self.addEventListener("activate", (event) => {
       .then(() => self.clients.claim())
   );
 });
+
+function fallbackShellFor(request) {
+  const url = new URL(request.url);
+  if (url.pathname.startsWith(AUTH_CALLBACK_PATH)) return caches.match("./auth/callback/index.html");
+  return caches.match("./index.html");
+}
 
 /** Network-first for same-origin GET requests, falling back to whatever
  * is cached (and finally to the app shell for navigations) when offline.
@@ -38,7 +46,13 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() =>
-        caches.match(request).then((cached) => cached || (request.mode === "navigate" ? caches.match("./index.html") : undefined))
+        caches.match(request).then((cached) => cached || (request.mode === "navigate" ? fallbackShellFor(request) : undefined))
       )
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "ALWENDA_RELEASE_DIAGNOSTICS") {
+    event.source?.postMessage({ type: "ALWENDA_RELEASE_DIAGNOSTICS", releaseVersion: RELEASE_VERSION, cacheVersion: CACHE_VERSION });
+  }
 });

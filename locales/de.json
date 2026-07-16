@@ -274,7 +274,8 @@
     "rating": "Bewertung",
     "available": "Verfügbar",
     "distance": "Entfernung",
-    "responseTime": "Antwortzeit"
+    "responseTime": "Antwortzeit",
+    "distanceAway": "{distance} entfernt"
   },
   "nav": {
     "home": "Start",
@@ -359,7 +360,10 @@
     "verifyCta": "Bestätigen",
     "verifyCodeTitle": "Überprüfe dein {method}",
     "verifyCodeHint": "Gib den 6-stelligen Code ein, den wir an {target} gesendet haben.",
-    "verifyCodeDevHint": "Vorschau-Build — es ist noch kein E-Mail-/SMS-Anbieter verbunden, dein Code lautet daher {code}.",
+    "authMagicLinkHint": "Wir senden dir einen sicheren Anmeldelink per E-Mail. Kein Passwort nötig.",
+    "authSendSignInLink": "Anmeldelink senden",
+    "authCheckingSession": "Sitzung wird geprüft",
+    "authCheckingSessionHint": "Einen Moment, während Alwenda deine sichere Anmeldung wiederherstellt.",
     "authErrorName": "Gib deinen vollständigen Namen ein.",
     "authErrorEmail": "Gib eine gültige E-Mail-Adresse ein.",
     "authErrorEmailTaken": "Für diese E-Mail-Adresse existiert bereits ein Konto.",
@@ -373,8 +377,11 @@
     "auth": "Anmeldung",
     "authErrorProviderNotConfigured": "Diese Anmeldemethode ist in diesem Build nicht konfiguriert.",
     "authCheckEmailToConfirm": "Bestätigen Sie Ihr Konto per E-Mail, bevor Sie sich anmelden.",
+    "authCheckEmailForSignIn": "Prüfe deine E-Mail auf einen sicheren Anmeldelink.",
     "authCheckEmailForReset": "Prüfen Sie Ihre E-Mails auf einen Link zum Zurücksetzen Ihres Passworts.",
     "authPasswordUpdated": "Ihr Passwort wurde aktualisiert. Melden Sie sich mit dem neuen Passwort an.",
+    "authDeleteAccountBackendRequired": "Zum Löschen des Kontos ist eine sichere Backend-Aktion erforderlich. Du wurdest abgemeldet.",
+    "authErrorGeneric": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
     "authErrorRateLimited": "Zu viele Versuche. Bitte versuchen Sie es in {minutes} Min. erneut."
   },
   "onboarding": {
@@ -421,7 +428,9 @@
     "legal": {
       "legalPlaceholderBody": "Dieser Pilot-Build hat noch keine endgültigen Rechtsdokumente. Vollständige Nutzungsbedingungen und Datenschutzerklärung werden vor dem öffentlichen Start veröffentlicht.",
       "legalShortSummary": "Mit der Nutzung von Alwenda erklärst du dich damit einverstanden, die Plattform sicher und rechtmäßig zu nutzen. Angebote, Dienstleistungen, Buchungen, Unternehmensseiten, Übersetzungen und KI-Vorschläge können von Nutzern, öffentlichen Quellen, Dritten oder Alwen erstellt werden und sind möglicherweise nicht immer vollständig oder korrekt. Du bist verantwortlich für das, was du veröffentlichst, kaufst, verkaufst, buchst, beanspruchst oder worauf du dich verlässt. Unternehmensinhaber können ihre Seite nach einer Verifizierung beanspruchen. Alwenda kann unsichere oder rechtswidrige Inhalte entfernen und missbräuchliche Konten einschränken.",
-      "legalReadFullTerms": "Vollständige Nutzungsbedingungen lesen"
+      "legalReadFullTerms": "Vollständige Nutzungsbedingungen lesen",
+      "privacyShortSummary": "Wenn du dich mit Google, Apple, E-Mail oder Telefon anmeldest, erhält Alwenda deinen Namen, deine E-Mail-Adresse oder Telefonnummer und — bei Google/Apple — dein Profilbild; dein Passwort sehen wir niemals. Marktplatz-Angebote, gespeicherte Orte und Profildaten bleiben derzeit nur auf deinem eigenen Gerät, nicht auf unseren Servern. Wir greifen nicht auf deinen Standort zu und verwenden keine Tracking- oder Werbe-Cookies. Du kannst jederzeit deine Daten oder die Löschung deines Kontos anfordern.",
+      "privacyReadFullPolicy": "Vollständige Datenschutzerklärung lesen"
     },
     "language": "Sprache",
     "settingsAction": "Einstellungen",
@@ -433,25 +442,131 @@
     "pilotNote": "Alwenda ist derzeit ein MVP-/Pilot-Build für Vilnius. Dies ist die richtige Struktur für ein Pilotprojekt, jedoch kein Ersatz für Rechtsberatung — diese Bedingungen werden vor dem öffentlichen Start finalisiert.",
     "englishOnlyNote": "Dieses Dokument ist derzeit nur auf Englisch verfügbar.",
     "sections": [
-      { "title": "1. What Alwenda Is", "body": "Alwenda is a city platform that helps you discover places, find services, buy and sell, hire, book, translate, and connect locally. Alwenda may show public and open data, user-generated content, and third-party business information." },
-      { "title": "2. User Accounts", "body": "You're responsible for keeping your account information accurate and your access secure. Alwenda may suspend accounts that abuse the platform, post unsafe content, scam other users, or break these terms." },
-      { "title": "3. Marketplace Rules", "body": "Listings must be lawful and accurate. Counterfeit or stolen goods, weapons, drugs, illegal services, adult exploitation, hate content, and scams are never allowed. Sellers are responsible for their own listings, prices, availability, delivery, and communication with buyers." },
-      { "title": "4. Local Services / Hire", "body": "Professionals are responsible for their own qualifications, licenses, insurance, pricing, availability, and quality of work. Alwenda helps connect you with local professionals but doesn't guarantee outcomes unless a specific paid protection product is introduced later." },
-      { "title": "5. Bookings / Reservations", "body": "Restaurants, hotels, service providers, and users are all responsible for honoring confirmed bookings. Cancellation and no-show rules will be added once payments go live." },
-      { "title": "6. Business Pages and Claims", "body": "Some business and place data may come from public sources. Business owners can claim their page and request updates. Alwenda may verify ownership before handing over control of a business profile." },
-      { "title": "7. User Content", "body": "You keep ownership of what you post, but you grant Alwenda permission to display, translate, moderate, promote, and improve it within the platform." },
-      { "title": "8. Alwen / AI", "body": "Alwen can help you search, draft listings, translate, summarise, and recommend actions. AI output may be incomplete or inaccurate — always verify anything important yourself, especially legal, medical, financial, housing, employment, or safety decisions." },
-      { "title": "9. Safety and Conduct", "body": "No harassment, hate, fraud, impersonation, spam, illegal activity, unsafe meetups, or abuse. Meet in safe public places and use caution with payments and people you don't know." },
-      { "title": "10. Payments", "body": "If payments are added later, Alwenda may use third-party payment providers. Fees, refunds, disputes, chargebacks, taxes, and payout timing will be governed by those providers' own terms." },
-      { "title": "11. Location and Maps", "body": "Directions, distances, opening hours, and availability may be approximate. Confirm details yourself before traveling or relying on time-sensitive information." },
-      { "title": "12. Privacy", "body": "Our separate Privacy Policy covers account data, location, messages, marketplace activity, business claims, AI inputs, cookies, analytics, and your rights under GDPR." },
-      { "title": "13. Moderation and Reporting", "body": "You can report illegal, harmful, or misleading content. Alwenda may remove content or restrict accounts that break these rules." },
-      { "title": "14. Disclaimers", "body": "Alwenda is provided \"as is\" during this MVP/pilot phase. We don't guarantee that listings, businesses, translations, directions, or availability are always accurate." }
+      {
+        "title": "1. What Alwenda Is",
+        "body": "Alwenda is a city platform that helps you discover places, find services, buy and sell, hire, book, translate, and connect locally. Alwenda may show public and open data, user-generated content, and third-party business information."
+      },
+      {
+        "title": "2. User Accounts",
+        "body": "You're responsible for keeping your account information accurate and your access secure. Alwenda may suspend accounts that abuse the platform, post unsafe content, scam other users, or break these terms."
+      },
+      {
+        "title": "3. Marketplace Rules",
+        "body": "Listings must be lawful and accurate. Counterfeit or stolen goods, weapons, drugs, illegal services, adult exploitation, hate content, and scams are never allowed. Sellers are responsible for their own listings, prices, availability, delivery, and communication with buyers."
+      },
+      {
+        "title": "4. Local Services / Hire",
+        "body": "Professionals are responsible for their own qualifications, licenses, insurance, pricing, availability, and quality of work. Alwenda helps connect you with local professionals but doesn't guarantee outcomes unless a specific paid protection product is introduced later."
+      },
+      {
+        "title": "5. Bookings / Reservations",
+        "body": "Restaurants, hotels, service providers, and users are all responsible for honoring confirmed bookings. Cancellation and no-show rules will be added once payments go live."
+      },
+      {
+        "title": "6. Business Pages and Claims",
+        "body": "Some business and place data may come from public sources. Business owners can claim their page and request updates. Alwenda may verify ownership before handing over control of a business profile."
+      },
+      {
+        "title": "7. User Content",
+        "body": "You keep ownership of what you post, but you grant Alwenda permission to display, translate, moderate, promote, and improve it within the platform."
+      },
+      {
+        "title": "8. Alwen / AI",
+        "body": "Alwen can help you search, draft listings, translate, summarise, and recommend actions. AI output may be incomplete or inaccurate — always verify anything important yourself, especially legal, medical, financial, housing, employment, or safety decisions."
+      },
+      {
+        "title": "9. Safety and Conduct",
+        "body": "No harassment, hate, fraud, impersonation, spam, illegal activity, unsafe meetups, or abuse. Meet in safe public places and use caution with payments and people you don't know."
+      },
+      {
+        "title": "10. Payments",
+        "body": "If payments are added later, Alwenda may use third-party payment providers. Fees, refunds, disputes, chargebacks, taxes, and payout timing will be governed by those providers' own terms."
+      },
+      {
+        "title": "11. Location and Maps",
+        "body": "Directions, distances, opening hours, and availability may be approximate. Confirm details yourself before traveling or relying on time-sensitive information."
+      },
+      {
+        "title": "12. Privacy",
+        "body": "Our separate Privacy Policy covers account data, location, messages, marketplace activity, business claims, AI inputs, cookies, analytics, and your rights under GDPR."
+      },
+      {
+        "title": "13. Moderation and Reporting",
+        "body": "You can report illegal, harmful, or misleading content. Alwenda may remove content or restrict accounts that break these rules."
+      },
+      {
+        "title": "14. Disclaimers",
+        "body": "Alwenda is provided \"as is\" during this MVP/pilot phase. We don't guarantee that listings, businesses, translations, directions, or availability are always accurate."
+      }
     ],
     "contactTitle": "Kontakt",
     "contactLegalLabel": "Rechtliches",
     "contactSupportLabel": "Support",
     "privacyLinkLabel": "Datenschutzerklärung ansehen"
+  },
+  "legalPrivacy": {
+    "eyebrow": "Rechtliches",
+    "title": "Datenschutzerklärung",
+    "pilotNote": "Alwenda ist derzeit ein MVP-/Pilot-Build für Vilnius. Dies beschreibt in einfacher Sprache, was die App heute tatsächlich mit deinen Daten macht — kein Ersatz für Rechtsberatung, und wird vor dem öffentlichen Start finalisiert.",
+    "englishOnlyNote": "Dieses Dokument ist derzeit nur auf Englisch verfügbar.",
+    "sections": [
+      {
+        "title": "1. Who This Covers",
+        "body": "This policy explains what data Alwenda collects, how it's used, and your rights, for anyone using the Alwenda pilot in Vilnius."
+      },
+      {
+        "title": "2. Account Data",
+        "body": "When you sign in with Google, Apple, email, or phone, we receive your name, email address or phone number, and — for Google/Apple — the profile photo made available by that provider. If you use email and password, your password is handled by our authentication provider and is never visible to us in readable form."
+      },
+      {
+        "title": "3. App Content Stays On Your Device",
+        "body": "Marketplace listings, saved places, profile details, and community activity you create in Alwenda are currently stored locally on your own device, not on our servers. We don't have access to this content, though it also means it won't yet sync between your devices."
+      },
+      {
+        "title": "4. Location",
+        "body": "Alwenda does not access your device's precise location. Distances and \"nearby\" information shown in the app are based on the city and listed addresses, not real-time GPS tracking."
+      },
+      {
+        "title": "5. Translation and Alwen (AI Features)",
+        "body": "Text you submit for translation is sent to the translation service active at the time. Alwen, our AI assistant, is not yet processing real user messages in this build — this policy will be updated with specifics before that feature is enabled for real users."
+      },
+      {
+        "title": "6. Cookies and Local Storage",
+        "body": "Alwenda does not use third-party advertising or tracking cookies. We use your browser's local storage to keep you signed in, remember your language and theme, and store the on-device app content described above."
+      },
+      {
+        "title": "7. Analytics",
+        "body": "Alwenda logs basic usage events, like which screens you open, in a local log kept on your own device to help us understand and improve the app. This log is not currently transmitted to us or any third party."
+      },
+      {
+        "title": "8. Where Account Data Is Stored",
+        "body": "Account data is stored with our authentication provider, Supabase, hosted in the EU (Ireland region)."
+      },
+      {
+        "title": "9. Public Place Data",
+        "body": "Business and place listings you see in Alwenda come from OpenStreetMap and Wikidata, open public data sources describing real places — this is not personal data about you or any individual user."
+      },
+      {
+        "title": "10. Data Retention and Deletion",
+        "body": "You can sign out at any time from Profile or Settings. Full account deletion currently requires contacting us directly at the email below; in-app self-service deletion is planned for a future release."
+      },
+      {
+        "title": "11. Your Rights Under GDPR",
+        "body": "Alwenda is based in Vilnius, Lithuania, so you have rights under the EU General Data Protection Regulation, including the right to access, correct, delete, or export your data, and to object to or restrict how it's used. Contact us to exercise these rights, or lodge a complaint with the State Data Protection Inspectorate of Lithuania."
+      },
+      {
+        "title": "12. Children",
+        "body": "Alwenda is not directed at children under 16, and we don't knowingly collect data from them."
+      },
+      {
+        "title": "13. Changes to This Policy",
+        "body": "As Alwenda's features grow — including payments, bookings, and AI — this policy will be updated to reflect what the app actually does. Check back for the latest version."
+      }
+    ],
+    "contactTitle": "Kontakt",
+    "contactPrivacyLabel": "Datenschutz",
+    "contactSupportLabel": "Support",
+    "termsLinkLabel": "Nutzungsbedingungen ansehen"
   },
   "profile": {
     "signedOut": {
@@ -638,6 +753,17 @@
   "alwen": {
     "alwenDockTitle": "Alwen ist bereit.",
     "alwenDockHint": "Sag Alwen, was du brauchst. Alwen kann den nächsten Schritt übernehmen, Angebote in der Nähe finden, Anfragen entwerfen, buchen, vergleichen und übersetzen.",
+    "alwenChatLabel": "Sicherer Textchat",
+    "alwenChatPlaceholder": "Was brauchst du in der Stadt?",
+    "alwenChatSend": "Senden",
+    "alwenChatSending": "Wird gesendet...",
+    "alwenChatAnswerLabel": "Alwen",
+    "alwenChatRetry": "Erneut versuchen",
+    "alwenChatEmptyError": "Sag Alwen zuerst, was du brauchst.",
+    "alwenChatSignedOutError": "Melde dich an, um den sicheren Alwen-Chat zu nutzen.",
+    "alwenChatExpiredError": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+    "alwenChatMissingKeyError": "Alwen ist für diesen Build noch nicht konfiguriert.",
+    "alwenChatGenericError": "Alwen kann gerade nicht antworten. Bitte versuche es erneut.",
     "alwenInputModes": "So erreichst du Alwen",
     "alwenWorkspace": "Alwen KI",
     "alwenWorkspaceTitle": "Lass Alwen dir helfen, die Stadt zu leben",
@@ -795,10 +921,28 @@
     "location": "Standort",
     "phone": "Telefon",
     "email": "E-Mail",
-    "role": "Rolle"
+    "role": "Rolle",
+    "days": {
+      "monFri": "Mo–Fr",
+      "sat": "Sa",
+      "everyDay": "Täglich",
+      "monSat": "Mo–Sa",
+      "satSun": "Sa–So",
+      "tueSun": "Di–So"
+    }
   },
   "contribute": {
-    "verifyLocations": "Orte verifizieren"
+    "verifyLocations": "Orte verifizieren",
+    "scores": {
+      "reputation": "Reputation",
+      "trust": "Vertrauen",
+      "contributionPoints": "Beitragspunkte",
+      "marketplaceScore": "Marktplatz-Wertung",
+      "professionalScore": "Berufliche Wertung",
+      "communityScore": "Community-Wertung",
+      "translationScore": "Übersetzungswertung",
+      "businessScore": "Unternehmenswertung"
+    }
   },
   "translate": {
     "translateForOthers": "Für andere übersetzen",
@@ -870,6 +1014,30 @@
       "capabilityRatings": "Bewertungspunkte",
       "capabilityAvailability": "Verfügbarkeit",
       "capabilitySecurePayments": "Sichere Zahlungen"
+    },
+    "condition": {
+      "new": "Neu",
+      "likeNew": "Wie neu",
+      "good": "Gut",
+      "fair": "In Ordnung",
+      "used": "Gebraucht"
+    },
+    "responseTime": {
+      "fast": "Antwortet meist innerhalb einer Stunde",
+      "sameDay": "Antwortet meist am selben Tag",
+      "slow": "Antwortet meist innerhalb weniger Tage"
+    },
+    "listingDetail": {
+      "galleryEmpty": "Noch keine weiteren Fotos",
+      "aboutListing": "Über dieses Angebot",
+      "fulfilment": "Abholung & Lieferung",
+      "pickupAvailable": "Abholung möglich",
+      "deliveryAvailable": "Lieferung möglich",
+      "notOffered": "Nicht angeboten",
+      "callOpensPhone": "Öffnet Ihre Telefon-App",
+      "shareCopied": "Link kopiert",
+      "reportedConfirmation": "Gemeldet — danke für den Hinweis",
+      "savedConfirmation": "Zu Ihrer Liste hinzugefügt"
     }
   },
   "needHelp": {
@@ -1259,7 +1427,18 @@
       "listing108Title": "Zwei-Zimmer-Wohnung nahe dem Fluss",
       "listing108Meta": "62 m² · Balkon · Haustiere möglich",
       "listing109Title": "Verlorene Brieftasche nahe dem Domplatz",
-      "listing109Meta": "Schwarzes Leder · Ausweis darin · dringend"
+      "listing109Meta": "Schwarzes Leder · Ausweis darin · dringend",
+      "listing101Description": "Helles 32 m² Studio, nur einen kurzen Spaziergang vom MO-Museum entfernt. Voll möbliert mit einer richtigen Küchenecke, schnellem WLAN, und die Nebenkosten sind bereits in der Miete enthalten — einziehen und loslegen, nichts weiter einzurichten.",
+      "listing102Description": "Gesprungenes Display noch am selben Tag repariert, die meisten Aufträge innerhalb einer Stunde während Sie warten. Originalteile, schriftliche Garantie auf die Reparatur, das Team spricht Englisch, Litauisch und Russisch.",
+      "listing103Description": "Frühschichten in einem belebten Café in der Altstadt, ideal neben dem Studium oder einem weiteren Job. Volle Einarbeitung wird geboten, Trinkgeld wird fair geteilt, das Team ist an Neulinge als Barista gewöhnt.",
+      "listing110Description": "Position als Produktdesigner auf mittlerer bis höherer Erfahrungsstufe in einem kleinen, schnell arbeitenden Produktteam. Sie verantworten Abläufe von der Recherche bis zur fertigen Oberfläche, in enger Zusammenarbeit mit dem Engineering-Team.",
+      "listing111Description": "Remote-Kundensupport-Rolle für Englisch und Litauisch, Abendschichten passend zur EU-US-Überlappung. Vollständiges Onboarding wird geboten, kleines unterstützendes Team, flexibel neben Studium oder Familie.",
+      "listing104Description": "Ein Samstagvormittagsmarkt an der Flusspromenade — lokale Handwerker verkaufen Keramik, Drucke, Schmuck und Lebensmittel in kleinen Mengen. Eintritt frei, am besten zwischen 11:00 und 13:00 besuchen, bevor es voll wird.",
+      "listing105Description": "Massiver Esstisch mit Eichenfurnier, bietet bequem Platz für vier Personen. Ein paar leichte Gebrauchsspuren, aber strukturell solide — kein Wackeln, keine Reparaturen nötig. Nur Abholung, Erdgeschoss, leichtes Beladen.",
+      "listing106Description": "Stadtfahrrad mit hinten montiertem Kindersitz, kürzlich gewartet mit neuen Bremsbelägen und eingestellter Schaltung. Vorder- und Rücklicht enthalten und funktionsfähig. Ideal für den Schulweg oder Wochenendtouren am Fluss entlang.",
+      "listing107Description": "Etabliertes Nagelstudio in der Altstadt mit übertragbarem Mietvertrag und treuem Kundenstamm — 4,9 Durchschnittsbewertung über alle Buchungen. Im Verkauf enthalten sind die gesamte Ausstattung und das aktuelle Terminbuch.",
+      "listing108Description": "Zwei-Zimmer-Wohnung nahe dem Fluss, 62 m² mit privatem Balkon. Tagsüber hell, ruhige Straße, und der Vermieter ist offen für wohlerzogene Haustiere — bei Anfrage nachfragen.",
+      "listing109Description": "Schwarze Lederbrieftasche irgendwo nahe dem Domplatz verloren, Ausweise noch darin. Belohnung für die sichere Rückgabe angeboten — bitte mit jeglichen Hinweisen melden, auch wenn Sie nicht sicher sind, ob es die richtige ist."
     },
     "achievement": {
       "ach1Title": "Top-Verkäufer",
