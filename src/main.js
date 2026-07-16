@@ -6450,12 +6450,10 @@ function bindEvents() {
     state.query = event.target.value;
     state.category = "all";
     const cursor = event.target.selectionStart || state.query.length;
-    scheduleLiveFieldRender("global-search", () => {
-      const search = document.getElementById("global-search");
-      if (!search) return;
-      search.focus({ preventScroll: true });
-      search.setSelectionRange(cursor, cursor);
-    });
+    scheduleLiveFieldRender("global-search", () => restoreLiveFieldFocus("global-search", cursor));
+  });
+  document.getElementById("global-search")?.addEventListener("blur", () => {
+    if (liveFieldRenderTimers.has("global-search")) flushLiveFieldRender("global-search");
   });
 
   document.querySelectorAll("[data-sheet]").forEach((button) => {
@@ -6787,31 +6785,58 @@ function bindEvents() {
   bindPublicProfileEvents();
 }
 
-/** render() rebuilds the *entire* #app subtree (see render(), below), which
- * tears down and recreates whatever input is currently focused. Doing that
- * synchronously on every keystroke — even with preventScroll on the
- * refocus() — forces a real blur+focus cycle on the actual DOM node each
- * letter, which on mobile briefly dismisses and reopens the on-screen
- * keyboard, reading as the whole screen jumping while typing. Coalescing
- * rapid keystrokes so the (expensive, focus-destroying) render only runs
- * once typing actually pauses keeps the keyboard — and the layout — stable
- * while the user is actively typing, at the cost of dependent UI (character
- * counts, live validation) updating a beat after the keystroke instead of
- * on it. Keyed per field so typing in one field never resets another's
- * pending render. */
+/** render() rebuilds the *entire* #app subtree (see render(), below) — on a
+ * real phone that's routinely 100ms+ of main-thread work, not just a DOM
+ * churn cosmetic issue. Running it on every keystroke tears down and
+ * recreates whatever input is focused (a real blur+focus cycle that
+ * flickers the on-screen keyboard, reading as the screen jumping while
+ * typing), and even debounced to "once typing pauses," that same 100ms+
+ * block lands right as the user resumes typing after any brief pause,
+ * which reads as the keyboard itself being slow to respond.
+ *
+ * The fix is to not render at all while a field is actively focused —
+ * apply() already updates state synchronously on every keystroke, so
+ * nothing needs the render for correctness, only for *other* UI that
+ * happens to depend on this field's value (e.g. the search button's
+ * destination). That dependent UI is refreshed the moment the field
+ * blurs — a natural pause point, and (via the browser's own focus-out →
+ * click event order) always before any button relying on the fresh value
+ * can actually be tapped. LIVE_FIELD_RENDER_IDLE_MS is just a safety net
+ * for a field left focused with no further typing and no blur. Keyed per
+ * field so typing in one field never resets another's pending render. */
 const liveFieldRenderTimers = new Map();
-const LIVE_FIELD_RENDER_DEBOUNCE_MS = 200;
+const LIVE_FIELD_RENDER_IDLE_MS = 1200;
+
+function flushLiveFieldRender(key, afterRender) {
+  clearTimeout(liveFieldRenderTimers.get(key));
+  liveFieldRenderTimers.delete(key);
+  render();
+  afterRender?.();
+}
 
 function scheduleLiveFieldRender(key, afterRender) {
   clearTimeout(liveFieldRenderTimers.get(key));
-  liveFieldRenderTimers.set(
-    key,
-    setTimeout(() => {
-      liveFieldRenderTimers.delete(key);
-      render();
-      afterRender();
-    }, LIVE_FIELD_RENDER_DEBOUNCE_MS)
-  );
+  liveFieldRenderTimers.set(key, setTimeout(() => flushLiveFieldRender(key, afterRender), LIVE_FIELD_RENDER_IDLE_MS));
+}
+
+function restoreLiveFieldFocus(id, cursor) {
+  const fresh = document.getElementById(id);
+  if (!fresh) return;
+  // render() just tore down and rebuilt the whole subtree, so `fresh`
+  // is a brand-new element even though it looks identical — a plain
+  // focus() on a "new" node makes the browser treat it as a fresh
+  // focus target and auto-scroll it into view.
+  // preventScroll keeps the caret/typing working with none of that.
+  fresh.focus({ preventScroll: true });
+  // Some input types (email, number, ...) don't support the selection
+  // API at all and throw on setSelectionRange — without this guard the
+  // exception aborts the handler before the cursor is restored, so the
+  // caret silently resets to the start once the render fires.
+  try {
+    fresh.setSelectionRange(cursor, cursor);
+  } catch {
+    /* Selection API unsupported for this input type — focus() above is enough. */
+  }
 }
 
 function bindLiveField(id, apply) {
@@ -6825,26 +6850,17 @@ function bindLiveField(id, apply) {
       render();
       return;
     }
-    scheduleLiveFieldRender(id, () => {
-      const fresh = document.getElementById(id);
-      if (!fresh) return;
-      // render() just tore down and rebuilt the whole subtree, so `fresh`
-      // is a brand-new element even though it looks identical — a plain
-      // focus() on a "new" node makes the browser treat it as a fresh
-      // focus target and auto-scroll it into view.
-      // preventScroll keeps the caret/typing working with none of that.
-      fresh.focus({ preventScroll: true });
-      // Some input types (email, number, ...) don't support the selection
-      // API at all and throw on setSelectionRange — without this guard the
-      // exception aborts the handler before the cursor is restored, so the
-      // caret silently resets to the start once the debounced render fires.
-      try {
-        fresh.setSelectionRange(cursor, cursor);
-      } catch {
-        /* Selection API unsupported for this input type — focus() above is enough. */
-      }
-    });
+    // Only a long-idle safety net — the normal path is the "blur" listener
+    // below, which fires the instant the user actually pauses on their own.
+    scheduleLiveFieldRender(id, () => restoreLiveFieldFocus(id, cursor));
   });
+  if (!isCheckbox) {
+    el.addEventListener("blur", () => {
+      // Nothing to flush if the idle timer already fired, or the field was
+      // never touched — and don't refocus here, the user meant to leave.
+      if (liveFieldRenderTimers.has(id)) flushLiveFieldRender(id);
+    });
+  }
 }
 
 function bindAuthEvents() {
