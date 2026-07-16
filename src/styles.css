@@ -4897,7 +4897,7 @@ select:focus-visible {
 
 .app-top {
   min-height: 76px;
-  padding: 10px 4px 12px;
+  padding: max(10px, env(safe-area-inset-top)) 4px 12px;
 }
 
 .nav-active .app-icon-frame {
