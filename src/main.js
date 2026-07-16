@@ -87,8 +87,9 @@ import {
   signOutSupabase,
   mapSupabaseUserToAccount,
   ensureUserProfiles,
-  completeUserProfile
-} from "./services/auth/supabaseClient.js?v=production-sprint-1";
+  completeUserProfile,
+  AUTH_CALLBACK_PATH
+} from "./services/auth/supabaseClient.js?v=auth-redirect-fix-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
@@ -7261,6 +7262,14 @@ await setLanguage(state.language);
 resetAuthDrafts();
 hydrateAuthFromStorage();
 await hydrateSupabaseAuth();
+// The OAuth callback page (auth/callback/index.html) is a separate physical
+// path with no routes of its own — every relative fetch/asset URL the rest
+// of the app builds (locales, brand SVGs, in-app pushState links) resolves
+// against whatever path is in the address bar, so this app must never stay
+// parked there once Supabase has consumed the redirect and restored the session.
+if (window.location.pathname.startsWith(AUTH_CALLBACK_PATH)) {
+  history.replaceState(null, "", "/");
+}
 applyBusinessOverrides();
 syncStateFromUrl();
 suppressNextUrlPush = true;

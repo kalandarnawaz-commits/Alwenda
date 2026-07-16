@@ -23,7 +23,7 @@ export class AuthNotConfiguredError extends Error {
 
 let clientPromise = null;
 
-const AUTH_CALLBACK_PATH = "/auth/callback";
+export const AUTH_CALLBACK_PATH = "/auth/callback";
 
 function authRedirectUrl() {
   return `${window.location.origin}${AUTH_CALLBACK_PATH}`;
