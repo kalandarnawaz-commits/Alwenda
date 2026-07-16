@@ -50,7 +50,7 @@ function interpolate(template, params) {
 export async function loadLocale(code) {
   if (localeCache.has(code)) return localeCache.get(code);
   try {
-    const response = await fetch(`./locales/${code}.json`, { cache: "no-store" });
+    const response = await fetch(`/locales/${code}.json`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     localeCache.set(code, data);
