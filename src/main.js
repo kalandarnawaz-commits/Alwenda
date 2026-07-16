@@ -4529,12 +4529,20 @@ function formatListingPrice(priceAmount, pricePeriod, currency = "EUR") {
  * convention as submitHelpRequest()/applyAlwenCreatedHelpRequest() use for
  * Hire) and state.myListings (Profile's "My Listings"). Shared by the manual
  * form below and by Alwen's create_marketplace_listing tool result. */
-function applyCreatedListing(created) {
+/** Shapes a real listings-table row into whatever renderMarketplaceListing()
+ * and friends already expect from the seeded mock data. Shared by the
+ * manual form/Alwen's tool result (a listing just created THIS session) and
+ * refreshMyListings() below (listings created in an earlier session, which
+ * otherwise only ever exist in state.myListings and never actually appear
+ * anywhere you'd browse them, since the `listings` array driving Marketplace
+ * is a plain in-memory array with no database backing of its own). */
+function shapeListingForDisplay(created) {
   const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === created.category) || "buy-sell";
   const user = state.auth.user;
-  const listing = {
+  const isOwnListing = user && String(created.owner_user_id || user.id) === String(user.id);
+  return {
     id: created.id,
-    sellerId: user?.id || created.owner_user_id || created.requester_user_id,
+    sellerId: created.owner_user_id || user?.id,
     type: uiCategory,
     title: created.title,
     meta: created.description || "",
@@ -4543,28 +4551,43 @@ function applyCreatedListing(created) {
     status: t("status.published"),
     image: "",
     gallery: [],
-    seller: user?.name || "",
-    sellerAvatar: user?.avatar || "",
+    seller: isOwnListing ? user?.name || "" : "",
+    sellerAvatar: isOwnListing ? user?.avatar || "" : "",
     sellerPhone: null,
     sellerResponseTime: "fast",
     sellerReputation: 100,
     pickupAvailable: false,
     deliveryAvailable: false,
-    verifiedSeller: Boolean(user?.emailVerified),
+    verifiedSeller: isOwnListing ? Boolean(user?.emailVerified) : false,
     distance: "",
     popularity: "",
     aiPrice: "",
     aiInsight: "",
     cardSize: "compact"
   };
-  listings.unshift(listing);
+}
+
+function applyCreatedListing(created) {
+  listings.unshift(shapeListingForDisplay(created));
   state.myListings.unshift(created);
   trackEvent("listing_created", { category: created.category, hasPrice: Boolean(created.price_amount) });
 }
 
+/** Fire-and-forget, called both right after sign-in and every time the
+ * user opens Profile or Marketplace — a transient network hiccup on the
+ * sign-in call previously left "My Listings" empty for the rest of the
+ * session with no way to recover short of a full reload. Also merges any
+ * fetched listing that isn't already in the local `listings` array (i.e.
+ * one created in an earlier session) so it actually shows up in Marketplace
+ * too, not just Profile. */
 async function refreshMyListings() {
   try {
     state.myListings = await fetchMyListings();
+    for (const item of state.myListings) {
+      if (!listings.some((existing) => String(existing.id) === String(item.id))) {
+        listings.unshift(shapeListingForDisplay(item));
+      }
+    }
     render();
   } catch (error) {
     console.warn("[listings] Failed to load my listings.", error);
@@ -6683,6 +6706,13 @@ function bindEvents() {
       if (button.dataset.category) state.category = button.dataset.category;
       if (button.dataset.view === "createListing" && button.dataset.category) {
         state.listingDraft.category = button.dataset.category;
+      }
+      // Retries on every visit rather than relying solely on the one
+      // fire-and-forget call at sign-in, which left "My Listings" — and any
+      // real listing created in an earlier session — silently stuck empty
+      // for the rest of the session if that one attempt hit any hiccup.
+      if ((button.dataset.view === "profile" || button.dataset.view === "marketplace") && state.auth.status === "signedIn") {
+        refreshMyListings();
       }
       if (button.dataset.seeAllCategory) {
         state.exploreCategory = button.dataset.seeAllCategory;
