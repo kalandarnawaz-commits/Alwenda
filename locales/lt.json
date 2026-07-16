@@ -355,9 +355,9 @@
   },
   "auth": {
     "authWelcomeBack": "Sveiki sugrįžę",
-    "authWelcomeBackHint": "Prisijunkite ir tęskite nuo tos vietos, kur sustojote.",
+    "authWelcomeBackHint": "Prisijunkite ir pamatykite, kas naujo aplinkui.",
     "authCreateAccount": "Susikurkite paskyrą",
-    "authCreateAccountHint": "Užtruks mažiau nei minutę.",
+    "authCreateAccountHint": "Užtruks mažiau nei minutę — tada Alwen jau galės padėti.",
     "verifyCta": "Patvirtinti",
     "verifyCodeTitle": "Patikrinkite savo {method}",
     "verifyCodeHint": "Įveskite 6 skaitmenų kodą, kurį išsiuntėme adresu {target}.",
@@ -382,24 +382,24 @@
     "authCheckEmailForReset": "Patikrinkite el. paštą – jame rasite nuorodą slaptažodžiui atkurti.",
     "authPasswordUpdated": "Jūsų slaptažodis atnaujintas. Prisijunkite nauju slaptažodžiu.",
     "authDeleteAccountBackendRequired": "Paskyros ištrynimui reikia saugaus serverio veiksmo. Jūs buvote atjungti.",
-    "authErrorGeneric": "Kažkas nepavyko. Bandykite dar kartą.",
+    "authErrorGeneric": "Nepavyko. Bandykite dar kartą.",
     "authErrorRateLimited": "Per daug bandymų. Bandykite dar kartą po {minutes} min."
   },
   "onboarding": {
-    "onboardingWelcomeTitle": "Sveiki atvykę į Alwenda",
-    "onboardingWelcomeBody": "Jūsų miestas. Jūsų reputacija. Jūsų galimybės. Atraskite tikras vietas, keiskitės įgūdžiais ir palaikykite ryšį su kaimynyste.",
-    "onboardingLanguageTitle": "Pasirinkite kalbą",
-    "onboardingLanguageBody": "Alwenda pilnai veikia jūsų kalba — tai bet kada galite pakeisti Nustatymuose.",
-    "onboardingCityTitle": "Jūs pasiruošę Vilniui",
-    "onboardingCityBody": "Pradedame nuo Vilniaus. Daugiau miestų prisijungs augant Alwenda.",
+    "onboardingSeeTitle": "Pamatykite, kas aplinkui",
+    "onboardingSeeBody": "Alwenda parodo tikras vietas, žmones ir galimybes jūsų mieste — tokias, kokios jos yra dabar.",
+    "onboardingAskTitle": "Klauskite Alwen bet ko",
+    "onboardingAskBody": "Alwen supranta jus jūsų kalba. Pasirinkite ją žemiau ir pradėkite.",
+    "onboardingConnectTitle": "Bendraukite ir tvarkykite reikalus",
+    "onboardingConnectBody": "Pirkite, parduokite, samdykite pagalbą, siūlykite ranką ir pažinkite žmones netoliese — viskas vienoje vietoje.",
     "onboardingGetStarted": "Pradėti",
     "onboardingSkip": "Praleisti",
     "onboardingNext": "Toliau",
     "welcome": {
-      "welcomeSequenceStep1": "Kuriame jūsų miestą...",
-      "welcomeSequenceStep2": "Randame galimybių netoliese...",
-      "welcomeSequenceStep3": "Ruošiame jūsų kaimynystę...",
-      "welcomeSequenceStep4": "Kraunama jūsų reputacija..."
+      "welcomeSequenceStep1": "Ruošiame jūsų miestą...",
+      "welcomeSequenceStep2": "Ieškome, kas netoliese...",
+      "welcomeSequenceStep3": "Tvarkome jūsų kaimynystę...",
+      "welcomeSequenceStep4": "Beveik viskas paruošta..."
     }
   },
   "settings": {

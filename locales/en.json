@@ -355,9 +355,9 @@
   },
   "auth": {
     "authWelcomeBack": "Welcome back",
-    "authWelcomeBackHint": "Sign in to pick up where you left off.",
+    "authWelcomeBackHint": "Sign in to see what's new around you.",
     "authCreateAccount": "Create your account",
-    "authCreateAccountHint": "Takes less than a minute.",
+    "authCreateAccountHint": "Takes less than a minute — then Alwen can start helping.",
     "verifyCta": "Verify",
     "verifyCodeTitle": "Check your {method}",
     "verifyCodeHint": "Enter the 6-digit code we sent to {target}.",
@@ -382,24 +382,24 @@
     "authCheckEmailForReset": "Check your email for a link to reset your password.",
     "authPasswordUpdated": "Your password has been updated. Sign in with your new password.",
     "authDeleteAccountBackendRequired": "Account deletion needs a secure backend action. You have been signed out.",
-    "authErrorGeneric": "Something went wrong. Please try again.",
+    "authErrorGeneric": "That didn't go through. Please try again.",
     "authErrorRateLimited": "Too many attempts. Please try again in {minutes} min."
   },
   "onboarding": {
-    "onboardingWelcomeTitle": "Welcome to Alwenda",
-    "onboardingWelcomeBody": "Your city. Your reputation. Your opportunities. Discover real places, trade skills, and stay connected to your neighbourhood.",
-    "onboardingLanguageTitle": "Choose your language",
-    "onboardingLanguageBody": "Alwenda works fully in your language — you can change this anytime in Settings.",
-    "onboardingCityTitle": "You're set for Vilnius",
-    "onboardingCityBody": "We're starting with Vilnius. More cities are coming as Alwenda grows.",
+    "onboardingSeeTitle": "See what's around you",
+    "onboardingSeeBody": "Alwenda shows you real places, people, and opportunities in your city, as they happen.",
+    "onboardingAskTitle": "Ask Alwen anything",
+    "onboardingAskBody": "Alwen understands you in your own language. Choose it below to get started.",
+    "onboardingConnectTitle": "Connect and get things done",
+    "onboardingConnectBody": "Buy, sell, hire help, offer a hand, and meet people nearby, all in one place.",
     "onboardingGetStarted": "Get started",
     "onboardingSkip": "Skip",
     "onboardingNext": "Next",
     "welcome": {
-      "welcomeSequenceStep1": "Building your city...",
-      "welcomeSequenceStep2": "Finding nearby opportunities...",
-      "welcomeSequenceStep3": "Preparing your neighbourhood...",
-      "welcomeSequenceStep4": "Loading your reputation..."
+      "welcomeSequenceStep1": "Getting your city ready...",
+      "welcomeSequenceStep2": "Finding what's nearby...",
+      "welcomeSequenceStep3": "Setting up your neighbourhood...",
+      "welcomeSequenceStep4": "Almost there..."
     }
   },
   "settings": {

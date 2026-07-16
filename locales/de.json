@@ -355,9 +355,9 @@
   },
   "auth": {
     "authWelcomeBack": "Willkommen zurück",
-    "authWelcomeBackHint": "Melde dich an, um dort weiterzumachen, wo du aufgehört hast.",
+    "authWelcomeBackHint": "Melde dich an und sieh, was neu ist in deiner Umgebung.",
     "authCreateAccount": "Erstelle dein Konto",
-    "authCreateAccountHint": "Dauert weniger als eine Minute.",
+    "authCreateAccountHint": "Dauert weniger als eine Minute — dann kann Alwen dir gleich helfen.",
     "verifyCta": "Bestätigen",
     "verifyCodeTitle": "Überprüfe dein {method}",
     "verifyCodeHint": "Gib den 6-stelligen Code ein, den wir an {target} gesendet haben.",
@@ -382,24 +382,24 @@
     "authCheckEmailForReset": "Prüfen Sie Ihre E-Mails auf einen Link zum Zurücksetzen Ihres Passworts.",
     "authPasswordUpdated": "Ihr Passwort wurde aktualisiert. Melden Sie sich mit dem neuen Passwort an.",
     "authDeleteAccountBackendRequired": "Zum Löschen des Kontos ist eine sichere Backend-Aktion erforderlich. Du wurdest abgemeldet.",
-    "authErrorGeneric": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    "authErrorGeneric": "Das hat nicht geklappt. Bitte versuche es erneut.",
     "authErrorRateLimited": "Zu viele Versuche. Bitte versuchen Sie es in {minutes} Min. erneut."
   },
   "onboarding": {
-    "onboardingWelcomeTitle": "Willkommen bei Alwenda",
-    "onboardingWelcomeBody": "Deine Stadt. Dein Ruf. Deine Möglichkeiten. Entdecke echte Orte, tausche Fähigkeiten und bleib mit deiner Nachbarschaft verbunden.",
-    "onboardingLanguageTitle": "Wähle deine Sprache",
-    "onboardingLanguageBody": "Alwenda funktioniert vollständig in deiner Sprache — du kannst das jederzeit in den Einstellungen ändern.",
-    "onboardingCityTitle": "Du bist startklar für Vilnius",
-    "onboardingCityBody": "Wir starten mit Vilnius. Weitere Städte kommen hinzu, während Alwenda wächst.",
+    "onboardingSeeTitle": "Sieh, was um dich herum ist",
+    "onboardingSeeBody": "Alwenda zeigt dir echte Orte, Menschen und Möglichkeiten in deiner Stadt — so, wie sie gerade sind.",
+    "onboardingAskTitle": "Frag Alwen alles",
+    "onboardingAskBody": "Alwen versteht dich in deiner eigenen Sprache. Wähle sie unten aus, um loszulegen.",
+    "onboardingConnectTitle": "Verbinde dich und erledige Dinge",
+    "onboardingConnectBody": "Kaufen, verkaufen, Hilfe holen, anpacken und Menschen in deiner Nähe treffen — alles an einem Ort.",
     "onboardingGetStarted": "Loslegen",
     "onboardingSkip": "Überspringen",
     "onboardingNext": "Weiter",
     "welcome": {
-      "welcomeSequenceStep1": "Deine Stadt wird aufgebaut...",
-      "welcomeSequenceStep2": "Möglichkeiten in der Nähe werden gesucht...",
-      "welcomeSequenceStep3": "Deine Nachbarschaft wird vorbereitet...",
-      "welcomeSequenceStep4": "Dein Ruf wird geladen..."
+      "welcomeSequenceStep1": "Deine Stadt wird vorbereitet...",
+      "welcomeSequenceStep2": "Wir suchen, was in der Nähe ist...",
+      "welcomeSequenceStep3": "Deine Nachbarschaft wird eingerichtet...",
+      "welcomeSequenceStep4": "Gleich geschafft..."
     }
   },
   "settings": {

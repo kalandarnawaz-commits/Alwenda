@@ -2556,9 +2556,9 @@ function renderWelcomeSequence() {
 
 function renderOnboarding() {
   const steps = [
-    { eyebrow: t("common.appName"), title: t("onboarding.onboardingWelcomeTitle"), body: t("onboarding.onboardingWelcomeBody") },
-    { eyebrow: t("settings.language"), title: t("onboarding.onboardingLanguageTitle"), body: t("onboarding.onboardingLanguageBody") },
-    { eyebrow: t("common.city"), title: t("onboarding.onboardingCityTitle"), body: t("onboarding.onboardingCityBody") }
+    { eyebrow: t("common.appName"), title: t("onboarding.onboardingSeeTitle"), body: t("onboarding.onboardingSeeBody") },
+    { eyebrow: t("settings.language"), title: t("onboarding.onboardingAskTitle"), body: t("onboarding.onboardingAskBody") },
+    { eyebrow: t("common.city"), title: t("onboarding.onboardingConnectTitle"), body: t("onboarding.onboardingConnectBody") }
   ];
   const step = Math.min(state.onboardingStep, steps.length - 1);
   const current = steps[step];
