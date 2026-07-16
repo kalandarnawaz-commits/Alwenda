@@ -91,7 +91,7 @@ import {
   createListing,
   fetchMyListings,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=auth-redirect-fix-2";
+} from "./services/auth/supabaseClient.js?v=cdn-retry-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";

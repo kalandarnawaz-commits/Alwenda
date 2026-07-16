@@ -29,18 +29,51 @@ function authRedirectUrl() {
   return `${window.location.origin}${AUTH_CALLBACK_PATH}`;
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A blip on the esm.sh CDN (not Supabase itself) throws the browser's own
+ * "Failed to fetch dynamically imported module" — raw, unfriendly, and
+ * previously shown to users verbatim. Retrying a couple of times with a
+ * short backoff self-heals most of these without the user having to do
+ * anything. */
+async function importSupabaseSdk() {
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      // @ts-ignore Remote ESM import is intentional for this zero-build static app.
+      return await import("https://esm.sh/@supabase/supabase-js@2");
+    } catch (error) {
+      if (attempt === attempts) {
+        throw new Error("Alwenda couldn't reach its sign-in service. Check your connection and try again.", { cause: error });
+      }
+      await wait(400 * attempt);
+    }
+  }
+  throw new Error("Alwenda couldn't reach its sign-in service. Check your connection and try again.");
+}
+
 /** Lazily imports the SDK and creates the client — only ever runs the
  * network import when a project is actually configured, so the app never
  * pays for or depends on Supabase when running without credentials. */
 function getClient() {
   if (!isSupabaseConfigured()) throw new AuthNotConfiguredError();
   if (!clientPromise) {
-    // @ts-ignore Remote ESM import is intentional for this zero-build static app.
-    clientPromise = import("https://esm.sh/@supabase/supabase-js@2").then(({ createClient }) =>
-      createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-      })
-    );
+    clientPromise = importSupabaseSdk()
+      .then(({ createClient }) =>
+        createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        })
+      )
+      .catch((error) => {
+        // Don't cache a failed attempt — the next call (e.g. the user
+        // tapping "sign in" again) should get a fresh try instead of being
+        // stuck replaying the same rejected promise for the rest of the
+        // page's lifetime.
+        clientPromise = null;
+        throw error;
+      });
   }
   return clientPromise;
 }
