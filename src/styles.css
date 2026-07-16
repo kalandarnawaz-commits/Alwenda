@@ -122,7 +122,7 @@ button {
   gap: 14px;
   min-height: 88px;
   margin-inline: -2px;
-  padding: 14px 4px 16px;
+  padding: max(14px, env(safe-area-inset-top)) 4px 16px;
   border: 1px solid transparent;
   border-radius: 0 0 22px 22px;
   color: var(--ink);
@@ -3506,7 +3506,7 @@ select:focus-visible {
 
 .app-top {
   min-height: 88px;
-  padding: var(--space-2) var(--space-1);
+  padding: max(var(--space-2), env(safe-area-inset-top)) var(--space-1) var(--space-2);
 }
 
 .brand-city {
