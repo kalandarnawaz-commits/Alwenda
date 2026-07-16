@@ -1,6 +1,7 @@
 {
   "common": {
     "appName": "Alwenda",
+    "splashTagline": "Jūsų akys mieste.",
     "city": "Vilnius",
     "profileTagline": "Tavo reputacija keliauja kartu su tavimi.",
     "all": "Visi",
@@ -63,7 +64,7 @@
     "launchCity": "Paleidimo miestas",
     "close": "Uždaryti",
     "homeQuestion": "Ką norite nuveikti šiandien?",
-    "aiSearchPlaceholder": "Pasakykite Alwen, ko reikia...",
+    "aiSearchPlaceholder": "Ko ieškote mieste šiandien?",
     "aiSearchPrompts": [
       "Parduoti dviratį",
       "Užsisakyti valytoją",
@@ -383,6 +384,7 @@
     "authPasswordUpdated": "Jūsų slaptažodis atnaujintas. Prisijunkite nauju slaptažodžiu.",
     "authDeleteAccountBackendRequired": "Paskyros ištrynimui reikia saugaus serverio veiksmo. Jūs buvote atjungti.",
     "authErrorGeneric": "Nepavyko. Bandykite dar kartą.",
+    "authLegalIntro": "Tęsdami sutinkate su mūsų",
     "authErrorRateLimited": "Per daug bandymų. Bandykite dar kartą po {minutes} min."
   },
   "onboarding": {
@@ -786,8 +788,9 @@
     ]
   },
   "alwen": {
-    "alwenDockTitle": "Alwen pasiruošęs.",
-    "alwenDockHint": "Pasakykite Alwen, ko reikia. Alwen gali pasirūpinti kitu žingsniu, rasti variantus šalia, paruošti užklausas, rezervuoti, palyginti ir išversti.",
+    "alwenDockTitle": "Kuo galiu padėti ar ką atlikti?",
+    "alwenDockHint": "Klauskite apie vietas, paslaugas, prekes ar kasdienius miesto reikalus.",
+    "alwenChatLooking": "Alwen apsidairo...",
     "alwenChatLabel": "Saugus tekstinis pokalbis",
     "alwenChatPlaceholder": "Ko jums reikia mieste?",
     "alwenChatSend": "Siųsti",

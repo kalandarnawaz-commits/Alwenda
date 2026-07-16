@@ -1,6 +1,7 @@
 {
   "common": {
     "appName": "Alwenda",
+    "splashTagline": "Deine Augen auf die Stadt.",
     "city": "Vilnius",
     "profileTagline": "Dein Ruf begleitet dich überallhin.",
     "all": "Alle",
@@ -63,7 +64,7 @@
     "launchCity": "Stadt starten",
     "close": "Schließen",
     "homeQuestion": "Was möchtest du heute erledigen?",
-    "aiSearchPlaceholder": "Sag Alwen, was du brauchst...",
+    "aiSearchPlaceholder": "Wonach suchst du heute in der Stadt?",
     "aiSearchPrompts": [
       "Mein Fahrrad verkaufen",
       "Reinigungskraft buchen",
@@ -383,6 +384,7 @@
     "authPasswordUpdated": "Ihr Passwort wurde aktualisiert. Melden Sie sich mit dem neuen Passwort an.",
     "authDeleteAccountBackendRequired": "Zum Löschen des Kontos ist eine sichere Backend-Aktion erforderlich. Du wurdest abgemeldet.",
     "authErrorGeneric": "Das hat nicht geklappt. Bitte versuche es erneut.",
+    "authLegalIntro": "Wenn du fortfährst, stimmst du unseren",
     "authErrorRateLimited": "Zu viele Versuche. Bitte versuchen Sie es in {minutes} Min. erneut."
   },
   "onboarding": {
@@ -786,8 +788,9 @@
     ]
   },
   "alwen": {
-    "alwenDockTitle": "Alwen ist bereit.",
-    "alwenDockHint": "Sag Alwen, was du brauchst. Alwen kann den nächsten Schritt übernehmen, Angebote in der Nähe finden, Anfragen entwerfen, buchen, vergleichen und übersetzen.",
+    "alwenDockTitle": "Wobei kann ich dir helfen?",
+    "alwenDockHint": "Frag nach Orten, Dienstleistungen, Produkten oder alltäglichen Dingen in der Stadt.",
+    "alwenChatLooking": "Alwen schaut sich um...",
     "alwenChatLabel": "Sicherer Textchat",
     "alwenChatPlaceholder": "Was brauchst du in der Stadt?",
     "alwenChatSend": "Senden",

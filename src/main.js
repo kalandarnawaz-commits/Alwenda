@@ -2165,6 +2165,13 @@ function renderNavButton([view, label, iconName]) {
 }
 
 function renderShell() {
+  if (state.activeView === "auth") {
+    return `
+      <div class="app-shell auth-focus-shell">
+        <main class="main">${renderView()}</main>
+      </div>
+    `;
+  }
   const navItems = [
     ["home", "nav.home", "app"],
     ["marketplace", "nav.marketplace", "shop"],
@@ -2234,15 +2241,20 @@ function renderAuthNotice() {
 
 function renderAuthShell(eyebrow, title, hint, bodyHtml) {
   return `
-    <section class="section-shell auth-shell">
-      <div class="auth-card">
-        <p class="eyebrow">${eyebrow}</p>
-        <h1>${title}</h1>
-        ${hint ? `<p class="auth-hint">${hint}</p>` : ""}
-        ${renderAuthError()}
-        ${renderAuthNotice()}
-        ${bodyHtml}
-      </div>
+    <section class="auth-entry">
+      <span class="auth-entry-mark" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
+      <p class="eyebrow">${eyebrow}</p>
+      <h1>${title}</h1>
+      ${hint ? `<p class="auth-hint">${hint}</p>` : ""}
+      ${renderAuthError()}
+      ${renderAuthNotice()}
+      <div class="auth-entry-body">${bodyHtml}</div>
+      <p class="auth-legal-note">
+        ${t("auth.authLegalIntro")}
+        <button type="button" data-view="legalTerms">${t("settings.settingsTermsOfService")}</button>
+        <span aria-hidden="true">&middot;</span>
+        <button type="button" data-view="legalPrivacy">${t("settings.settingsPrivacyPolicy")}</button>
+      </p>
     </section>
   `;
 }
@@ -2280,6 +2292,7 @@ function renderLogin() {
         `}
     </form>
     <p class="auth-footer-line">${t("common.dontHaveAccount")} <button type="button" class="auth-link" data-auth-view="register">${t("common.signUp")}</button></p>
+    <button type="button" class="auth-link" data-view="home">${t("common.continueAsGuest")}</button>
   `;
   return renderAuthShell(t("common.appName"), t("auth.authWelcomeBack"), t("auth.authWelcomeBackHint"), body);
 }
@@ -2554,11 +2567,50 @@ function renderWelcomeSequence() {
   `;
 }
 
+/* Abstract, restrained "what Alwenda does" motifs for onboarding — a map
+   fragment with location clusters (see), a conversational exchange (ask),
+   and overlapping place/community cards (connect). Not decorative stock
+   art: each shape echoes the real product surface the step describes. */
+function onboardingVisualMarkup(kind) {
+  if (kind === "see") {
+    return `
+      <svg class="onboarding-visual-art" viewBox="0 0 120 84" aria-hidden="true">
+        <rect x="4" y="4" width="112" height="76" rx="16" class="onboarding-visual-frame" />
+        <path d="M14 66 L34 20" class="onboarding-visual-path" />
+        <path d="M50 66 L64 34" class="onboarding-visual-path" />
+        <path d="M78 66 L90 18" class="onboarding-visual-path" />
+        <circle cx="34" cy="20" r="4" class="onboarding-visual-dot onboarding-visual-dot-a" />
+        <circle cx="64" cy="34" r="5" class="onboarding-visual-dot onboarding-visual-dot-b" />
+        <circle cx="90" cy="18" r="3.5" class="onboarding-visual-dot onboarding-visual-dot-c" />
+      </svg>
+    `;
+  }
+  if (kind === "ask") {
+    return `
+      <svg class="onboarding-visual-art" viewBox="0 0 120 84" aria-hidden="true">
+        <rect x="16" y="10" width="88" height="46" rx="20" class="onboarding-visual-frame" />
+        <path d="M42 56 L34 72 L56 56 Z" class="onboarding-visual-frame" />
+        <circle cx="46" cy="33" r="4" class="onboarding-visual-dot onboarding-visual-dot-a" />
+        <circle cx="60" cy="33" r="4" class="onboarding-visual-dot onboarding-visual-dot-b" />
+        <circle cx="74" cy="33" r="4" class="onboarding-visual-dot onboarding-visual-dot-c" />
+      </svg>
+    `;
+  }
+  return `
+    <svg class="onboarding-visual-art" viewBox="0 0 120 84" aria-hidden="true">
+      <rect x="8" y="16" width="58" height="42" rx="14" class="onboarding-visual-frame onboarding-visual-card-a" />
+      <rect x="42" y="30" width="58" height="42" rx="14" class="onboarding-visual-frame onboarding-visual-card-b" />
+      <circle cx="30" cy="37" r="6" class="onboarding-visual-dot onboarding-visual-dot-a" />
+      <circle cx="72" cy="51" r="6" class="onboarding-visual-dot onboarding-visual-dot-b" />
+    </svg>
+  `;
+}
+
 function renderOnboarding() {
   const steps = [
-    { eyebrow: t("common.appName"), title: t("onboarding.onboardingSeeTitle"), body: t("onboarding.onboardingSeeBody") },
-    { eyebrow: t("settings.language"), title: t("onboarding.onboardingAskTitle"), body: t("onboarding.onboardingAskBody") },
-    { eyebrow: t("common.city"), title: t("onboarding.onboardingConnectTitle"), body: t("onboarding.onboardingConnectBody") }
+    { eyebrow: t("common.appName"), title: t("onboarding.onboardingSeeTitle"), body: t("onboarding.onboardingSeeBody"), visual: "see" },
+    { eyebrow: t("settings.language"), title: t("onboarding.onboardingAskTitle"), body: t("onboarding.onboardingAskBody"), visual: "ask" },
+    { eyebrow: t("common.city"), title: t("onboarding.onboardingConnectTitle"), body: t("onboarding.onboardingConnectBody"), visual: "connect" }
   ];
   const step = Math.min(state.onboardingStep, steps.length - 1);
   const current = steps[step];
@@ -2571,6 +2623,7 @@ function renderOnboarding() {
           <div class="onboarding-progress">
             ${steps.map((_, index) => `<span class="${index <= step ? "is-active" : ""}"></span>`).join("")}
           </div>
+          <div class="onboarding-visual" key="${step}">${onboardingVisualMarkup(current.visual)}</div>
           <p class="eyebrow">${current.eyebrow}</p>
           <h1>${current.title}</h1>
           <p class="auth-hint">${current.body}</p>
@@ -3374,6 +3427,12 @@ function renderAlwenDock() {
             <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
           </div>
         </form>
+        ${isLoading ? `
+          <div class="alwen-status-row" role="status">
+            <span class="alwen-status-dot" aria-hidden="true"></span>
+            <span>${t("alwen.alwenChatLooking")}</span>
+          </div>
+        ` : ""}
         ${chat.status === "success" ? `
           <div class="alwen-chat-answer" role="status">
             <strong>${t("alwen.alwenChatAnswerLabel")}</strong>
@@ -7906,12 +7965,18 @@ async function initSplashScreen() {
   root.setAttribute("role", "presentation");
   root.setAttribute("aria-hidden", "true");
   root.innerHTML = reduced
-    ? `<div class="splash-stage splash-stage-reduced"><span class="splash-icon">${splashIconMarkup()}</span></div>`
+    ? `
+      <div class="splash-stage splash-stage-reduced">
+        <span class="splash-icon">${splashIconMarkup()}</span>
+        <p class="splash-tagline is-visible">${t("common.splashTagline")}</p>
+      </div>
+    `
     : `
       <div class="splash-stage">
         <span class="splash-glow"></span>
         <span class="splash-wordmark"></span>
         <span class="splash-icon">${splashIconMarkup()}</span>
+        <p class="splash-tagline">${t("common.splashTagline")}</p>
       </div>
     `;
   document.body.appendChild(root);
@@ -7920,7 +7985,7 @@ async function initSplashScreen() {
   if (reduced) {
     await wait(20);
     stage.classList.add("is-visible");
-    await wait(500);
+    await wait(650);
   } else {
     const wordmarkHost = stage.querySelector(".splash-wordmark");
     let lettersReady = false;
@@ -7940,6 +8005,8 @@ async function initSplashScreen() {
       await wait(20);
       stage.classList.add("is-alive");
       await wait(450);
+      stage.classList.add("is-tagline-visible");
+      await wait(300);
     } else {
       await wait(20);
       stage.classList.add("is-visible");
@@ -7950,6 +8017,8 @@ async function initSplashScreen() {
       await wait(200);
       stage.classList.add("is-alive");
       await wait(450);
+      stage.classList.add("is-tagline-visible");
+      await wait(300);
     }
   }
 
