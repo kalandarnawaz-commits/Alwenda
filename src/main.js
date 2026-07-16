@@ -477,6 +477,23 @@ function enforceRateLimit(action, identifier, options) {
   return result;
 }
 
+/** Supabase/OAuth providers report a failed redirect as query-string (or,
+ * for some legacy flows, hash-fragment) params — never as something a try/
+ * catch here could see, since the browser navigated here directly rather
+ * than through our own code. Checks both locations since different failure
+ * paths use different ones. */
+function readOAuthCallbackError() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+  const raw = query.get("error_description") || hash.get("error_description") || query.get("error") || hash.get("error");
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, " "));
+  } catch {
+    return raw;
+  }
+}
+
 function hydrateAuthFromStorage() {
   state.hasOnboarded = Boolean(readLocalStorage(ONBOARDED_KEY));
   const storedSettings = readLocalStorage(SETTINGS_KEY);
@@ -7358,14 +7375,31 @@ await setLanguage(state.language);
 
 resetAuthDrafts();
 hydrateAuthFromStorage();
+
+// Google/Supabase report a failed or cancelled OAuth attempt (wrong redirect
+// URI, expired client secret, user closed the consent screen, ...) as
+// ?error=...&error_description=... on this exact redirect — never as a JS
+// exception, since the browser was just navigated here directly. Read it
+// before anything (our own history.replaceState below, or Supabase's own
+// internal URL parsing inside hydrateSupabaseAuth) has a chance to clear
+// the query string, or a real failure silently looks identical to "nothing
+// happened, you're just signed out on Home" instead of a visible error.
+const isAuthCallback = window.location.pathname.startsWith(AUTH_CALLBACK_PATH);
+const oauthCallbackError = isAuthCallback ? readOAuthCallbackError() : null;
+
 await hydrateSupabaseAuth();
 // The OAuth callback page (auth/callback/index.html) is a separate physical
 // path with no routes of its own — every relative fetch/asset URL the rest
 // of the app builds (locales, brand SVGs, in-app pushState links) resolves
 // against whatever path is in the address bar, so this app must never stay
 // parked there once Supabase has consumed the redirect and restored the session.
-if (window.location.pathname.startsWith(AUTH_CALLBACK_PATH)) {
+if (isAuthCallback) {
   history.replaceState(null, "", "/");
+}
+if (oauthCallbackError) {
+  state.auth.authError = oauthCallbackError;
+  state.auth.authView = "login";
+  state.activeView = "auth";
 }
 applyBusinessOverrides();
 syncStateFromUrl();
