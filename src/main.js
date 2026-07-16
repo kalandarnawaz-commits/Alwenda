@@ -88,9 +88,11 @@ import {
   mapSupabaseUserToAccount,
   ensureUserProfiles,
   completeUserProfile,
+  createListing,
+  fetchMyListings,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=auth-redirect-fix-1";
-import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-3";
+} from "./services/auth/supabaseClient.js?v=auth-redirect-fix-2";
+import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
@@ -166,6 +168,10 @@ const state = {
   helpRequestDraft: { text: "", urgency: "flexible" },
   helpRequestPosted: null,
   helpRequestError: null,
+  listingDraft: { title: "", description: "", category: "buy-sell", priceAmount: "", pricePeriod: "one_time", neighbourhood: "" },
+  listingSubmitStatus: "idle",
+  listingSubmitError: null,
+  myListings: [],
   bookingDraft: { dateIndex: null, time: null },
   bookingConfirmed: null,
   directionsOptions: null,
@@ -504,6 +510,7 @@ function applySignedOutState() {
   state.auth.status = "signedOut";
   state.auth.user = null;
   state.auth.pendingVerification = null;
+  state.myListings = [];
   if (state.activeView === "auth" && !state.auth.authView) state.auth.authView = "login";
 }
 
@@ -534,6 +541,9 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   state.auth.authError = null;
   state.hasOnboarded = true;
   writeLocalStorage(ONBOARDED_KEY, true);
+  // Fire-and-forget — "My Listings" in Profile shouldn't block sign-in on
+  // this, and refreshMyListings() already renders once it resolves.
+  refreshMyListings();
 
   try {
     const profiles = await ensureUserProfiles();
@@ -680,7 +690,7 @@ function syncStateFromUrl() {
   if (!id || !ID_LINKED_VIEWS.has(view)) return;
   if (view === "publicProfile") openPublicProfileById(id);
   else if (view === "businessProfile") state.selectedBusinessId = Number(id);
-  else if (view === "listingDetail") state.selectedListingId = Number(id);
+  else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
 }
 
@@ -1143,7 +1153,7 @@ function sharePost(post) {
 }
 
 function shareListing(item) {
-  const title = t(item.titleKey);
+  const title = listingTitle(item);
   const url = `${window.location.origin}${window.location.pathname}?view=listingDetail&id=${item.id}`;
   if (navigator.share) {
     navigator.share({ title, text: `${title} — ${item.price}`, url }).catch(() => {});
@@ -1668,6 +1678,20 @@ function bindCoverflow() {
   });
 }
 
+/** Every seeded listing carries a titleKey/metaKey (translated mock copy),
+ * but a real, user-created listing has plain title/meta strings instead —
+ * there's no locale entry to look one up by. Preferring the plain field
+ * when present is the same fallback renderHelpRequest() already uses for
+ * user-created help requests. */
+function listingTitle(item) {
+  return item.title || t(item.titleKey);
+}
+
+function listingMeta(item) {
+  if (item.meta) return item.meta;
+  return item.metaKey ? t(item.metaKey) : "";
+}
+
 function categoryLabel(type) {
   const key = `category.marketplace.cat${type.replace(/(^|-)([a-z])/g, (_, __, letter) => letter.toUpperCase()).replaceAll("-", "")}`;
   return t(key) || type;
@@ -1945,8 +1969,8 @@ function filteredListings() {
   return listings.filter((item) => {
     const categoryMatch = state.category === "all" || item.type === state.category;
     const areaMatch = state.area === "All" || item.area === state.area;
-    return categoryMatch && areaMatch && matchesQuery(`${t(item.titleKey)} ${item.area} ${t(item.metaKey)} ${item.status}`);
-  }).sort((a, b) => queryScore(`${t(b.titleKey)} ${t(b.titleKey)} ${t(b.metaKey)} ${b.type}`) - queryScore(`${t(a.titleKey)} ${t(a.titleKey)} ${t(a.metaKey)} ${a.type}`));
+    return categoryMatch && areaMatch && matchesQuery(`${listingTitle(item)} ${item.area} ${listingMeta(item)} ${item.status}`);
+  }).sort((a, b) => queryScore(`${listingTitle(b)} ${listingTitle(b)} ${listingMeta(b)} ${b.type}`) - queryScore(`${listingTitle(a)} ${listingTitle(a)} ${listingMeta(a)} ${a.type}`));
 }
 
 function filteredBusinesses() {
@@ -2044,8 +2068,8 @@ function topMatches() {
       : [];
   const helpMatches = filteredHelpRequests().map((item) => ({
     kind: t("entity.helpRequest"),
-    title: t(item.titleKey),
-    meta: `${item.area} · ${item.budget} · ${t(item.statusKey)}`,
+    title: item.title || t(item.titleKey),
+    meta: `${item.area} · ${item.budget || item.urgency} · ${item.status || t(item.statusKey)}`,
     action: "needHelp",
     tileIcon: "help"
   }));
@@ -2072,7 +2096,7 @@ function topMatches() {
   }));
   const listingMatches = filteredListings().map((item) => ({
     kind: t("entity.listing"),
-    title: t(item.titleKey),
+    title: listingTitle(item),
     meta: `${item.area} · ${item.price} · ${item.status}`,
     action: "marketplace",
     image: item.image
@@ -2561,6 +2585,7 @@ function renderView() {
     contribute: renderContribute,
     hire: renderHire,
     needHelp: renderNeedHelp,
+    createListing: renderCreateListingForm,
     listings: renderListings,
     listingDetail: renderListingDetail,
     businesses: renderBusinesses,
@@ -3378,6 +3403,7 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
     state.alwenChat.input = "";
     trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
     if (result.createdHelpRequest) applyAlwenCreatedHelpRequest(result.createdHelpRequest);
+    if (result.createdListing) applyCreatedListing(result.createdListing);
   } catch (error) {
     const code = error?.code || "";
     state.alwenChat.status = "error";
@@ -3555,7 +3581,7 @@ function renderHomeMarketplace() {
         ${featured.map((item) => `
           <article>
             <span>${categoryLabel(item.type)}</span>
-            <h3>${t(item.titleKey)}</h3>
+            <h3>${listingTitle(item)}</h3>
             <p>${item.area} · ${item.price}</p>
           </article>
         `).join("")}
@@ -3669,14 +3695,14 @@ function renderPulse(post) {
 
 function renderCreate() {
   const primaryCreationActions = [
-    ["tag", "common.sellSomething", "common.sellSomethingHint", "marketplace"],
+    ["tag", "common.sellSomething", "common.sellSomethingHint", "createListing"],
     ["help", "common.requestHelp", "common.requestHelpHint", "needHelp"],
     ["city", "common.addBusiness", "common.addBusinessHint", "ops"]
   ];
   const secondaryCreationActions = [
     ["message", "common.postCommunity", "common.postCommunityHint", "community"],
     ["service", "common.offerService", "common.offerServiceHint", "hire"],
-    ["stay", "common.rentSomething", "common.rentSomethingHint", "marketplace", "rentals"],
+    ["stay", "common.rentSomething", "common.rentSomethingHint", "createListing", "rentals"],
     ["calendar", "common.createEvent", "common.createEventHint", "community"],
     ["briefcase", "common.findWork", "common.findWorkHint", "contribute"]
   ];
@@ -4000,6 +4026,102 @@ function renderContributionAction(action) {
   `;
 }
 
+/** Maps the marketplace's own hyphenated category ids (shared with the
+ * seeded mock listings and categoryLabel()'s translation lookup) to the
+ * listings table's check-constraint values, which use underscores and a
+ * couple of different names ("services" -> "local_services"). */
+const LISTING_CATEGORY_TO_DB = {
+  "buy-sell": "buy_sell",
+  rentals: "rentals",
+  jobs: "jobs",
+  services: "local_services",
+  vehicles: "vehicles",
+  property: "property"
+};
+
+const LISTING_CATEGORY_OPTIONS = ["buy-sell", "rentals", "jobs", "services", "vehicles", "property"];
+const LISTING_PRICE_PERIODS = [
+  ["one_time", "createListing.priceOneTime"],
+  ["hour", "createListing.pricePerHour"],
+  ["day", "createListing.pricePerDay"],
+  ["month", "createListing.pricePerMonth"],
+  ["quote", "createListing.priceQuote"]
+];
+
+/** The real "create a listing" form — manual counterpart to Alwen drafting
+ * one conversationally (see create_marketplace_listing in
+ * supabase/functions/alwen-chat). Inserts directly into the listings table
+ * via Supabase from the client, since nothing here needs a secret key. */
+function renderCreateListingForm() {
+  const draft = state.listingDraft;
+  const isLoading = state.listingSubmitStatus === "loading";
+  if (state.auth.status !== "signedIn") {
+    return `
+      <section class="section-shell create-listing-shell">
+        <button type="button" class="back-button" data-view="create">${icon("arrow")}${t("common.back")}</button>
+        <div class="screen-heading">
+          <p class="eyebrow">${t("nav.marketplace")}</p>
+          <h1>${t("createListing.createListingTitle")}</h1>
+        </div>
+        <div class="post-request-signin">
+          <p>${t("createListing.signInHint")}</p>
+          <button type="button" class="auth-primary-button" data-auth-view="login">${t("needHelp.signInToPost")}</button>
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section class="section-shell create-listing-shell">
+      <button type="button" class="back-button" data-view="create">${icon("arrow")}${t("common.back")}</button>
+      <div class="screen-heading">
+        <p class="eyebrow">${t("nav.marketplace")}</p>
+        <h1>${t("createListing.createListingTitle")}</h1>
+        <p>${t("createListing.createListingHint")}</p>
+      </div>
+      <form class="claim-form create-listing-form" data-role="create-listing-form">
+        <div class="auth-field">
+          <label for="listing-title">${t("field.title")}</label>
+          <input id="listing-title" name="title" value="${escapeHtml(draft.title)}" placeholder="${t("createListing.titlePlaceholder")}" maxlength="120" />
+        </div>
+
+        <div class="auth-field">
+          <label for="listing-category">${t("field.category")}</label>
+          <select id="listing-category" data-role="listing-category">
+            ${LISTING_CATEGORY_OPTIONS.map((value) => `<option value="${value}" ${draft.category === value ? "selected" : ""}>${categoryLabel(value)}</option>`).join("")}
+          </select>
+        </div>
+
+        <div class="auth-field">
+          <label for="listing-description">${t("field.description")}</label>
+          <textarea id="listing-description" name="description" rows="3" maxlength="1000" placeholder="${t("createListing.descriptionPlaceholder")}">${escapeHtml(draft.description)}</textarea>
+        </div>
+
+        <div class="create-listing-price-row">
+          <div class="auth-field">
+            <label for="listing-price">${t("createListing.priceLabel")}</label>
+            <input id="listing-price" name="priceAmount" type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(draft.priceAmount)}" placeholder="0" />
+          </div>
+          <div class="auth-field">
+            <label for="listing-price-period">${t("createListing.pricePeriodLabel")}</label>
+            <select id="listing-price-period" data-role="listing-price-period">
+              ${LISTING_PRICE_PERIODS.map(([value, labelKey]) => `<option value="${value}" ${draft.pricePeriod === value ? "selected" : ""}>${t(labelKey)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label for="listing-neighbourhood">${t("createListing.neighbourhoodLabel")}</label>
+          <input id="listing-neighbourhood" name="neighbourhood" value="${escapeHtml(draft.neighbourhood)}" placeholder="${city.name}" />
+        </div>
+
+        ${state.listingSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.listingSubmitError)}</p>` : ""}
+
+        <button type="submit" class="auth-primary-button" ${isLoading ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : t("createListing.publishButton")}</button>
+      </form>
+    </section>
+  `;
+}
+
 function renderAlwenListingCreator() {
   const editableChips = [
     alwenListingDraft.suggestedPrice,
@@ -4048,7 +4170,7 @@ function renderAlwenListingCreator() {
 }
 
 function renderMarketplaceListing(item) {
-  const isSaved = state.savedListingIds.includes(item.id);
+  const isSaved = state.savedListingIds.includes(String(item.id));
   const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
     <article class="market-card visual-market-card is-${item.cardSize || "compact"}" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
@@ -4062,9 +4184,9 @@ function renderMarketplaceListing(item) {
         </div>
         <span class="badge">${categoryLabel(item.type)}</span>
         ${item.workMode ? `<span class="badge badge-workmode">${item.workMode}</span>` : ""}
-        <h3>${t(item.titleKey)}</h3>
+        <h3>${listingTitle(item)}</h3>
         <div class="price-row"><strong>${item.price}</strong></div>
-        <p>${t(item.metaKey)}</p>
+        <p>${listingMeta(item)}</p>
         <div class="ai-price-pill">${icon("spark")}<span>${item.aiMatch ? `${item.aiMatch} · ${item.aiPrice}` : item.aiPrice}</span></div>
         <div class="trust-row visual-trust">
           <span>${item.popularity}</span>
@@ -4084,7 +4206,7 @@ function renderMarketplaceListing(item) {
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
 function renderListingDetail() {
-  const item = listings.find((listing) => listing.id === state.selectedListingId);
+  const item = listings.find((listing) => String(listing.id) === String(state.selectedListingId));
   if (!item) {
     return `
       <section class="section-shell listing-detail-shell">
@@ -4095,8 +4217,8 @@ function renderListingDetail() {
   }
 
   const gallery = item.gallery && item.gallery.length ? item.gallery : [item.image];
-  const isSaved = state.savedListingIds.includes(item.id);
-  const isReported = state.reportedListings.includes(item.id);
+  const isSaved = state.savedListingIds.includes(String(item.id));
+  const isReported = state.reportedListings.includes(String(item.id));
   const sellerAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   const hasFulfilment = item.pickupAvailable || item.deliveryAvailable;
 
@@ -4109,7 +4231,7 @@ function renderListingDetail() {
 
       <div class="screen-heading">
         <span class="badge category-chip">${categoryLabel(item.type)}</span>
-        <h1>${t(item.titleKey)}</h1>
+        <h1>${listingTitle(item)}</h1>
         <p class="price-row"><strong>${item.price}</strong></p>
       </div>
 
@@ -4119,7 +4241,7 @@ function renderListingDetail() {
       </div>
 
       <div class="section-title"><h2>${t("marketplace.listingDetail.aboutListing")}</h2></div>
-      <p>${item.descriptionKey ? t(item.descriptionKey) : t(item.metaKey)}</p>
+      <p>${item.description || (item.descriptionKey ? t(item.descriptionKey) : listingMeta(item))}</p>
 
       ${
         hasFulfilment
@@ -4394,6 +4516,96 @@ function resetHelpRequestDraft() {
   render();
 }
 
+function formatListingPrice(priceAmount, pricePeriod, currency = "EUR") {
+  if (!priceAmount) return t("createListing.priceQuote");
+  const amount = formatCurrency(Number(priceAmount), currency);
+  const suffix = { hour: "/hr", day: "/day", month: "/mo" }[pricePeriod];
+  return suffix ? `${amount}${suffix}` : amount;
+}
+
+/** Shapes a real listings-table row into whatever renderMarketplaceListing()
+ * and friends already expect from the seeded mock data, and adds it to both
+ * the local `listings` list (so it appears in Marketplace immediately, same
+ * convention as submitHelpRequest()/applyAlwenCreatedHelpRequest() use for
+ * Hire) and state.myListings (Profile's "My Listings"). Shared by the manual
+ * form below and by Alwen's create_marketplace_listing tool result. */
+function applyCreatedListing(created) {
+  const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === created.category) || "buy-sell";
+  const user = state.auth.user;
+  const listing = {
+    id: created.id,
+    sellerId: user?.id || created.owner_user_id || created.requester_user_id,
+    type: uiCategory,
+    title: created.title,
+    meta: created.description || "",
+    area: created.neighbourhood || created.location_label || city.name,
+    price: formatListingPrice(created.price_amount, created.price_period, created.price_currency),
+    status: t("status.published"),
+    image: "",
+    gallery: [],
+    seller: user?.name || "",
+    sellerAvatar: user?.avatar || "",
+    sellerPhone: null,
+    sellerResponseTime: "fast",
+    sellerReputation: 100,
+    pickupAvailable: false,
+    deliveryAvailable: false,
+    verifiedSeller: Boolean(user?.emailVerified),
+    distance: "",
+    popularity: "",
+    aiPrice: "",
+    aiInsight: "",
+    cardSize: "compact"
+  };
+  listings.unshift(listing);
+  state.myListings.unshift(created);
+  trackEvent("listing_created", { category: created.category, hasPrice: Boolean(created.price_amount) });
+}
+
+async function refreshMyListings() {
+  try {
+    state.myListings = await fetchMyListings();
+    render();
+  } catch (error) {
+    console.warn("[listings] Failed to load my listings.", error);
+  }
+}
+
+async function submitListingForm() {
+  const draft = state.listingDraft;
+  const title = draft.title.trim();
+  if (!title) {
+    state.listingSubmitStatus = "error";
+    state.listingSubmitError = t("createListing.missingTitleError");
+    render();
+    return;
+  }
+
+  state.listingSubmitStatus = "loading";
+  state.listingSubmitError = null;
+  render();
+
+  try {
+    const created = await createListing({
+      title,
+      description: draft.description.trim(),
+      category: LISTING_CATEGORY_TO_DB[draft.category] || "buy_sell",
+      priceAmount: draft.priceAmount ? Number(draft.priceAmount) : null,
+      pricePeriod: draft.priceAmount ? draft.pricePeriod : null,
+      neighbourhood: draft.neighbourhood.trim()
+    });
+    applyCreatedListing(created);
+    state.listingSubmitStatus = "success";
+    state.listingDraft = { title: "", description: "", category: "buy-sell", priceAmount: "", pricePeriod: "one_time", neighbourhood: "" };
+    state.activeView = "listingDetail";
+    state.selectedListingId = created.id;
+  } catch (error) {
+    state.listingSubmitStatus = "error";
+    state.listingSubmitError = error?.message || t("createListing.genericError");
+  }
+  render();
+}
+
 function renderHelpRequest(request) {
   const title = request.title || t(request.titleKey);
   const urgency = request.urgency || t(request.urgencyKey);
@@ -4437,8 +4649,8 @@ function renderListings() {
             (item) => `
             <article class="content-card">
               <span class="badge">${item.status}</span>
-              <h3>${t(item.titleKey)}</h3>
-              <p>${item.area} · ${t(item.metaKey)}</p>
+              <h3>${listingTitle(item)}</h3>
+              <p>${item.area} · ${listingMeta(item)}</p>
               <div><strong>${item.price}</strong><button>${t("common.view")}</button></div>
             </article>`
           )
@@ -5529,6 +5741,7 @@ function renderProfile() {
         </div>
       </div>
       ${renderProfileQuickActions()}
+      ${renderMyListings()}
       ${renderMyBusinesses()}
       ${renderReputationProfile()}
       ${renderProfileAchievements()}
@@ -5669,6 +5882,35 @@ function renderAlwenProfileBuilder() {
         `).join("")}
       </div>
     </section>
+  `;
+}
+
+/** state.myListings holds real rows straight from the listings table
+ * (populated by refreshMyListings()), so field names here are the DB's own
+ * (price_amount, price_period, price_currency) rather than the mock
+ * display shape renderMarketplaceListing() expects — this is a different,
+ * simpler card, not a reuse of that component. */
+function renderMyListings() {
+  if (state.auth.status !== "signedIn" || !state.myListings.length) return "";
+  return `
+    <div class="settings-section">
+      <h3>${t("createListing.myListingsTitle")}</h3>
+      <div class="my-business-list">
+        ${state.myListings
+          .map(
+            (item) => `
+          <button type="button" class="my-business-row" data-view="listingDetail" data-listing-id="${item.id}">
+            <div>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${categoryLabel(Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === item.category) || "buy-sell")} · ${t(`status.${item.status}`) || item.status}</span>
+            </div>
+            ${icon("arrow")}
+          </button>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -6439,13 +6681,16 @@ function bindEvents() {
       state.alwenOpen = false;
       state.quickTranslateOpen = false;
       if (button.dataset.category) state.category = button.dataset.category;
+      if (button.dataset.view === "createListing" && button.dataset.category) {
+        state.listingDraft.category = button.dataset.category;
+      }
       if (button.dataset.seeAllCategory) {
         state.exploreCategory = button.dataset.seeAllCategory;
         state.exploreCuisine = "All";
         state.exploreStars = "All";
       }
       if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
-      if (button.dataset.listingId) state.selectedListingId = Number(button.dataset.listingId);
+      if (button.dataset.listingId) state.selectedListingId = button.dataset.listingId;
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
       render();
       if (isReturningToSameView) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -6597,7 +6842,9 @@ function bindEvents() {
   document.querySelectorAll('[data-action="toggle-listing-save"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const id = Number(button.dataset.listingId);
+      // A plain string, not Number() — real listings created via Supabase
+      // have UUID ids, not the seeded mock data's numeric ones.
+      const id = button.dataset.listingId;
       state.savedListingIds = state.savedListingIds.includes(id) ? state.savedListingIds.filter((existing) => existing !== id) : [...state.savedListingIds, id];
       trackEvent("place_saved", { listingId: id });
       render();
@@ -6607,8 +6854,8 @@ function bindEvents() {
   document.querySelectorAll('[data-action="share-listing"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const id = Number(button.dataset.listingId);
-      const item = listings.find((listing) => listing.id === id);
+      const id = button.dataset.listingId;
+      const item = listings.find((listing) => String(listing.id) === id);
       if (item) shareListing(item);
       trackEvent("place_shared", { listingId: id });
     });
@@ -6617,7 +6864,7 @@ function bindEvents() {
   document.querySelectorAll('[data-action="report-listing"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const id = Number(button.dataset.listingId);
+      const id = button.dataset.listingId;
       if (!state.reportedListings.includes(id)) state.reportedListings.push(id);
       render();
     });
@@ -6732,6 +6979,29 @@ function bindEvents() {
 
   document.querySelector('[data-role="submit-help-request"]')?.addEventListener("click", submitHelpRequest);
   document.querySelector('[data-role="post-another-request"]')?.addEventListener("click", resetHelpRequestDraft);
+
+  bindLiveField("listing-title", (value) => {
+    state.listingDraft.title = value;
+  });
+  bindLiveField("listing-description", (value) => {
+    state.listingDraft.description = value;
+  });
+  bindLiveField("listing-price", (value) => {
+    state.listingDraft.priceAmount = value;
+  });
+  bindLiveField("listing-neighbourhood", (value) => {
+    state.listingDraft.neighbourhood = value;
+  });
+  document.querySelector('[data-role="listing-category"]')?.addEventListener("change", (event) => {
+    state.listingDraft.category = event.target.value;
+  });
+  document.querySelector('[data-role="listing-price-period"]')?.addEventListener("change", (event) => {
+    state.listingDraft.pricePeriod = event.target.value;
+  });
+  document.querySelector('[data-role="create-listing-form"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitListingForm();
+  });
 
   document.querySelector('[data-role="explore-sort"]')?.addEventListener("change", (event) => {
     state.exploreSort = event.target.value;

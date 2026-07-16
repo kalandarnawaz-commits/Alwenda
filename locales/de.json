@@ -1062,6 +1062,26 @@
     "instantMatchesNone": "Noch keine {category} in der Nähe — veröffentliche deine Anfrage und wir benachrichtigen dich.",
     "instantMatchesSeeAll": "Alle Treffer ansehen"
   },
+  "createListing": {
+    "createListingTitle": "Etwas zum Verkauf oder zur Miete anbieten",
+    "createListingHint": "Dies veröffentlicht sofort ein echtes Inserat im Marktplatz.",
+    "titlePlaceholder": "z. B. Trek Mountainbike, kaum benutzt",
+    "descriptionPlaceholder": "Zustand, Größe oder andere wichtige Infos für Käufer hinzufügen.",
+    "priceLabel": "Preis (optional)",
+    "pricePeriodLabel": "Pro",
+    "priceOneTime": "Einmalig",
+    "pricePerHour": "Pro Stunde",
+    "pricePerDay": "Pro Tag",
+    "pricePerMonth": "Pro Monat",
+    "priceQuote": "Angebot anfragen",
+    "neighbourhoodLabel": "Stadtteil (optional)",
+    "publishButton": "Inserat veröffentlichen",
+    "publishing": "Wird veröffentlicht...",
+    "missingTitleError": "Bitte zuerst einen Titel eingeben.",
+    "genericError": "Inserat konnte nicht veröffentlicht werden. Bitte erneut versuchen.",
+    "myListingsTitle": "Meine Inserate",
+    "signInHint": "Damit Käufer und Mieter wissen, an wen sie sich wenden können."
+  },
   "booking": {
     "bookingSheetTitle": "{name} buchen",
     "bookingSheetHint": "Wähle einen Tag und eine Uhrzeit, die dir passt.",

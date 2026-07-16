@@ -1062,6 +1062,26 @@
     "instantMatchesNone": "No {category} nearby yet — post your request and we'll notify you.",
     "instantMatchesSeeAll": "See all matches"
   },
+  "createListing": {
+    "createListingTitle": "List something to sell or rent",
+    "createListingHint": "This publishes a real listing to Marketplace right away.",
+    "titlePlaceholder": "e.g. Trek mountain bike, barely used",
+    "descriptionPlaceholder": "Add condition, size, or anything a buyer should know.",
+    "priceLabel": "Price (optional)",
+    "pricePeriodLabel": "Per",
+    "priceOneTime": "One-time",
+    "pricePerHour": "Per hour",
+    "pricePerDay": "Per day",
+    "pricePerMonth": "Per month",
+    "priceQuote": "Ask for quote",
+    "neighbourhoodLabel": "Neighbourhood (optional)",
+    "publishButton": "Publish listing",
+    "publishing": "Publishing...",
+    "missingTitleError": "Add a title first.",
+    "genericError": "Could not publish your listing. Please try again.",
+    "myListingsTitle": "My Listings",
+    "signInHint": "So buyers and renters know who to contact."
+  },
   "booking": {
     "bookingSheetTitle": "Book {name}",
     "bookingSheetHint": "Pick a day and time that works for you.",

@@ -166,6 +166,48 @@ export async function ensureUserProfiles() {
   return bootstrapAuthenticatedProfile({ supabase, user });
 }
 
+/** Creates a real row in the listings table — published immediately, since
+ * this is a direct "Publish" action, not a draft-then-publish flow. RLS
+ * ("Owners create listings") already enforces owner_user_id = auth.uid(),
+ * so there's nothing to check client-side beyond having a signed-in user. */
+export async function createListing({ title, description, category, priceAmount, priceCurrency, pricePeriod, neighbourhood }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("listings")
+    .insert({
+      owner_user_id: user.id,
+      title,
+      description: description || null,
+      category,
+      status: "published",
+      price_amount: priceAmount || null,
+      price_currency: priceCurrency || "EUR",
+      price_period: pricePeriod || null,
+      location_label: neighbourhood || null,
+      neighbourhood: neighbourhood || null,
+      published_at: now
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchMyListings() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase.from("listings").select("*").eq("owner_user_id", user.id).order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 export async function completeUserProfile({ displayName, profession, avatarUrl }) {
   const supabase = await getClient();
   const user = await getCurrentUser();

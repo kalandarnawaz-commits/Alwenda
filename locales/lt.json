@@ -1062,6 +1062,26 @@
     "instantMatchesNone": "Kol kas nėra {category} netoliese — paskelbkite užklausą ir mes jus informuosime.",
     "instantMatchesSeeAll": "Žiūrėti visus atitikmenis"
   },
+  "createListing": {
+    "createListingTitle": "Sukurti skelbimą apie pardavimą ar nuomą",
+    "createListingHint": "Tai iškart paskelbs tikrą skelbimą Prekyvietėje.",
+    "titlePlaceholder": "pvz., Trek kalnų dviratis, beveik nenaudotas",
+    "descriptionPlaceholder": "Pridėkite būklę, dydį ar kitą svarbią informaciją pirkėjui.",
+    "priceLabel": "Kaina (neprivaloma)",
+    "pricePeriodLabel": "Už",
+    "priceOneTime": "Vienkartinė",
+    "pricePerHour": "Už valandą",
+    "pricePerDay": "Už dieną",
+    "pricePerMonth": "Už mėnesį",
+    "priceQuote": "Prašyti pasiūlymo",
+    "neighbourhoodLabel": "Rajonas (neprivaloma)",
+    "publishButton": "Skelbti",
+    "publishing": "Skelbiama...",
+    "missingTitleError": "Pirmiausia įveskite pavadinimą.",
+    "genericError": "Nepavyko paskelbti skelbimo. Bandykite dar kartą.",
+    "myListingsTitle": "Mano skelbimai",
+    "signInHint": "Kad pirkėjai ir nuomininkai žinotų, į ką kreiptis."
+  },
   "booking": {
     "bookingSheetTitle": "Rezervuoti: {name}",
     "bookingSheetHint": "Pasirinkite jums tinkamą dieną ir laiką.",

@@ -5,6 +5,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const MAX_MESSAGE_LENGTH = 2000;
 const HELP_REQUEST_URGENCIES = ["today", "thisWeek", "flexible"];
+const LISTING_CATEGORIES = ["buy_sell", "rentals", "jobs", "local_services", "vehicles", "property"];
+const LISTING_PRICE_PERIODS = ["one_time", "hour", "day", "month", "quote"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +44,10 @@ online for..."). Everything the user might need has an equivalent inside Alwenda
   create_hire_request after the user clearly confirms (yes/go ahead/do it) in their
   next message — never call it speculatively, before confirmation, or more than once
   for the same request.
-- Wants to buy, sell, or rent something -> point them to Marketplace.
+- Wants to buy, sell, or rent something -> you can actually post a real Marketplace
+  listing for them with the create_marketplace_listing tool, using the exact same
+  gather-summarize-confirm pattern as create_hire_request above. Never call it before
+  the user has explicitly confirmed the summary.
 - Wants to ask neighbours a question, share a recommendation, offer something for
   free, or post a lost & found alert -> point them to Community.
 - Wants to earn money with small paid tasks, or offer their own time/skills -> point
@@ -81,6 +86,29 @@ const tools = [
         area: { type: "string", description: "Neighbourhood or area if the user mentioned one, otherwise omit." }
       },
       required: ["category", "description", "urgency"],
+      additionalProperties: false
+    }
+  },
+  {
+    type: "function",
+    name: "create_marketplace_listing",
+    description:
+      "Creates a real Marketplace listing in Alwenda so buyers/renters can find and contact the seller in-app. Only call this AFTER the user has explicitly confirmed the summary you gave them in plain text — never call it speculatively or before they say yes.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "A short, clear listing title, e.g. 'Trek mountain bike, barely used'." },
+        description: { type: "string", description: "A fuller description written from the conversation — condition, size, reason for selling, etc." },
+        category: {
+          type: "string",
+          enum: LISTING_CATEGORIES,
+          description: "buy_sell (general items), rentals, jobs, local_services, vehicles, or property."
+        },
+        priceAmount: { type: "number", description: "The asking price as a plain number, e.g. 150. Omit if the user wants to ask for quotes instead." },
+        pricePeriod: { type: "string", enum: LISTING_PRICE_PERIODS, description: "one_time for a sale, hour/day/month for a rental rate, quote if no fixed price." },
+        area: { type: "string", description: "Neighbourhood or area if the user mentioned one, otherwise omit." }
+      },
+      required: ["title", "description", "category"],
       additionalProperties: false
     }
   }
@@ -221,6 +249,7 @@ Deno.serve(async (req) => {
       | undefined;
 
     let createdHelpRequest: Record<string, unknown> | null = null;
+    let createdListing: Record<string, unknown> | null = null;
 
     if (functionCall?.name === "create_hire_request") {
       let args: Record<string, unknown> = {};
@@ -268,6 +297,57 @@ Deno.serve(async (req) => {
         { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
       ];
       payload = await callResponses(followUpInput);
+    } else if (functionCall?.name === "create_marketplace_listing") {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(functionCall.arguments || "{}");
+      } catch {
+        args = {};
+      }
+
+      const title = typeof args.title === "string" ? args.title.trim().slice(0, 120) : "";
+      const description = typeof args.description === "string" ? args.description.trim().slice(0, 1000) : "";
+      const category = typeof args.category === "string" && LISTING_CATEGORIES.includes(args.category) ? args.category : "buy_sell";
+      const priceAmount = typeof args.priceAmount === "number" && Number.isFinite(args.priceAmount) && args.priceAmount >= 0 ? args.priceAmount : null;
+      const pricePeriod = typeof args.pricePeriod === "string" && LISTING_PRICE_PERIODS.includes(args.pricePeriod) ? args.pricePeriod : priceAmount ? "one_time" : null;
+      const area = typeof args.area === "string" && args.area.trim() ? args.area.trim().slice(0, 120) : null;
+
+      let toolOutput: string;
+      if (title && description) {
+        const { data: inserted, error: insertError } = await supabase
+          .from("listings")
+          .insert({
+            owner_user_id: authData.user.id,
+            title,
+            description,
+            category,
+            status: "published",
+            price_amount: priceAmount,
+            price_period: pricePeriod,
+            location_label: area,
+            neighbourhood: area,
+            published_at: new Date().toISOString()
+          })
+          .select("id, title, description, category, price_amount, price_currency, price_period, neighbourhood, location_label")
+          .single();
+
+        if (insertError || !inserted) {
+          console.error("[alwen-chat] Failed to create listing", insertError);
+          toolOutput = JSON.stringify({ status: "error", message: "Could not create the listing." });
+        } else {
+          createdListing = inserted;
+          toolOutput = JSON.stringify({ status: "created", listingId: inserted.id });
+        }
+      } else {
+        toolOutput = JSON.stringify({ status: "error", message: "Missing title or description." });
+      }
+
+      const followUpInput = [
+        ...input,
+        ...(payload.output || []),
+        { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
+      ];
+      payload = await callResponses(followUpInput);
     }
 
     const answer = extractAnswerText(payload);
@@ -275,7 +355,12 @@ Deno.serve(async (req) => {
 
     await supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "assistant", content: answer });
 
-    return jsonResponse({ answer, conversationId, ...(createdHelpRequest ? { createdHelpRequest } : {}) });
+    return jsonResponse({
+      answer,
+      conversationId,
+      ...(createdHelpRequest ? { createdHelpRequest } : {}),
+      ...(createdListing ? { createdListing } : {})
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "OPENAI_REQUEST_FAILED") {
       return safeError("Alwen could not answer right now. Please try again.", 502);

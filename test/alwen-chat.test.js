@@ -74,3 +74,17 @@ test("help_requests migration exists with RLS scoped to the requester", async ()
   assert.match(source, /enable row level security/);
   assert.match(source, /auth\.uid\(\) = requester_user_id/);
 });
+
+test("Alwen Edge Function can also create a marketplace listing after confirmation", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /create_marketplace_listing/);
+  assert.match(source, /from\("listings"\)/);
+  assert.match(source, /owner_user_id: authData\.user\.id/);
+  assert.match(source, /status: "published"/);
+});
+
+test("Alwen chat client passes through createdHelpRequest and createdListing", async () => {
+  const source = await readRepoFile("src/services/alwenChatClient.js");
+  assert.match(source, /createdHelpRequest: payload\.createdHelpRequest \|\| null/);
+  assert.match(source, /createdListing: payload\.createdListing \|\| null/);
+});

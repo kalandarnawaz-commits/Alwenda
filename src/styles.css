@@ -8636,6 +8636,12 @@ body {
   gap: 6px;
 }
 
+.create-listing-price-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 .auth-field label {
   color: var(--muted);
   font-size: 0.8rem;
