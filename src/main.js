@@ -122,6 +122,7 @@ const state = {
   query: "",
   discoverOpen: false,
   marketplaceCategoryChosen: false,
+  exploreCategoryChosen: false,
   activeSheet: null,
   headerSolid: false,
   alwenOpen: false,
@@ -1385,6 +1386,7 @@ function submitClaim(formData) {
 
 const iconMap = {
   home: "⌂",
+  explore: "🧭",
   search: "⌕",
   city: "◫",
   building: "▥",
@@ -2177,7 +2179,7 @@ function renderShell() {
     ["home", "nav.home", "app"],
     ["marketplace", "nav.marketplace", "shop"],
     ["community", "nav.community", "message"],
-    ["profile", "nav.profile", "profile"]
+    ["explore", "nav.explore", "explore"]
   ];
   const isHome = state.activeView === "home";
   const headerTheme = isHome && !state.headerSolid ? "theme-dark-header header-dark header-transparent" : "theme-light-header header-light header-solid";
@@ -3946,7 +3948,38 @@ function renderExploreSubFilterRow() {
   return "";
 }
 
+/** Explore's own landing screen is the category picker, not the imported
+ * directory — every arrival here (bottom-nav tab, any other "go to
+ * Explore" link) resets state.exploreCategoryChosen to false (see the
+ * [data-view] handler in bindEvents), so this branch is what actually
+ * shows first. Picking any tile — including "All" — sets it back to true
+ * (see the [data-explore-category] handler) and re-renders into the full
+ * directory page underneath. Same pattern as renderMarketplacePicker(). */
+function renderExplorePicker() {
+  return `
+    <section class="section-shell explore-picker-shell">
+      <section class="city-hero page-hero explore-picker-hero" aria-labelledby="explore-picker-title">
+        <div class="city-hero-copy">
+          <p class="eyebrow">${t("nav.businesses")} · ${currentAreaLabel()}</p>
+          <h1 id="explore-picker-title">${t("explore.exploreTitle")}</h1>
+          <p>${t("explore.exploreHeroSubtitle")}</p>
+        </div>
+      </section>
+      ${renderCategoryTileGrid(
+        ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
+          label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
+          iconGlyph: cat === "All" ? "🧭" : EXPLORE_CATEGORY_EMOJI[cat] || "📍",
+          isActive: state.exploreCategory === cat,
+          attrs: `data-explore-category="${cat}"`
+        }))
+      )}
+    </section>
+  `;
+}
+
 function renderExplore() {
+  if (!state.exploreCategoryChosen) return renderExplorePicker();
+
   const imported = filteredImportedBusinesses();
   const EXPLORE_PREVIEW_LIMIT = 30;
   const shown = imported.slice(0, EXPLORE_PREVIEW_LIMIT);
@@ -7047,6 +7080,7 @@ function bindEvents() {
          tab, any other "go to Marketplace" link) should land there fresh,
          not stay wherever a previous category selection left it. */
       if (button.dataset.view === "marketplace") state.marketplaceCategoryChosen = false;
+      if (button.dataset.view === "explore") state.exploreCategoryChosen = false;
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.alwenOpen = false;
@@ -7338,6 +7372,7 @@ function bindEvents() {
       state.exploreCategory = button.dataset.exploreCategory;
       state.exploreCuisine = "All";
       state.exploreStars = "All";
+      state.exploreCategoryChosen = true;
       render();
     });
   });

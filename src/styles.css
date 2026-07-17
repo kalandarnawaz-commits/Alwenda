@@ -1420,6 +1420,43 @@ body.has-open-sheet {
   font-size: 0.68rem;
 }
 
+/* Explore's landing picker mirrors Marketplace's — same compact hero strip
+   and tile density. Explore has 15 tiles (vs Marketplace's 9), so unlike
+   Marketplace this one isn't guaranteed to fit one screen without scroll,
+   but the visual treatment stays consistent. */
+.explore-picker-hero.city-hero.page-hero {
+  min-height: clamp(120px, 20vw, 170px);
+  padding: clamp(14px, 3.5vw, 24px);
+}
+
+.explore-picker-hero.city-hero.page-hero h1 {
+  font-size: clamp(1.5rem, 4.5vw, 2.2rem);
+}
+
+.explore-picker-hero .city-hero-copy {
+  gap: 3px;
+}
+
+.explore-picker-shell .category-tile-grid {
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.explore-picker-shell .category-tile {
+  padding: 12px 4px 10px;
+  gap: 6px;
+}
+
+.explore-picker-shell .category-tile-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 1.4rem;
+}
+
+.explore-picker-shell .category-tile-label {
+  font-size: 0.68rem;
+}
+
 /* Every page-hero used to share the exact same background photo
    (assets/vilnius-hero.png) — Home keeps that one, but each of these
    gets its own distinct photo instead so the screens read apart from
