@@ -1555,112 +1555,208 @@ export const backendTodoPlaceholders = [
   "TODO: Attach secure payments, booking systems, and messaging transport after authentication."
 ];
 
+/**
+ * type: which source/category a notification belongs to — drives icon,
+ * filter chip, and grouping. priority: "urgent" | "high" | "normal" |
+ * "success" — drives the accent colour and whether it surfaces in the
+ * "Needs action" summary. timeGroup: "now" | "today" | "yesterday" |
+ * "week" | "earlier" — drives section grouping (mock data has no real
+ * timestamps, so the bucket is authored directly rather than computed).
+ * primaryActionView routes through the same [data-view] handler every
+ * other button in the app already uses; primaryActionSheet opens a
+ * sheet instead for actions that don't have their own screen.
+ */
 export const notifications = [
   {
     id: 801,
-    categoryKey: "mock.notif.notif1Category",
+    type: "alwen",
+    priority: "urgent",
     titleKey: "mock.notif.notif1Title",
     summaryKey: "mock.notif.notif1Summary",
-    priorityKey: "mock.notif.notif1Priority",
-    unread: true,
     timeKey: "mock.notif.notif1Time",
-    actionKey: "mock.notif.notif1Action"
+    timeGroup: "now",
+    unread: true,
+    completed: false,
+    primaryActionKey: "mock.notif.notif1Action",
+    primaryActionView: "alwen"
   },
   {
     id: 802,
-    categoryKey: "mock.notif.notif2Category",
+    type: "marketplace",
+    priority: "high",
     titleKey: "mock.notif.notif2Title",
     summaryKey: "mock.notif.notif2Summary",
-    priorityKey: "mock.notif.notif2Priority",
-    unread: true,
     timeKey: "mock.notif.notif2Time",
-    actionKey: "mock.notif.notif2Action"
+    timeGroup: "now",
+    unread: true,
+    completed: false,
+    primaryActionKey: "mock.notif.notif2Action",
+    primaryActionView: "marketplace"
   },
   {
     id: 803,
-    categoryKey: "mock.notif.notif3Category",
+    type: "booking",
+    priority: "urgent",
     titleKey: "mock.notif.notif3Title",
     summaryKey: "mock.notif.notif3Summary",
-    priorityKey: "mock.notif.notif3Priority",
-    unread: true,
     timeKey: "mock.notif.notif3Time",
-    actionKey: "mock.notif.notif3Action"
+    timeGroup: "today",
+    unread: true,
+    completed: false,
+    primaryActionKey: "mock.notif.notif3Action",
+    primaryActionView: "reservations"
+  },
+  {
+    id: 806,
+    type: "business",
+    priority: "high",
+    titleKey: "mock.notif.notif6Title",
+    summaryKey: "mock.notif.notif6Summary",
+    timeKey: "mock.notif.notif6Time",
+    timeGroup: "today",
+    unread: true,
+    completed: false,
+    primaryActionKey: "mock.notif.notif6Action",
+    primaryActionView: "businessDashboard"
   },
   {
     id: 804,
-    categoryKey: "mock.notif.notif4Category",
+    type: "community",
+    priority: "normal",
     titleKey: "mock.notif.notif4Title",
     summaryKey: "mock.notif.notif4Summary",
-    priorityKey: "mock.notif.notif4Priority",
-    unread: false,
     timeKey: "mock.notif.notif4Time",
-    actionKey: "mock.notif.notif4Action"
+    timeGroup: "yesterday",
+    unread: false,
+    completed: false,
+    primaryActionKey: "mock.notif.notif4Action",
+    primaryActionView: "community"
+  },
+  {
+    id: 807,
+    type: "payment",
+    priority: "success",
+    titleKey: "mock.notif.notif7Title",
+    summaryKey: "mock.notif.notif7Summary",
+    timeKey: "mock.notif.notif7Time",
+    timeGroup: "yesterday",
+    unread: false,
+    completed: true,
+    primaryActionKey: "mock.notif.notif7Action",
+    primaryActionView: "marketplace"
+  },
+  {
+    id: 808,
+    type: "tyt",
+    priority: "normal",
+    titleKey: "mock.notif.notif8Title",
+    summaryKey: "mock.notif.notif8Summary",
+    timeKey: "mock.notif.notif8Time",
+    timeGroup: "week",
+    unread: false,
+    completed: false,
+    primaryActionKey: "mock.notif.notif8Action",
+    primaryActionSheet: "tyt"
+  },
+  {
+    id: 809,
+    type: "profile",
+    priority: "normal",
+    titleKey: "mock.notif.notif9Title",
+    summaryKey: "mock.notif.notif9Summary",
+    timeKey: "mock.notif.notif9Time",
+    timeGroup: "week",
+    unread: false,
+    completed: false,
+    primaryActionKey: "mock.notif.notif9Action",
+    primaryActionView: "publicProfile"
   },
   {
     id: 805,
-    categoryKey: "mock.notif.notif5Category",
+    type: "system",
+    priority: "normal",
     titleKey: "mock.notif.notif5Title",
     summaryKey: "mock.notif.notif5Summary",
-    priorityKey: "mock.notif.notif5Priority",
-    unread: false,
     timeKey: "mock.notif.notif5Time",
-    actionKey: "mock.notif.notif5Action"
+    timeGroup: "earlier",
+    unread: false,
+    completed: false,
+    primaryActionKey: "mock.notif.notif5Action",
+    primaryActionView: "settings"
+  },
+  {
+    id: 810,
+    type: "system",
+    priority: "success",
+    titleKey: "mock.notif.notif10Title",
+    summaryKey: "mock.notif.notif10Summary",
+    timeKey: "mock.notif.notif10Time",
+    timeGroup: "earlier",
+    unread: false,
+    completed: true,
+    primaryActionKey: "mock.notif.notif10Action",
+    primaryActionView: "profile"
   }
 ];
 
-export const notificationGroups = [
-  "mock.notifGroup.groupActivity",
-  "mock.notifGroup.groupMarketplace",
-  "mock.notifGroup.groupJobs",
-  "mock.notifGroup.groupCommunity",
-  "mock.notifGroup.groupBusinesses",
-  "mock.notifGroup.groupBookings",
-  "mock.notifGroup.groupMessages",
-  "mock.notifGroup.groupAlwen",
-  "mock.notifGroup.groupPayments",
-  "mock.notifGroup.groupSystem"
-];
+export const NOTIFICATION_FILTERS = ["needsAction", "alwen", "booking", "marketplace", "business", "community", "tyt", "payment", "profile", "system"];
 
 export const messageThreads = [
   {
     id: 901,
+    type: "professional",
     participant: "Mantas Home Fix",
-    type: "Professional",
+    verified: true,
     preview: "I can assemble the IKEA wardrobe tomorrow at 18:30 for €75.",
-    unread: true,
-    readReceipt: "Delivered",
-    typing: true,
-    attachments: ["voice", "image"]
+    unread: 2,
+    timeKey: "mock.thread.thread1Time",
+    context: { kind: "quote", titleKey: "mock.thread.thread1ContextTitle", metaKey: "mock.thread.thread1ContextMeta" },
+    messages: [
+      { from: "them", textKey: "mock.thread.thread1Msg1", timeKey: "mock.thread.thread1Msg1Time" },
+      { from: "me", textKey: "mock.thread.thread1Msg2", timeKey: "mock.thread.thread1Msg2Time" },
+      { from: "them", textKey: "mock.thread.thread1Msg3", timeKey: "mock.thread.thread1Msg3Time" }
+    ]
   },
   {
     id: 902,
+    type: "business",
     participant: "Paupys Bistro",
-    type: "Business",
+    verified: true,
     preview: "We can hold a table for six until 17:00.",
-    unread: true,
-    readReceipt: "Read",
-    typing: false,
-    attachments: ["file"]
+    unread: 1,
+    timeKey: "mock.thread.thread2Time",
+    context: { kind: "booking", titleKey: "mock.thread.thread2ContextTitle", metaKey: "mock.thread.thread2ContextMeta" },
+    messages: [
+      { from: "them", textKey: "mock.thread.thread2Msg1", timeKey: "mock.thread.thread2Msg1Time" },
+      { from: "them", textKey: "mock.thread.thread2Msg2", timeKey: "mock.thread.thread2Msg2Time" }
+    ]
   },
   {
     id: 903,
+    type: "marketplace",
     participant: "Nearby buyer",
-    type: "Marketplace",
+    verified: false,
     preview: "Is the iPhone still available for pickup today?",
-    unread: false,
-    readReceipt: "Read",
-    typing: false,
-    attachments: ["image"]
+    unread: 0,
+    timeKey: "mock.thread.thread3Time",
+    context: { kind: "listing", titleKey: "mock.thread.thread3ContextTitle", metaKey: "mock.thread.thread3ContextMeta" },
+    messages: [
+      { from: "them", textKey: "mock.thread.thread3Msg1", timeKey: "mock.thread.thread3Msg1Time" },
+      { from: "me", textKey: "mock.thread.thread3Msg2", timeKey: "mock.thread.thread3Msg2Time" }
+    ]
   },
   {
     id: 904,
+    type: "alwen",
     participant: "Alwen",
-    type: "AI conversation",
+    verified: true,
     preview: "I grouped your city setup tasks and can complete the next three after approval.",
-    unread: false,
-    readReceipt: "Synced",
-    typing: false,
-    attachments: ["document", "voice"]
+    unread: 0,
+    timeKey: "mock.thread.thread4Time",
+    context: { kind: "plan", titleKey: "mock.thread.thread4ContextTitle", metaKey: "mock.thread.thread4ContextMeta" },
+    messages: [
+      { from: "them", textKey: "mock.thread.thread4Msg1", timeKey: "mock.thread.thread4Msg1Time" }
+    ]
   }
 ];
 

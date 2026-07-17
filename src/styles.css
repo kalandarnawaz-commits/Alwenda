@@ -10328,3 +10328,762 @@ strong:has(> .verified-check) {
 :root[data-theme="dark"] .pro-stat-availability {
   color: #b3f5d1;
 }
+
+/* ==========================================================================
+   Inbox & Notification Centre — premium redesign
+   ========================================================================== */
+
+.notification-hub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.notification-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+
+.notification-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.notification-header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+.notification-header-actions {
+  display: flex;
+  gap: var(--sp-8);
+  flex: 0 0 auto;
+}
+
+.notification-header-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.notification-header-icon:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
+}
+
+/* Segmented control — Notifications | Inbox. Both tabs are just normal
+   [data-view] navigation (see renderNotificationsHub's comment), so no
+   bespoke JS state is needed to keep this in sync with the URL. */
+.inbox-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+}
+
+.inbox-tabs button {
+  min-height: 40px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.inbox-tabs button.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+.notification-hub-layout {
+  display: grid;
+  gap: var(--sp-16);
+}
+
+.notification-hub-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+/* Right rail is desktop-only — see the min-width:900px block below. */
+.notification-hub-rail {
+  display: none;
+}
+
+.needs-action-summary h2,
+.notification-time-group h2 {
+  margin: 0 0 var(--sp-8);
+  font-size: 1rem;
+}
+
+.needs-action-strip {
+  display: flex;
+  gap: var(--sp-8);
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.needs-action-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex: 0 0 auto;
+  max-width: 240px;
+  min-height: 44px;
+  padding: 0 var(--sp-12);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--priority-urgent, #e5484d);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.needs-action-card span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.needs-action-card.priority-high {
+  border-left-color: #d99a1f;
+}
+
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.notification-filter-row button.is-selected .chip-count {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+:root[data-theme="dark"] .chip-count {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.notification-card-list,
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+/* Priority accent — a thin left border + tinted icon badge, never a
+   full-card fill (kept subtle per the "premium, not loud" brief). */
+.notification-card {
+  display: flex;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16) var(--sp-12) var(--sp-12);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: background 200ms ease;
+}
+
+.notification-card.priority-urgent {
+  border-left-color: #e5484d;
+}
+
+.notification-card.priority-high {
+  border-left-color: #d99a1f;
+}
+
+.notification-card.priority-success {
+  border-left-color: var(--emerald-text);
+}
+
+.notification-card.is-unread {
+  background: var(--surface-soft);
+}
+
+.notification-card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  font-size: 1.15rem;
+}
+
+.notification-card.is-unread .notification-card-icon {
+  background: rgba(52, 211, 153, 0.16);
+}
+
+.notification-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notification-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notification-card-source {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.notification-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--emerald-text);
+  flex: 0 0 auto;
+}
+
+.notification-urgent-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(229, 72, 77, 0.14);
+  color: #e5484d;
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.notification-card-time {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.notification-card-body h3 {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.notification-card.is-unread .notification-card-body h3 {
+  font-weight: 900;
+}
+
+.notification-card-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.notification-card-actions {
+  display: flex;
+  gap: var(--sp-8);
+  margin-top: 4px;
+}
+
+.notification-primary-action {
+  min-height: 44px;
+  padding: 0 var(--sp-16);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+:root[data-theme="dark"] .notification-primary-action {
+  background: var(--emerald-600);
+}
+
+.notification-secondary-action {
+  min-height: 44px;
+  padding: 0 var(--sp-12);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.notification-secondary-action:hover {
+  color: var(--ink);
+}
+
+.notification-completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--emerald-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.notification-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: var(--sp-16) var(--sp-16) 40px;
+  text-align: center;
+}
+
+.notification-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  font-size: 1.4rem;
+  color: var(--muted);
+}
+
+.notification-empty-state h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.notification-empty-state p {
+  margin: 0;
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+/* Swipe rows — shared by notification cards and conversation rows. The
+   two glyphs sit behind the foreground surface; bindSwipeRows() in
+   main.js drags .swipe-surface via translateX and fires the matching
+   action past a threshold. Desktop pointers never trigger touch events
+   so these stay inert (and hidden) outside of touch/hover contexts. */
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.swipe-action {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  font-size: 1.1rem;
+}
+
+.swipe-action-left {
+  left: 0;
+  background: rgba(52, 211, 153, 0.16);
+}
+
+.swipe-action-right {
+  right: 0;
+  background: rgba(229, 72, 77, 0.14);
+}
+
+.swipe-surface {
+  position: relative;
+  background: var(--bg);
+  touch-action: pan-y;
+}
+
+/* Desktop hover reveals the secondary action a little more strongly —
+   the mobile swipe affordance's desktop equivalent per the brief. */
+@media (hover: hover) {
+  .notification-secondary-action,
+  .conversation-row .conversation-verified {
+    opacity: 0.85;
+    transition: opacity 180ms ease;
+  }
+
+  .notification-card:hover .notification-secondary-action {
+    opacity: 1;
+  }
+}
+
+/* Inbox conversation rows */
+.conversation-row {
+  display: flex;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversation-row.is-unread {
+  background: var(--surface-soft);
+}
+
+.conversation-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 900;
+  overflow: hidden;
+}
+
+.conversation-avatar.is-alwen {
+  background: var(--emerald-600);
+}
+
+.conversation-avatar.is-alwen img {
+  width: 60%;
+  height: 60%;
+}
+
+.conversation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.conversation-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.conversation-top h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-row.is-unread .conversation-top h3 {
+  font-weight: 900;
+}
+
+.conversation-verified {
+  color: var(--emerald-text);
+  font-size: 0.8rem;
+}
+
+.conversation-time {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.conversation-preview {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.conversation-row.is-unread .conversation-preview {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.conversation-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.conversation-type-tag {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.conversation-unread-count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--emerald-text);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+/* Conversation detail */
+.conversation-detail-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.conversation-detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}
+
+.conversation-back {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transform: scaleX(-1);
+}
+
+.conversation-detail-identity h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conversation-context-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+}
+
+.conversation-context-kind {
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--emerald-text);
+}
+
+.conversation-context-card h3 {
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.conversation-context-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.conversation-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+.conversation-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 78%;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--radius-md);
+}
+
+.conversation-message p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.conversation-message span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.conversation-message.is-them {
+  align-self: flex-start;
+  background: var(--surface-soft);
+  border-bottom-left-radius: 4px;
+}
+
+.conversation-message.is-me {
+  align-self: flex-end;
+  background: var(--emerald-600);
+  border-bottom-right-radius: 4px;
+}
+
+.conversation-message.is-me p,
+.conversation-message.is-me span {
+  color: var(--ink-inverse);
+}
+
+.conversation-composer {
+  display: flex;
+  gap: var(--sp-8);
+  position: sticky;
+  bottom: calc(160px + env(safe-area-inset-bottom));
+}
+
+.conversation-composer input {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.conversation-composer button {
+  min-height: 44px;
+  padding: 0 var(--sp-16);
+  border-radius: 999px;
+  background: var(--emerald-600);
+  color: var(--ink-inverse);
+  font-weight: 800;
+}
+
+/* Right rail — Needs action summary, Alwen shortcut, settings entry.
+   Desktop only: below this the rail folds back into the main column's
+   own Needs action strip so nothing is lost on mobile. */
+@media (min-width: 900px) {
+  .notification-hub-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+
+  .notification-hub-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-12);
+    position: sticky;
+    top: 16px;
+  }
+
+  /* The inline needs-action strip stays for mobile scanability but is
+     redundant next to the rail's own card at this width. */
+  .notification-hub-main .needs-action-summary {
+    display: none;
+  }
+}
+
+.notification-rail-card {
+  padding: var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.notification-rail-card h3 {
+  margin: 0 0 var(--sp-8);
+  font-size: 0.9rem;
+}
+
+.notification-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-rail-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.notification-rail-list li:last-child {
+  border-bottom: none;
+}
+
+.notification-rail-empty,
+.notification-rail-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.notification-rail-button {
+  margin-top: var(--sp-8);
+  min-height: 40px;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--emerald-600);
+  color: var(--ink-inverse);
+  font-weight: 800;
+}
+
+.notification-rail-settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 750;
+}
+
+/* Desktop: keep the hub from stretching edge-to-edge — a controlled
+   centred max-width instead of full-bleed cards. */
+@media (min-width: 900px) {
+  .notification-hub {
+    max-width: 1080px;
+    margin-inline: auto;
+  }
+}

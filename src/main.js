@@ -36,7 +36,7 @@ import {
   marketplaceCapabilities,
   messageThreads,
   neighbourhoods,
-  notificationGroups,
+  NOTIFICATION_FILTERS,
   notifications,
   offers,
   professionalCategories,
@@ -138,6 +138,9 @@ const state = {
   selectedBusinessId: null,
   selectedListingId: null,
   selectedPlaceId: null,
+  activeConversationId: null,
+  composerDraft: "",
+  notificationFilter: "all",
   savedPlaceIds: [],
   auth: {
     status: "checking", // "checking" | "signedOut" | "signedIn"
@@ -156,6 +159,12 @@ const state = {
     notifyMessages: true,
     notifyOffers: true,
     notifyCommunity: true,
+    notifyBookings: true,
+    notifyBusiness: true,
+    notifyTyt: true,
+    notifyPayments: true,
+    notifyAlwen: true,
+    notifySystem: true,
     theme: "system"
   },
   settingsConfirmDelete: false,
@@ -1436,6 +1445,7 @@ const iconMap = {
   arrow: "→",
   spark: "✦",
   exit: "⏻",
+  settings: "⚙",
   alwen: ""
 };
 
@@ -2471,6 +2481,30 @@ function renderSettings() {
           <span>${t("settings.settingsNotifyCommunity")}</span>
           <input type="checkbox" id="settings-notify-community" ${state.settings.notifyCommunity ? "checked" : ""} />
         </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.booking")}</span>
+          <input type="checkbox" id="settings-notify-bookings" ${state.settings.notifyBookings ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.business")}</span>
+          <input type="checkbox" id="settings-notify-business" ${state.settings.notifyBusiness ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.tyt")}</span>
+          <input type="checkbox" id="settings-notify-tyt" ${state.settings.notifyTyt ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.payment")}</span>
+          <input type="checkbox" id="settings-notify-payments" ${state.settings.notifyPayments ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.alwen")}</span>
+          <input type="checkbox" id="settings-notify-alwen" ${state.settings.notifyAlwen ? "checked" : ""} />
+        </label>
+        <label class="settings-toggle-row">
+          <span>${t("notification.category.system")}</span>
+          <input type="checkbox" id="settings-notify-system" ${state.settings.notifySystem ? "checked" : ""} />
+        </label>
       </div>
 
       <div class="settings-section">
@@ -2675,7 +2709,7 @@ function renderView() {
      (language, theme, install-app all work for guests) per an explicit,
      confirmed product decision. Only genuinely personal data screens are
      gated here. */
-  const protectedViews = new Set(["messages", "notifications", "savedPlaces", "businessDashboard"]);
+  const protectedViews = new Set(["messages", "notifications", "conversation", "savedPlaces", "businessDashboard"]);
   if (state.auth.status === "checking") return renderAuthLoading();
   if (protectedViews.has(state.activeView) && state.auth.status !== "signedIn") {
     state.auth.authView = "login";
@@ -2702,8 +2736,9 @@ function renderView() {
     reservations: renderReservations,
     translate: renderTranslation,
     profile: renderProfile,
-    notifications: renderNotifications,
-    messages: renderMessages,
+    notifications: renderNotificationsHub,
+    messages: renderNotificationsHub,
+    conversation: renderConversationDetail,
     ops: renderOps,
     auth: renderAuthFlow,
     settings: renderSettings,
@@ -5171,80 +5206,336 @@ function renderBusinessProfile() {
   `;
 }
 
-function renderNotifications() {
-  const unreadCount = notifications.filter((item) => item.unread).length;
+/* Inbox & Notification Centre — a single hub with two modes (segmented
+   control below), not two unrelated screens. Both "notifications" and
+   "messages" routes render this same shell; state.activeView (already
+   the thing [data-view] buttons set) doubles as the tab selector, so
+   switching tabs is just a normal navigation click — no extra state
+   field needed to keep it in sync with the URL/back-button. */
+
+const NOTIFICATION_TYPE_META = {
+  alwen: { emoji: "✨", labelKey: "notification.category.alwen" },
+  marketplace: { emoji: "🛍️", labelKey: "notification.category.marketplace" },
+  booking: { emoji: "📅", labelKey: "notification.category.booking" },
+  business: { emoji: "🏢", labelKey: "notification.category.business" },
+  community: { emoji: "🤝", labelKey: "notification.category.community" },
+  payment: { emoji: "💳", labelKey: "notification.category.payment" },
+  tyt: { emoji: "🔁", labelKey: "notification.category.tyt" },
+  profile: { emoji: "👤", labelKey: "notification.category.profile" },
+  system: { emoji: "⚙️", labelKey: "notification.category.system" }
+};
+
+const CONVERSATION_TYPE_META = {
+  professional: { emoji: "🛠️", labelKey: "messages.conversationTypeProfessional" },
+  business: { emoji: "🏢", labelKey: "messages.conversationTypeBusiness" },
+  marketplace: { emoji: "🛍️", labelKey: "messages.conversationTypeMarketplace" },
+  alwen: { emoji: "✨", labelKey: "messages.conversationTypeAlwen" }
+};
+
+const CONVERSATION_CONTEXT_LABEL_KEY = {
+  quote: "messages.contextQuote",
+  booking: "messages.contextBooking",
+  listing: "messages.contextListing",
+  plan: "messages.contextPlan"
+};
+
+const NOTIFICATION_PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, success: 3 };
+
+const NOTIFICATION_TIME_GROUPS = [
+  ["now", "notification.groupNow"],
+  ["today", "notification.groupToday"],
+  ["yesterday", "notification.groupYesterday"],
+  ["week", "notification.groupWeek"],
+  ["earlier", "notification.groupEarlier"]
+];
+
+function notificationsForFilter(filter) {
+  if (filter === "all") return notifications;
+  if (filter === "needsAction") return notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high"));
+  return notifications.filter((item) => item.type === filter);
+}
+
+function sortedNotifications(list) {
+  return [...list].sort((a, b) => {
+    const rankDiff = NOTIFICATION_PRIORITY_RANK[a.priority] - NOTIFICATION_PRIORITY_RANK[b.priority];
+    if (rankDiff !== 0) return rankDiff;
+    if (a.unread !== b.unread) return a.unread ? -1 : 1;
+    return 0;
+  });
+}
+
+function dismissNotification(id) {
+  const index = notifications.findIndex((item) => item.id === Number(id));
+  if (index !== -1) notifications.splice(index, 1);
+}
+
+function toggleNotificationRead(id) {
+  const item = notifications.find((entry) => entry.id === Number(id));
+  if (item) item.unread = !item.unread;
+}
+
+function markAllNotificationsRead() {
+  notifications.forEach((item) => { item.unread = false; });
+}
+
+function archiveConversation(id) {
+  const index = messageThreads.findIndex((thread) => thread.id === Number(id));
+  if (index !== -1) messageThreads.splice(index, 1);
+}
+
+function toggleConversationRead(id) {
+  const thread = messageThreads.find((entry) => entry.id === Number(id));
+  if (thread) thread.unread = thread.unread > 0 ? 0 : 1;
+}
+
+/* Swipe-to-act wrapper shared by notification cards and conversation
+   rows — two action glyphs sit behind the card, revealed by dragging
+   the foreground surface; bindSwipeRows() in bindEvents() does the
+   actual touch handling. data-swipe-type + data-swipe-id tell that one
+   shared handler which array/action to mutate. */
+function renderSwipeRow(type, id, leftGlyph, rightGlyph, innerHtml) {
   return `
-    <section class="section-shell notification-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${t("notification.notificationCentre")}</p>
-        <h1>${t("common.smartSummary")}</h1>
-      </div>
-      <div class="summary-card">
-        ${icon("spark")}
-        <div><strong>${unreadCount} ${t("common.unread")}</strong><p>${t("notification.notificationSummary")}</p></div>
-        <button>${t("common.letAlwenPrioritise")}</button>
-      </div>
-      <div class="category-cloud notification-groups">
-        ${notificationGroups.map((group) => `<button>${t(group)}</button>`).join("")}
-      </div>
-      <div class="notification-list">
-        ${notifications.map((item) => `
-          <article class="${item.unread ? "is-unread" : ""}">
-            <div>
-              <span class="badge">${t(item.categoryKey)} · ${t(item.priorityKey)}</span>
-              <h3>${t(item.titleKey)}</h3>
-              <p>${t(item.summaryKey)}</p>
-              <small>${t(item.timeKey)}</small>
+    <div class="swipe-row" data-swipe-type="${type}" data-swipe-id="${id}">
+      <span class="swipe-action swipe-action-left" aria-hidden="true">${leftGlyph}</span>
+      <span class="swipe-action swipe-action-right" aria-hidden="true">${rightGlyph}</span>
+      <div class="swipe-surface">${innerHtml}</div>
+    </div>
+  `;
+}
+
+function renderNotificationCard(item) {
+  const meta = NOTIFICATION_TYPE_META[item.type] || NOTIFICATION_TYPE_META.system;
+  const primaryAttrs = item.primaryActionSheet ? `data-sheet="${item.primaryActionSheet}"` : `data-view="${item.primaryActionView || "notifications"}"`;
+  return `
+    <article class="notification-card priority-${item.priority} ${item.unread ? "is-unread" : ""}">
+      <span class="notification-card-icon" aria-hidden="true">${meta.emoji}</span>
+      <div class="notification-card-body">
+        <div class="notification-card-top">
+          <span class="notification-card-source">${t(meta.labelKey)}</span>
+          ${item.unread ? `<span class="notification-unread-dot" aria-hidden="true"></span>` : ""}
+          ${item.priority === "urgent" && !item.completed ? `<span class="notification-urgent-badge">${t("notification.urgentLabel")}</span>` : ""}
+          <span class="notification-card-time">${t(item.timeKey)}</span>
+        </div>
+        <h3>${t(item.titleKey)}</h3>
+        <p>${t(item.summaryKey)}</p>
+        ${item.completed
+          ? `<span class="notification-completed-badge">${icon("check")}${t("notification.completedLabel")}</span>`
+          : `
+            <div class="notification-card-actions">
+              <button type="button" class="notification-primary-action" data-action="notification-primary" data-id="${item.id}" ${primaryAttrs}>${t(item.primaryActionKey)}</button>
+              <button type="button" class="notification-secondary-action" data-action="dismiss-notification" data-id="${item.id}">${t("notification.dismiss")}</button>
             </div>
-            <button>${t(item.actionKey)}</button>
-          </article>
-        `).join("")}
+          `}
+      </div>
+    </article>
+  `;
+}
+
+function renderNotificationCardSwipeable(item) {
+  return renderSwipeRow("notification", item.id, "✓", "🗑️", renderNotificationCard(item));
+}
+
+function renderNeedsActionSummary(items) {
+  return `
+    <div class="needs-action-summary">
+      <h2>${t("notification.needsAction")}</h2>
+      <div class="needs-action-strip">
+        ${items.map((item) => {
+          const meta = NOTIFICATION_TYPE_META[item.type] || NOTIFICATION_TYPE_META.system;
+          const primaryAttrs = item.primaryActionSheet ? `data-sheet="${item.primaryActionSheet}"` : `data-view="${item.primaryActionView || "notifications"}"`;
+          return `
+            <button type="button" class="needs-action-card priority-${item.priority}" data-action="notification-primary" data-id="${item.id}" ${primaryAttrs}>
+              <span aria-hidden="true">${meta.emoji}</span>
+              <span>${t(item.titleKey)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderNotificationFilterChips() {
+  const counts = {};
+  notifications.forEach((item) => { counts[item.type] = (counts[item.type] || 0) + 1; });
+  const needsActionCount = notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high")).length;
+  const chips = [
+    ["all", t("common.all"), notifications.length],
+    ["needsAction", t("notification.needsAction"), needsActionCount],
+    ...NOTIFICATION_FILTERS.filter((type) => type !== "needsAction").map((type) => [type, t(`notification.category.${type}`), counts[type] || 0])
+  ];
+  return `
+    <div class="chip-row explore-category-row notification-filter-row">
+      ${chips.map(([value, label, count]) => `
+        <button type="button" class="${state.notificationFilter === value ? "is-selected" : ""}" data-notification-filter="${value}">
+          ${label}${count ? ` <span class="chip-count">${count}</span>` : ""}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderNotificationsBody() {
+  const filtered = notificationsForFilter(state.notificationFilter);
+  const needsAction = sortedNotifications(notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high"))).slice(0, 3);
+  const groups = NOTIFICATION_TIME_GROUPS
+    .map(([key, labelKey]) => [key, labelKey, sortedNotifications(filtered.filter((item) => item.timeGroup === key))])
+    .filter(([, , items]) => items.length);
+  return `
+    ${needsAction.length ? renderNeedsActionSummary(needsAction) : ""}
+    ${renderNotificationFilterChips()}
+    ${groups.length
+      ? groups.map(([, labelKey, items]) => `
+        <div class="notification-time-group">
+          <h2>${t(labelKey)}</h2>
+          <div class="notification-card-list">${items.map(renderNotificationCardSwipeable).join("")}</div>
+        </div>
+      `).join("")
+      : `
+        <div class="notification-empty-state">
+          <span class="notification-empty-icon" aria-hidden="true">${icon("bell")}</span>
+          <h3>${state.notificationFilter === "needsAction" ? t("notification.needsActionEmpty") : t("notification.emptyTitle")}</h3>
+          <p>${t("notification.emptyHint")}</p>
+        </div>
+      `}
+  `;
+}
+
+function renderConversationRow(thread) {
+  const meta = CONVERSATION_TYPE_META[thread.type] || CONVERSATION_TYPE_META.business;
+  const initials = thread.participant.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
+  return `
+    <article class="conversation-row ${thread.unread ? "is-unread" : ""}" data-view="conversation" data-conversation-id="${thread.id}">
+      <div class="conversation-avatar ${thread.type === "alwen" ? "is-alwen" : ""}">
+        ${thread.type === "alwen" ? brandIconMarkup("app-icon") : `<span>${escapeHtml(initials)}</span>`}
+      </div>
+      <div class="conversation-body">
+        <div class="conversation-top">
+          <h3>${escapeHtml(thread.participant)}${thread.verified ? `<span class="conversation-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</h3>
+          <span class="conversation-time">${t(thread.timeKey)}</span>
+        </div>
+        <p class="conversation-preview">${escapeHtml(thread.preview)}</p>
+        <div class="conversation-meta-row">
+          <span class="conversation-type-tag">${meta.emoji} ${t(meta.labelKey)}</span>
+          ${thread.unread ? `<span class="conversation-unread-count">${thread.unread}</span>` : ""}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderConversationRowSwipeable(thread) {
+  return renderSwipeRow("conversation", thread.id, "✓", "🗑️", renderConversationRow(thread));
+}
+
+function renderInboxBody() {
+  if (!messageThreads.length) {
+    return `
+      <div class="notification-empty-state">
+        <span class="notification-empty-icon" aria-hidden="true">${icon("message")}</span>
+        <h3>${t("messages.emptyTitle")}</h3>
+        <p>${t("messages.emptyHint")}</p>
+      </div>
+    `;
+  }
+  return `<div class="conversation-list">${messageThreads.map(renderConversationRowSwipeable).join("")}</div>`;
+}
+
+function renderNotificationHeader(isInbox) {
+  const unreadNotifications = notifications.filter((item) => item.unread).length;
+  const unreadMessages = messageThreads.reduce((sum, thread) => sum + thread.unread, 0);
+  const actionCount = notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high")).length;
+  return `
+    <div class="notification-header">
+      <div>
+        <h1>${isInbox ? t("notification.tabInbox") : t("notification.tabNotifications")}</h1>
+        <p>
+          ${isInbox
+            ? t("notification.unreadCount").replace("{count}", unreadMessages)
+            : `${t("notification.unreadCount").replace("{count}", unreadNotifications)} · ${t("notification.requireActionCount").replace("{count}", actionCount)}`}
+        </p>
+      </div>
+      <div class="notification-header-actions">
+        ${!isInbox ? `<button type="button" class="notification-header-icon" data-action="mark-all-read" aria-label="${t("notification.markAllRead")}" title="${t("notification.markAllRead")}">${icon("check")}</button>` : ""}
+        <button type="button" class="notification-header-icon" data-view="settings" aria-label="${t("notification.settings")}" title="${t("notification.settings")}">${icon("settings")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderNotificationsHub() {
+  const isInbox = state.activeView === "messages";
+  return `
+    <section class="section-shell notification-hub">
+      ${renderNotificationHeader(isInbox)}
+      <div class="inbox-tabs" role="tablist">
+        <button type="button" role="tab" class="${!isInbox ? "is-active" : ""}" data-view="notifications" aria-selected="${!isInbox}">${t("notification.tabNotifications")}</button>
+        <button type="button" role="tab" class="${isInbox ? "is-active" : ""}" data-view="messages" aria-selected="${isInbox}">${t("notification.tabInbox")}</button>
+      </div>
+      <div class="notification-hub-layout">
+        <div class="notification-hub-main">
+          ${isInbox ? renderInboxBody() : renderNotificationsBody()}
+        </div>
+        <aside class="notification-hub-rail">
+          <div class="notification-rail-card">
+            <h3>${t("notification.needsAction")}</h3>
+            ${(() => {
+              const items = sortedNotifications(notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high"))).slice(0, 4);
+              if (!items.length) return `<p class="notification-rail-empty">${t("notification.needsActionEmpty")}</p>`;
+              return `<ul class="notification-rail-list">${items.map((item) => `<li>${t(item.titleKey)}</li>`).join("")}</ul>`;
+            })()}
+          </div>
+          <div class="notification-rail-card">
+            <h3>${t("alwen.alwenWorkspace")}</h3>
+            <p class="notification-rail-hint">${t("alwen.alwenWorkspaceTitle")}</p>
+            <button type="button" class="notification-rail-button" data-view="alwen">${t("common.tellAlwen")}</button>
+          </div>
+          <button type="button" class="notification-rail-settings" data-view="settings">${icon("settings")} ${t("notification.settings")}</button>
+        </aside>
       </div>
     </section>
   `;
 }
 
-function renderMessages() {
+function renderConversationDetail() {
+  const thread = messageThreads.find((entry) => entry.id === state.activeConversationId);
+  if (!thread) {
+    state.activeView = "messages";
+    return renderNotificationsHub();
+  }
+  const meta = CONVERSATION_TYPE_META[thread.type] || CONVERSATION_TYPE_META.business;
+  const initials = thread.participant.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
   return `
-    <section class="section-shell message-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${t("messages.messages")}</p>
-        <h1>${t("messages.messagesTitle")}</h1>
+    <section class="section-shell conversation-detail-shell">
+      <div class="conversation-detail-header">
+        <button type="button" class="conversation-back" data-view="messages" aria-label="${t("messages.backToInbox")}">${icon("arrow")}</button>
+        <div class="conversation-avatar ${thread.type === "alwen" ? "is-alwen" : ""}">
+          ${thread.type === "alwen" ? brandIconMarkup("app-icon") : `<span>${escapeHtml(initials)}</span>`}
+        </div>
+        <div class="conversation-detail-identity">
+          <h2>${escapeHtml(thread.participant)}${thread.verified ? `<span class="conversation-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</h2>
+          <span class="conversation-type-tag">${meta.emoji} ${t(meta.labelKey)}</span>
+        </div>
       </div>
-      <div class="summary-card">
-        ${icon("message")}
-        <div><strong>${t("messages.messageSummaryTitle")}</strong><p>${t("messages.messageSummary")}</p></div>
-        <button>${t("messages.composeWithAlwen")}</button>
-      </div>
-      <div class="message-list">
-        ${messageThreads.map((thread) => `
-          <article class="${thread.unread ? "is-unread" : ""}">
-            <div class="business-logo">${thread.participant.split(" ").map((word) => word[0]).slice(0, 2).join("")}</div>
-            <div>
-              <span>${thread.type}</span>
-              <h3>${thread.participant}</h3>
-              <p>${thread.preview}</p>
-              <div class="trust-row">
-                <span>${thread.readReceipt}</span>
-                ${thread.typing ? `<span>${t("common.typing")}</span>` : ""}
-                ${thread.attachments.map((attachment) => `<span>${attachment}</span>`).join("")}
-              </div>
-            </div>
-            <button>${t("common.reply")}</button>
-          </article>
+      ${thread.context ? `
+        <div class="conversation-context-card">
+          <span class="conversation-context-kind">${t(CONVERSATION_CONTEXT_LABEL_KEY[thread.context.kind] || "messages.contextPlan")}</span>
+          <h3>${t(thread.context.titleKey)}</h3>
+          <p>${t(thread.context.metaKey)}</p>
+        </div>
+      ` : ""}
+      <div class="conversation-history">
+        ${thread.messages.map((message) => `
+          <div class="conversation-message ${message.from === "me" ? "is-me" : "is-them"}">
+            <p>${message.textKey ? t(message.textKey) : escapeHtml(message.text)}</p>
+            <span>${message.timeKey ? t(message.timeKey) : escapeHtml(message.time || "")}</span>
+          </div>
         `).join("")}
       </div>
-      <div class="alwen-card">
-        <div class="section-title">
-          <div><h2>${t("messages.futureAiConversations")}</h2><p>${t("messages.futureAiConversationsHint")}</p></div>
-        </div>
-        <div class="alwen-input-modes">
-          <button>${icon("mic")}${t("translate.text")}</button>
-          <button>${icon("image")}${t("common.uploadImage")}</button>
-          <button>${icon("file")}${t("common.uploadDocument")}</button>
-          <button>${icon("mic")}${t("translate.voice")}</button>
-        </div>
-      </div>
+      <form class="conversation-composer" data-action="send-message" data-conversation-id="${thread.id}">
+        <input type="text" id="conversation-composer-input" name="message" placeholder="${t("messages.composerPlaceholder")}" value="${escapeHtml(state.composerDraft)}" aria-label="${t("messages.composerPlaceholder")}" autocomplete="off" />
+        <button type="submit">${t("messages.send")}</button>
+      </form>
     </section>
   `;
 }
@@ -7121,6 +7412,54 @@ function renderClaimFlow() {
   `;
 }
 
+/* Swipe-left (dismiss/archive) and swipe-right (toggle read) for
+   notification cards and conversation rows — re-bound on every render()
+   since the DOM nodes are recreated each time, same as every other
+   bindEvents() listener. A simple drag-follows-finger + release-past-
+   threshold pattern; no momentum/animation library involved. */
+function bindSwipeRows() {
+  const THRESHOLD = 72;
+  document.querySelectorAll(".swipe-row").forEach((row) => {
+    const surface = row.querySelector(".swipe-surface");
+    if (!surface) return;
+    let startX = 0;
+    let deltaX = 0;
+    let dragging = false;
+    surface.addEventListener("touchstart", (event) => {
+      startX = event.touches[0].clientX;
+      deltaX = 0;
+      dragging = true;
+      surface.style.transition = "none";
+    }, { passive: true });
+    surface.addEventListener("touchmove", (event) => {
+      if (!dragging) return;
+      deltaX = event.touches[0].clientX - startX;
+      const clamped = Math.max(-96, Math.min(96, deltaX));
+      surface.style.transform = `translateX(${clamped}px)`;
+      row.classList.toggle("is-swiping-left", clamped < -12);
+      row.classList.toggle("is-swiping-right", clamped > 12);
+    }, { passive: true });
+    surface.addEventListener("touchend", () => {
+      dragging = false;
+      surface.style.transition = "";
+      surface.style.transform = "";
+      row.classList.remove("is-swiping-left", "is-swiping-right");
+      const type = row.dataset.swipeType;
+      const id = row.dataset.swipeId;
+      if (deltaX <= -THRESHOLD) {
+        if (type === "notification") dismissNotification(id);
+        else if (type === "conversation") archiveConversation(id);
+        render();
+      } else if (deltaX >= THRESHOLD) {
+        if (type === "notification") toggleNotificationRead(id);
+        else if (type === "conversation") toggleConversationRead(id);
+        render();
+      }
+      deltaX = 0;
+    });
+  });
+}
+
 function bindEvents() {
   document.querySelector(".claim-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -7170,6 +7509,7 @@ function bindEvents() {
       if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
       if (button.dataset.listingId) state.selectedListingId = button.dataset.listingId;
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
+      if (button.dataset.conversationId) state.activeConversationId = Number(button.dataset.conversationId);
       render();
       if (isReturningToSameView) window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -7211,6 +7551,53 @@ function bindEvents() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-notification-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.notificationFilter = button.dataset.notificationFilter;
+      render();
+    });
+  });
+
+  document.querySelector('[data-action="mark-all-read"]')?.addEventListener("click", () => {
+    markAllNotificationsRead();
+    render();
+  });
+
+  // The primary-action button already carries data-view/data-sheet, so the
+  // generic [data-view]/[data-sheet] handlers above do the actual
+  // navigation + render() — this listener only needs to flip the read
+  // state before that render happens, which addEventListener guarantees
+  // since both listeners fire synchronously in registration order.
+  document.querySelectorAll('[data-action="notification-primary"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const item = notifications.find((entry) => entry.id === Number(button.dataset.id));
+      if (item) item.unread = false;
+    });
+  });
+
+  document.querySelectorAll('[data-action="dismiss-notification"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      dismissNotification(button.dataset.id);
+      render();
+    });
+  });
+
+  document.querySelector('[data-action="send-message"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const text = String(formData.get("message") || "").trim();
+    if (!text) return;
+    const thread = messageThreads.find((entry) => entry.id === Number(event.currentTarget.dataset.conversationId));
+    if (thread) {
+      thread.messages.push({ from: "me", text, time: t("notification.groupNow") });
+      thread.unread = 0;
+    }
+    state.composerDraft = "";
+    render();
+  });
+
+  bindSwipeRows();
 
   document.querySelector('[data-role="import-source"]')?.addEventListener("change", (event) => {
     state.cityImportRun.source = event.target.value;
@@ -7811,7 +8198,13 @@ function bindSettingsEvents() {
   const notifyBindings = [
     ["settings-notify-messages", "notifyMessages"],
     ["settings-notify-offers", "notifyOffers"],
-    ["settings-notify-community", "notifyCommunity"]
+    ["settings-notify-community", "notifyCommunity"],
+    ["settings-notify-bookings", "notifyBookings"],
+    ["settings-notify-business", "notifyBusiness"],
+    ["settings-notify-tyt", "notifyTyt"],
+    ["settings-notify-payments", "notifyPayments"],
+    ["settings-notify-alwen", "notifyAlwen"],
+    ["settings-notify-system", "notifySystem"]
   ];
   notifyBindings.forEach(([id, key]) => {
     document.getElementById(id)?.addEventListener("change", (event) => {
