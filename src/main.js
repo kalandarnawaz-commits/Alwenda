@@ -2941,7 +2941,14 @@ function renderHome() {
       </div>
     </section>
 
-    ${renderAiSearchResults()}
+    ${/* Home already has its own curated rails below (Live around you,
+       Trending Marketplace, etc.) — the generic "Nearby picks"
+       discover-toggle panel only ever showed up here because
+       state.discoverOpen is global and was left on from Marketplace or
+       Explore, and read as redundant clutter. A typed search still
+       surfaces "Alwen found" results in place, same as every other
+       screen; only the no-query discover fallback is suppressed. */
+      state.query.trim() ? renderAiSearchResults() : ""}
 
     ${renderLiveAroundYou()}
     ${renderTrendingMarketplace()}
