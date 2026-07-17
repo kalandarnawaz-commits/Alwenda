@@ -2179,9 +2179,9 @@ function renderShell() {
   }
   const navItems = [
     ["home", "nav.home", "app"],
+    ["explore", "nav.explore", "explore"],
     ["marketplace", "nav.marketplace", "navMarketplace"],
-    ["community", "nav.community", "navCommunity"],
-    ["explore", "nav.explore", "explore"]
+    ["community", "nav.community", "navCommunity"]
   ];
   const isHome = state.activeView === "home";
   const headerTheme = isHome && !state.headerSolid ? "theme-dark-header header-dark header-transparent" : "theme-light-header header-light header-solid";
