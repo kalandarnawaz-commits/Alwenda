@@ -1463,11 +1463,21 @@ body.has-open-sheet {
    everywhere else in the app. Scoped to just these two picker screens
    (not the shared .category-tile-grid component in general) so it
    doesn't bleed into the full Marketplace/Explore pages' own category
-   row, which keeps its usual light styling. */
+   row, which keeps its usual light styling.
+   Like .tyt-sheet, this is meant to look the same regardless of the
+   site's light/dark theme setting — but .section-shell and
+   .category-tile-icon both have their own `:root[data-theme="dark"] ...`
+   overrides elsewhere in this file at higher selector specificity
+   (:root[attr] counts as two selectors) that would otherwise win over a
+   plain class selector here, and .section-shell's own base rule (light
+   card) sits later in the file than this block and would win in light
+   theme on equal specificity. !important pins these regardless of theme
+   or source order, the same escape hatch already used for
+   .create-primary-action above for the identical reason. */
 .marketplace-picker-shell,
 .explore-picker-shell {
-  background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .marketplace-picker-shell .category-tile.tone-mint,
@@ -1478,31 +1488,31 @@ body.has-open-sheet {
 .explore-picker-shell .category-tile.tone-gold,
 .explore-picker-shell .category-tile.tone-sky,
 .explore-picker-shell .category-tile.tone-rose {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: none !important;
 }
 
 .marketplace-picker-shell .category-tile:hover,
 .explore-picker-shell .category-tile:hover {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
 }
 
 .marketplace-picker-shell .category-tile.is-active,
 .explore-picker-shell .category-tile.is-active {
-  box-shadow: inset 0 0 0 2px #ffffff;
+  box-shadow: inset 0 0 0 2px #ffffff !important;
 }
 
 .marketplace-picker-shell .category-tile-icon,
 .explore-picker-shell .category-tile-icon {
-  background: rgba(52, 211, 153, 0.24);
-  border-radius: 999px;
-  box-shadow: none;
+  background: rgba(52, 211, 153, 0.24) !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
 }
 
 .marketplace-picker-shell .category-tile-label,
 .explore-picker-shell .category-tile-label {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 /* Every page-hero used to share the exact same background photo
