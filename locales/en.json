@@ -277,7 +277,9 @@
     "available": "Available",
     "distance": "Distance",
     "responseTime": "Response time",
-    "distanceAway": "{distance} away"
+    "distanceAway": "{distance} away",
+    "discoverNearby": "Discover nearby",
+    "discoverResultsTitle": "Nearby picks"
   },
   "nav": {
     "home": "Home",

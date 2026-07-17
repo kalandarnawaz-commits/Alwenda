@@ -277,7 +277,9 @@
     "available": "Verfügbar",
     "distance": "Entfernung",
     "responseTime": "Antwortzeit",
-    "distanceAway": "{distance} entfernt"
+    "distanceAway": "{distance} entfernt",
+    "discoverNearby": "In der Nähe entdecken",
+    "discoverResultsTitle": "Auswahl in der Nähe"
   },
   "nav": {
     "home": "Start",

@@ -1347,6 +1347,41 @@ body.has-open-sheet {
   }
 }
 
+/* Discover toggle — a radio-style pill sitting under the category tile
+   grid so the results panel below it (normally only shown once you've
+   typed a Tell Alwen search) can be opened without typing anything. */
+.discover-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.discover-toggle-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--muted);
+  box-sizing: border-box;
+}
+
+.discover-toggle.is-active {
+  border-color: var(--ink);
+}
+
+.discover-toggle.is-active .discover-toggle-dot {
+  border-color: var(--ink);
+  background: radial-gradient(circle, var(--ink) 0 40%, transparent 42%);
+}
+
 .intent-suggestions,
 .chip-row,
 .mode-tabs {

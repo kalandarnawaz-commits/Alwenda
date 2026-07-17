@@ -120,6 +120,7 @@ const state = {
   translateCameraProgress: 0,
   translateCameraErrorMessage: null,
   query: "",
+  discoverOpen: false,
   activeSheet: null,
   headerSolid: false,
   alwenOpen: false,
@@ -3340,17 +3341,32 @@ function renderAiSearch(context) {
   `;
 }
 
+/** Toggle for the results panel below — on Explore/Marketplace it sits
+ * right under the category tile grid so there's a way to see it without
+ * having to type anything into Tell Alwen first. */
+function renderDiscoverToggle() {
+  return `
+    <button type="button" class="discover-toggle ${state.discoverOpen ? "is-active" : ""}" data-action="toggle-discover" aria-pressed="${state.discoverOpen ? "true" : "false"}">
+      <span class="discover-toggle-dot" aria-hidden="true"></span>
+      ${t("common.discoverNearby")}
+    </button>
+  `;
+}
+
 /** Cross-entity "here's what matches what you typed" panel — shown under
  * every renderAiSearch() call site so Tell Alwen surfaces relevant results
  * in place instead of navigating to a different screen. Results already
  * update live as the user types, since the #global-search input handler
- * re-renders the whole screen on every keystroke. */
+ * re-renders the whole screen on every keystroke. Also opens with no
+ * query typed at all when state.discoverOpen is set via the toggle above,
+ * showing a default/unfiltered sample instead of search matches. */
 function renderAiSearchResults(limit = 6) {
-  if (!state.query.trim()) return "";
+  const hasQuery = Boolean(state.query.trim());
+  if (!hasQuery && !state.discoverOpen) return "";
   const matches = topMatches(limit);
   return `
     <section class="section-shell ai-search-results" data-role="ai-search-results">
-      <div class="section-title"><h2>${t("common.aiResults")}</h2></div>
+      <div class="section-title"><h2>${hasQuery ? t("common.aiResults") : t("common.discoverResultsTitle")}</h2></div>
       <div class="match-list">${matches.map(renderMatch).join("") || renderEmptyState(t("common.noResults"))}</div>
     </section>
   `;
@@ -3943,7 +3959,6 @@ function renderExplore() {
         </div>
         ${renderAiSearch("explore")}
       </section>
-      ${renderAiSearchResults()}
       <div class="section-title">
         <div><h2>${t("import.importedDirectory")}</h2><p>${t("import.importedDirectoryHint")}</p></div>
       </div>
@@ -3955,6 +3970,8 @@ function renderExplore() {
           attrs: `data-explore-category="${cat}"`
         }))
       )}
+      ${renderDiscoverToggle()}
+      ${renderAiSearchResults()}
       ${renderExploreSubFilterRow()}
       <label class="explore-sort">
         <span>${t("import.sort.sortLabel")}</span>
@@ -4034,7 +4051,6 @@ function renderMarketplace() {
         </div>
         ${renderAiSearch("marketplace")}
       </section>
-      ${renderAiSearchResults()}
       ${renderCapabilityRail()}
       <div class="need-help-card">
         <div>
@@ -4045,6 +4061,8 @@ function renderMarketplace() {
         <button data-view="needHelp">${t("needHelp.needHelpCta")}</button>
       </div>
       ${renderCategoryTabs("marketplace")}
+      ${renderDiscoverToggle()}
+      ${renderAiSearchResults()}
       ${renderMarketplaceCollections(items)}
       ${renderAlwenListingCreator()}
       <div class="section-title">
@@ -7189,6 +7207,14 @@ function bindEvents() {
       document.getElementById("global-search")?.blur();
       if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
       document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  document.querySelectorAll('[data-action="toggle-discover"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      state.discoverOpen = !state.discoverOpen;
+      render();
+      if (state.discoverOpen) document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   });
 

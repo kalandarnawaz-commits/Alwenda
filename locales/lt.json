@@ -277,7 +277,9 @@
     "available": "Laisvas",
     "distance": "Atstumas",
     "responseTime": "Atsakymo laikas",
-    "distanceAway": "už {distance}"
+    "distanceAway": "už {distance}",
+    "discoverNearby": "Atrasti netoliese",
+    "discoverResultsTitle": "Pasiūlymai netoliese"
   },
   "nav": {
     "home": "Pradžia",
