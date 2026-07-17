@@ -2092,8 +2092,14 @@ function filteredHelpRequests() {
   });
 }
 
-function topMatches(limit = 4) {
-  const routed = routeForQuery();
+function topMatches(limit = 4, context = "home") {
+  const hasQuery = Boolean(state.query.trim());
+  // With a typed query, what the query itself implies (routeForQuery)
+  // should win — that's a deliberate search. With no query — the
+  // "Nearby picks" discover-toggle case — fall back to which screen
+  // Tell Alwen is being shown on, so the same generic cross-entity mix
+  // doesn't show up unchanged on every screen.
+  const routed = hasQuery ? routeForQuery() : context;
   const translationMatches =
     routed === "translate"
       ? [
@@ -2153,10 +2159,18 @@ function topMatches(limit = 4) {
     routed === "hire"
       ? [...proMatches, ...helpMatches, ...placeMatches, ...listingMatches]
       : routed === "marketplace"
-        ? [...listingMatches, ...proMatches, ...helpMatches, ...placeMatches]
+        ? [...listingMatches, ...offerMatches, ...proMatches, ...helpMatches, ...placeMatches, ...importedMatches]
         : routed === "translate"
           ? [...translationMatches, ...placeMatches, ...importedMatches]
-          : [...placeMatches, ...importedMatches, ...proMatches, ...listingMatches, ...helpMatches, ...offerMatches];
+          : routed === "explore"
+            ? [...importedMatches, ...placeMatches, ...offerMatches, ...listingMatches, ...proMatches, ...helpMatches]
+            : routed === "community"
+              ? [...helpMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches, ...offerMatches]
+              : routed === "contribute"
+                ? [...helpMatches, ...offerMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches]
+                : routed === "reservations" || routed === "businesses"
+                  ? [...placeMatches, ...importedMatches, ...offerMatches, ...proMatches, ...listingMatches, ...helpMatches]
+                  : [...placeMatches, ...importedMatches, ...proMatches, ...listingMatches, ...helpMatches, ...offerMatches];
 
   return ordered.slice(0, limit);
 }
@@ -3365,10 +3379,10 @@ function renderDiscoverToggle() {
  * re-renders the whole screen on every keystroke. Also opens with no
  * query typed at all when state.discoverOpen is set via the toggle above,
  * showing a default/unfiltered sample instead of search matches. */
-function renderAiSearchResults(limit = 6) {
+function renderAiSearchResults(limit = 6, context = "home") {
   const hasQuery = Boolean(state.query.trim());
   if (!hasQuery && !state.discoverOpen) return "";
-  const matches = topMatches(limit);
+  const matches = topMatches(limit, context);
   return `
     <section class="section-shell ai-search-results" data-role="ai-search-results">
       <div class="section-title"><h2>${hasQuery ? t("common.aiResults") : t("common.discoverResultsTitle")}</h2></div>
@@ -3837,7 +3851,7 @@ function renderCreate() {
         <h1>${t("common.createTitle")}</h1>
       </div>
       ${renderAiSearch("create")}
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "create")}
       <div class="create-command-centre" aria-label="${t("nav.create")}">
         <div class="create-primary-actions">
           ${primaryCreationActions.map(([iconName, titleKey, hintKey, view]) => `
@@ -3880,7 +3894,7 @@ function renderCommunity() {
         </div>
         ${renderAiSearch("community")}
       </section>
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "community")}
       <div class="community-summary">
         <article><strong>23</strong><span>${t("common.peopleLookingForHelp")}</span></article>
         <article><strong>8</strong><span>${t("common.newNeighbourPosts")}</span></article>
@@ -4007,7 +4021,7 @@ function renderExplore() {
         }))
       )}
       ${renderDiscoverToggle()}
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "explore")}
       ${renderExploreSubFilterRow()}
       <label class="explore-sort">
         <span>${t("import.sort.sortLabel")}</span>
@@ -4122,7 +4136,7 @@ function renderMarketplace() {
       </div>
       ${renderMarketplaceCategoryChipRow("marketplace")}
       ${renderDiscoverToggle()}
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "marketplace")}
       ${renderMarketplaceCollections(items)}
       ${renderAlwenListingCreator()}
       <div class="section-title">
@@ -4186,7 +4200,7 @@ function renderContribute() {
         <h1>${t("common.contributeTitle")}</h1>
       </div>
       ${renderAiSearch("contribute")}
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "contribute")}
       <div class="score-grid">
         ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.id] || "spark", t(score.labelKey), score.value, undefined, CONTRIBUTION_SCORE_TONE[score.id])).join("")}
         ${reputationTile(streakTile.icon, streakTile.label, streakTile.value)}
@@ -4554,7 +4568,7 @@ function renderHire() {
         </div>
         ${renderAiSearch("hire")}
       </section>
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "hire")}
       <button class="need-help-wide" data-view="needHelp">${icon("help")}<span class="need-help-wide-text"><strong>${t("needHelp.needHelpTitle")}</strong><small>${t("needHelp.needHelpHint")}</small></span></button>
       ${renderPostRequestForm()}
       <div class="category-cloud">
@@ -5026,7 +5040,7 @@ function renderBusinesses() {
         </div>
         ${renderAiSearch("businesses")}
       </section>
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "businesses")}
       <div class="visual-business-grid">
         ${items
           .map(
@@ -5304,7 +5318,7 @@ function renderReservations() {
         ${renderAiSearch("reservations")}
       </section>
 
-      ${renderAiSearchResults()}
+      ${renderAiSearchResults(6, "reservations")}
 
       <div class="request-form-card">
         <h2>${t("common.newRequestTitle")}</h2>
