@@ -1481,6 +1481,14 @@ body.has-open-sheet {
 .explore-picker-shell {
   background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
+  /* .section-shell is `display: grid` with no grid-template-columns of its
+     own, so its single implicit column was sizing to the shell's
+     border-box width instead of its padding-adjusted content box —
+     the hero and tile grid inside it rendered flush against the right
+     edge (2px gutter) while the left padding stayed correct (13-14px),
+     reading as badly off-centre. minmax(0, 1fr) pins the implicit
+     column to the actual available content width. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .marketplace-picker-shell .category-tile.tone-mint,
@@ -1516,6 +1524,27 @@ body.has-open-sheet {
 .marketplace-picker-shell .category-tile-label,
 .explore-picker-shell .category-tile-label {
   color: #ffffff !important;
+}
+
+/* A separate "narrow-phone correction" further down this file pins every
+   .city-hero to `width: calc(100vw - 32px)` below 480px, sized for the
+   normal case where a hero sits directly inside the standard 16px page
+   margin. These two picker heroes are nested one level deeper, inside a
+   .marketplace-picker-shell/.explore-picker-shell that adds its own 13px
+   padding on top of that margin — so the fixed calc() came out wider
+   than the actual space available and the hero (and, before the
+   grid-template-columns fix above, the tile grid below it) overflowed
+   past the shell's right edge instead of sitting centred, with only a
+   ~2px gutter on the right against a ~14px gutter on the left. Higher
+   specificity + !important to beat that rule and let the hero just fill
+   its real container instead. */
+.marketplace-picker-hero.city-hero,
+.explore-picker-hero.city-hero {
+  width: 100% !important;
+  max-width: 100% !important;
+  inline-size: 100% !important;
+  max-inline-size: 100% !important;
+  margin-inline: 0 !important;
 }
 
 /* Every page-hero used to share the exact same background photo
