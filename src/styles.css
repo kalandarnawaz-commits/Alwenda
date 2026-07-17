@@ -1420,6 +1420,44 @@ body.has-open-sheet {
   font-size: 0.68rem;
 }
 
+/* Every page-hero used to share the exact same background photo
+   (assets/vilnius-hero.png) — Home keeps that one, but each of these
+   gets its own distinct photo instead so the screens read apart from
+   each other. Two-class selector to reliably beat the base .city-hero
+   rule's own background regardless of source order, same technique
+   already used by .city-hero.page-hero above. Only background-image is
+   overridden — position/size/gradient-overlay stay inherited from the
+   base rule. */
+.marketplace-hero-photo.city-hero {
+  background-image:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
+    url("https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1400&q=80");
+}
+
+.community-hero-photo.city-hero {
+  background-image:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
+    url("https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1400&q=80");
+}
+
+.hire-hero-photo.city-hero {
+  background-image:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
+    url("https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=1400&q=80");
+}
+
+.businesses-hero-photo.city-hero {
+  background-image:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
+    url("https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1400&q=80");
+}
+
+.reservations-hero-photo.city-hero {
+  background-image:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
+    url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1400&q=80");
+}
+
 .intent-suggestions,
 .chip-row,
 .mode-tabs {

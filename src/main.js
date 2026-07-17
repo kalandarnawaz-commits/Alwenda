@@ -3868,7 +3868,7 @@ function renderCreate() {
 function renderCommunity() {
   return `
     <section class="section-shell community-shell">
-      <section class="city-hero page-hero" aria-labelledby="community-hero-title">
+      <section class="city-hero page-hero community-hero-photo" aria-labelledby="community-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
           <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
@@ -4048,7 +4048,7 @@ function renderMarketplaceCollections(items) {
 function renderMarketplacePicker() {
   return `
     <section class="section-shell marketplace-picker-shell">
-      <section class="city-hero page-hero marketplace-picker-hero" aria-labelledby="marketplace-picker-title">
+      <section class="city-hero page-hero marketplace-picker-hero marketplace-hero-photo" aria-labelledby="marketplace-picker-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
           <h1 id="marketplace-picker-title">${t("marketplace.marketplaceHeroTitle")}</h1>
@@ -4068,7 +4068,7 @@ function renderMarketplace() {
 
   return `
     <section class="section-shell marketplace-shell">
-      <section class="city-hero page-hero" aria-labelledby="marketplace-hero-title">
+      <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
           <h1 id="marketplace-hero-title">${t("marketplace.marketplaceHeroTitle")}</h1>
@@ -4511,7 +4511,7 @@ function renderHire() {
   const pros = filteredProfessionals();
   return `
     <section class="section-shell hire-shell">
-      <section class="city-hero page-hero" aria-labelledby="hire-hero-title">
+      <section class="city-hero page-hero hire-hero-photo" aria-labelledby="hire-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("hire.hireEyebrow")} · ${currentAreaLabel()}</p>
           <h1 id="hire-hero-title">${t("hire.hireTitle")}</h1>
@@ -4971,7 +4971,7 @@ function renderBusinesses() {
   const items = filteredBusinesses();
   return `
     <section class="section-shell">
-      <section class="city-hero page-hero" aria-labelledby="businesses-hero-title">
+      <section class="city-hero page-hero businesses-hero-photo" aria-labelledby="businesses-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
           <h1 id="businesses-hero-title">${t("common.localPlaces")}</h1>
@@ -5248,7 +5248,7 @@ function renderReservations() {
   const suggestions = businesses.filter((item) => RESERVATION_BOOKABLE_TYPES.includes(item.type));
   return `
     <section class="section-shell reservations-shell">
-      <section class="city-hero page-hero" aria-labelledby="reservations-hero-title">
+      <section class="city-hero page-hero reservations-hero-photo" aria-labelledby="reservations-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("nav.book")} · ${currentAreaLabel()}</p>
           <h1 id="reservations-hero-title">${t("common.reservationTitle")}</h1>
