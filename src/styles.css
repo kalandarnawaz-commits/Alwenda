@@ -1278,6 +1278,67 @@ body.has-open-sheet {
   display: block;
 }
 
+/* Wolt-style colourful category picker — Explore's 14 city categories and
+   Marketplace/Listings' 8 categories both used to be a plain text chip
+   row; this gives them a scannable grid of tinted tiles instead, cycling
+   through the app's existing tone tokens (mint/gold/sky/rose) rather than
+   a bespoke colour per category. */
+.category-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+
+.category-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 6px 12px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.category-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 31, 27, 0.12);
+}
+
+.category-tile.tone-mint { background: var(--mint); }
+.category-tile.tone-gold { background: var(--gold); }
+.category-tile.tone-sky { background: var(--sky); }
+.category-tile.tone-rose { background: var(--rose); }
+
+.category-tile.is-active {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.category-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  font-size: 1.3rem;
+  color: var(--ink);
+}
+
+.category-tile-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+@media (max-width: 430px) {
+  .category-tile-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .intent-suggestions,
 .chip-row,
 .mode-tabs {
@@ -2726,7 +2787,11 @@ body.has-open-sheet {
 .match-tile-photo.is-fallback {
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.18), rgba(52, 211, 153, 0.06));
+  /* The translucent gradient alone had no theme-aware base underneath it,
+     so in dark mode it rendered as a distinctly lighter block sitting on
+     top of the card instead of a subtle tint integrated with it — pairing
+     it with --surface-soft as the base fill fixes that in both themes. */
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.18), rgba(52, 211, 153, 0.06)) var(--surface-soft);
 }
 
 .match-tile-initials {

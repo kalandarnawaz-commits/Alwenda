@@ -3963,9 +3963,14 @@ function renderExplore() {
       <div class="section-title">
         <div><h2>${t("import.importedDirectory")}</h2><p>${t("import.importedDirectoryHint")}</p></div>
       </div>
-      <div class="chip-row explore-category-row">
-        ${["All", ...CITY_ENTITY_CATEGORIES].map((cat) => `<button class="${state.exploreCategory === cat ? "is-selected" : ""}" data-explore-category="${cat}">${cat === "All" ? t("common.all") : businessCategoryLabel(cat)}</button>`).join("")}
-      </div>
+      ${renderCategoryTileGrid(
+        ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
+          label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
+          iconGlyph: cat === "All" ? "◈" : CATEGORY_ICON[cat] || "◈",
+          isActive: state.exploreCategory === cat,
+          attrs: `data-explore-category="${cat}"`
+        }))
+      )}
       ${renderExploreSubFilterRow()}
       <label class="explore-sort">
         <span>${t("import.sort.sortLabel")}</span>
@@ -4898,17 +4903,15 @@ function renderHelpRequest(request) {
 }
 
 function renderCategoryTabs(targetView = "marketplace") {
-  return `
-    <div class="chip-row" role="list">
-      <button class="chip ${state.category === "all" ? "is-active" : ""}" data-category="all" data-target-view="${targetView}">${t("common.allCategories")}</button>
-      ${categories
-        .map(
-          (category) =>
-            `<button class="chip ${state.category === category.id ? "is-active" : ""}" data-category="${category.id}" data-target-view="${targetView}">${categoryIcon(category.id)}${t(category.labelKey)}</button>`
-        )
-        .join("")}
-    </div>
-  `;
+  return renderCategoryTileGrid([
+    { label: t("common.allCategories"), iconGlyph: "◈", isActive: state.category === "all", attrs: `data-category="all" data-target-view="${targetView}"` },
+    ...categories.map((category) => ({
+      label: t(category.labelKey),
+      iconGlyph: categoryIcon(category.id),
+      isActive: state.category === category.id,
+      attrs: `data-category="${category.id}" data-target-view="${targetView}"`
+    }))
+  ]);
 }
 
 function renderListings() {
@@ -6512,6 +6515,31 @@ function renderCityImport() {
       </div>
       ${renderClaimFlow()}
     </section>
+  `;
+}
+
+/** Wolt-style colourful category grid — a handful of tone tiles cycled
+ * across however many categories there are, so the grid reads as
+ * scannable/colourful without needing a bespoke colour per category.
+ * tiles: [{ label, iconGlyph, isActive, attrs }], attrs is a raw string
+ * of data-* attributes (e.g. `data-category="x" data-target-view="y"`)
+ * so the existing click handlers for each caller keep working unchanged. */
+const CATEGORY_TILE_TONES = ["mint", "gold", "sky", "rose"];
+
+function renderCategoryTileGrid(tiles) {
+  return `
+    <div class="category-tile-grid" role="list">
+      ${tiles
+        .map(
+          (tile, index) => `
+            <button type="button" class="category-tile tone-${CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length]} ${tile.isActive ? "is-active" : ""}" ${tile.attrs}>
+              <span class="category-tile-icon">${tile.iconGlyph}</span>
+              <span class="category-tile-label">${tile.label}</span>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
   `;
 }
 
