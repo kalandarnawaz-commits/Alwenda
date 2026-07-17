@@ -15,6 +15,7 @@ import {
   categories,
   city,
   cityGraphConnections,
+  COMMUNITY_POST_TYPES,
   contributionActions,
   contributionScores,
   cityGraph,
@@ -174,6 +175,12 @@ const state = {
   blockedPeople: [],
   helpfulPostIds: [],
   savedPostIds: [],
+  hiddenPostIds: [],
+  mutedTopics: [],
+  communityFilter: "forYou",
+  activePostId: null,
+  communityPostDraft: { title: "", body: "", type: "discussion" },
+  communityPostSubmitStatus: "idle",
   savedListingIds: [],
   reportedListings: [],
   hireCategory: null,
@@ -364,7 +371,7 @@ function findPersonById(id) {
   const review = profileReviews.find((item) => item.id === id);
   if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
   const post = feedPosts.find((item) => item.authorId === id);
-  if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: post.categoryKey ? t(post.categoryKey) : "", context: "community" };
+  if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.verified, context: "community" };
   const listing = listings.find((item) => item.sellerId === id);
   if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
   const offer = offers.find((item) => `offer-${item.id}` === id);
@@ -1187,8 +1194,8 @@ function sharePlace(item) {
 }
 
 function sharePost(post) {
-  const title = t(post.titleKey);
-  const text = `${title} — ${t(post.bodyKey)}`;
+  const title = post.titleKey ? t(post.titleKey) : post.title || "";
+  const text = `${title} — ${post.bodyKey ? t(post.bodyKey) : post.body || ""}`;
   if (navigator.share) {
     navigator.share({ title, text }).catch(() => {});
     return;
@@ -1797,6 +1804,18 @@ function renderSheet() {
     return renderDirectionsSheet();
   }
 
+  if (state.activeSheet === "communityComposer") {
+    return renderCommunityComposerSheet();
+  }
+
+  if (state.activeSheet === "postActions") {
+    return renderPostActionsSheet();
+  }
+
+  if (state.activeSheet === "postDetail") {
+    return renderPostDetailSheet();
+  }
+
   return "";
 }
 
@@ -2204,7 +2223,7 @@ function renderShell() {
   const navItems = [
     ["home", "nav.home", "app"],
     ["explore", "nav.explore", "explore"],
-    ["marketplace", "nav.marketplace", "navMarketplace"],
+    ["marketplace", "nav.marketplaceShort", "navMarketplace"],
     ["community", "nav.community", "navCommunity"]
   ];
   const isHome = state.activeView === "home";
@@ -2230,7 +2249,12 @@ function renderShell() {
       </nav>
       ${renderTytOrb()}
       ${renderAlwenDock()}
-      ${state.activeView !== "translate" ? renderQuickTranslateDock() : ""}
+      ${/* Community deliberately drops this floating mic dock — with the
+         Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
+         already on screen, a third floating circle was competing
+         directly with post cards/images for attention. Every other
+         screen keeps it unchanged. */
+        state.activeView !== "translate" && state.activeView !== "community" ? renderQuickTranslateDock() : ""}
       ${renderSheet()}
     </div>
   `;
@@ -3393,10 +3417,15 @@ function renderCapabilityRail() {
 }
 
 function renderAiSearch(context) {
+  // Community gets its own contextual placeholder immediately (the
+  // rotation in bindAiSearchPlaceholderRotation() takes over from here
+  // on the next tick) rather than showing the generic city-wide prompt
+  // — including "Register my business" — for even a moment.
+  const placeholder = context === "community" ? t("community.communityPromptExamples")[0] : t("common.aiSearchPlaceholder");
   return `
     <div class="ai-search ${context === "home" ? "is-large" : ""}">
       <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
-      <input id="global-search" value="${escapeHtml(state.query)}" placeholder="${t("common.aiSearchPlaceholder")}" aria-label="${t("common.aiSearchPlaceholder")}" />
+      <input id="global-search" value="${escapeHtml(state.query)}" placeholder="${placeholder}" aria-label="${placeholder}" />
       <button type="button" data-action="ai-search-submit">${t("common.tellAlwen")}</button>
     </div>
   `;
@@ -3840,35 +3869,302 @@ function renderMatch(match) {
   `;
 }
 
+/* type meta drives the post-type label/emoji shown on every card, the
+ * filter chips, and which primary action a card offers (the action
+ * itself is one of three real, already-existing behaviours — save,
+ * share, or reply-in-detail-sheet — not nine bespoke flows; see
+ * COMMUNITY_PRIMARY_ACTION_KIND below). */
+const COMMUNITY_POST_TYPE_META = {
+  question: { emoji: "❓", labelKey: "community.postType.question", actionKey: "community.postAction.question" },
+  recommendation: { emoji: "⭐", labelKey: "community.postType.recommendation", actionKey: "community.postAction.recommendation" },
+  alert: { emoji: "🚨", labelKey: "community.postType.alert", actionKey: "community.postAction.alert" },
+  offer: { emoji: "🎁", labelKey: "community.postType.offer", actionKey: "community.postAction.offer" },
+  help: { emoji: "🤝", labelKey: "community.postType.help", actionKey: "community.postAction.help" },
+  lostFound: { emoji: "🐾", labelKey: "community.postType.lostFound", actionKey: "community.postAction.lostFound" },
+  event: { emoji: "📅", labelKey: "community.postType.event", actionKey: "community.postAction.event" },
+  update: { emoji: "📣", labelKey: "community.postType.update", actionKey: "community.postAction.update" },
+  discussion: { emoji: "💬", labelKey: "community.postType.discussion", actionKey: "community.postAction.discussion" }
+};
+
+const COMMUNITY_PRIMARY_ACTION_KIND = {
+  recommendation: "save",
+  alert: "share"
+  // every other type falls back to "reply" (opens the post-detail sheet)
+};
+
+const COMMUNITY_FILTER_META = [
+  ["forYou", "community.filterForYou", "🏠"],
+  ["nearby", "community.filterNearby", "📍"],
+  ["question", "community.filterQuestions", "❓"],
+  ["recommendation", "community.filterRecommendations", "⭐"],
+  ["alert", "community.filterAlerts", "🚨"],
+  ["help", "community.filterHelp", "🤝"],
+  ["event", "community.filterEvents", "📅"]
+];
+
+function communityPostTypeMeta(type) {
+  return COMMUNITY_POST_TYPE_META[type] || COMMUNITY_POST_TYPE_META.discussion;
+}
+
+/* Hidden posts, muted topics, and blocked authors all subtract from the
+ * same feed — "hide"/"mute"/"block" are three different reasons for the
+ * same effect (this stops showing up for me), so filtering happens in
+ * one place rather than three separate checks scattered through the
+ * render path. */
+function visibleFeedPosts() {
+  return feedPosts.filter(
+    (post) => !state.hiddenPostIds.includes(post.id) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.author)
+  );
+}
+
+/* "For you" and "Nearby" both show everything — there's no real
+ * personalization or geo-distance signal in this mock data to
+ * meaningfully tell them apart yet, so faking a difference between them
+ * would be exactly the kind of dishonest signal the rest of this
+ * redesign is trying to remove. Every other filter is a genuine
+ * post.type match. */
+function filteredCommunityPosts() {
+  const visible = visibleFeedPosts();
+  if (state.communityFilter === "forYou" || state.communityFilter === "nearby") return visible;
+  return visible.filter((post) => post.type === state.communityFilter);
+}
+
 function renderPulse(post) {
   const isHelpful = state.helpfulPostIds.includes(post.id);
   const isSaved = state.savedPostIds.includes(post.id);
   const helpfulCount = (post.helpful || 0) + (isHelpful ? 1 : 0);
   const savesCount = (post.saves || 0) + (isSaved ? 1 : 0);
+  const meta = communityPostTypeMeta(post.type);
+  const primaryKind = COMMUNITY_PRIMARY_ACTION_KIND[post.type] || "reply";
+  const primaryAttrs =
+    primaryKind === "save"
+      ? `data-action="toggle-post-save" data-post-id="${post.id}"`
+      : primaryKind === "share"
+        ? `data-action="share-post" data-post-id="${post.id}"`
+        : `data-action="open-post-detail" data-post-id="${post.id}"`;
   return `
-    <article class="pulse-card visual-pulse-card social-post-card">
-      <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: post.categoryKey ? t(post.categoryKey) : "", context: "community" })}>
-        <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
-        <div>
-          <strong>${post.author}</strong>
-          <span>${post.area} · ${post.time}</span>
+    <article class="pulse-card visual-pulse-card social-post-card type-${post.type}" data-post-id="${post.id}">
+      <div class="pulse-card-header">
+        <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t(meta.labelKey), verified: post.verified, context: "community" })}>
+          <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
+          <div class="pulse-author-copy">
+            <span class="pulse-author-name">${escapeHtml(post.author)}${post.verified ? `<span class="pulse-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</span>
+            <span class="pulse-meta-line">${escapeHtml(post.area)} · ${escapeHtml(post.time)}</span>
+          </div>
         </div>
-        <small>${post.categoryKey ? t(post.categoryKey) : t("home.rail.neighbourhood")}</small>
+        <span class="post-type-label type-${post.type}">${meta.emoji} ${t(meta.labelKey)}</span>
+        <button type="button" class="pulse-overflow" data-action="open-post-actions" data-post-id="${post.id}" aria-label="${t("community.postActionsTitle")}">⋯</button>
       </div>
+      ${post.type === "alert"
+        ? `
+          <div class="pulse-alert-context">
+            <span class="${post.active ? "is-active" : "is-resolved"}">${post.active ? t("community.alertActive") : t("community.alertResolved")}</span>
+            ${post.verified ? `<span class="pulse-alert-source">${t("messages.verified")} · ${escapeHtml(post.author)}</span>` : ""}
+          </div>
+        `
+        : ""}
       ${post.image ? `<div class="pulse-photo" style="background-image: url('${post.image}')"></div>` : ""}
       <div class="pulse-content">
-        <h3>${t(post.titleKey)}</h3>
-        <p>${t(post.bodyKey)}</p>
+        <h3>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h3>
+        <p>${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
         ${post.alwenSummaryKey ? `<div class="post-alwen-summary">${icon("spark")}<span>${t(post.alwenSummaryKey)}</span></div>` : ""}
-        <div class="tag-row">${(post.tags || []).map((tag) => `<span>${tag}</span>`).join("")}</div>
+        <div class="tag-row">${(post.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
       </div>
       <div class="post-actions">
-        <button type="button" class="${isHelpful ? "is-active" : ""}" data-action="toggle-helpful" data-post-id="${post.id}">${icon("star")}${helpfulCount} ${t("common.helpful")}</button>
-        <span class="post-comment-count">${icon("message")}${post.replies || 0} ${t("common.comments")}</span>
-        <button type="button" data-action="share-post" data-post-id="${post.id}">${icon("arrow")}${t("common.share")}</button>
-        <button type="button" class="${isSaved ? "is-active" : ""}" data-action="toggle-post-save" data-post-id="${post.id}">${icon("heart")}${savesCount}</button>
+        <button type="button" class="post-primary-action" ${primaryAttrs}>${t(meta.actionKey)}</button>
+        <button type="button" class="post-icon-action ${isHelpful ? "is-active" : ""}" data-action="toggle-helpful" data-post-id="${post.id}" aria-label="${t("common.helpful")}">${icon("star")}<span>${helpfulCount}</span></button>
+        <button type="button" class="post-icon-action" data-action="open-post-detail" data-post-id="${post.id}" aria-label="${t("common.comments")}">${icon("message")}<span>${post.replies || 0}</span></button>
+        <button type="button" class="post-icon-action ${isSaved ? "is-active" : ""}" data-action="toggle-post-save" data-post-id="${post.id}" aria-label="${t("common.favourite")}">${icon("heart")}<span>${savesCount}</span></button>
       </div>
     </article>
+  `;
+}
+
+function renderCommunityFeedEmptyState() {
+  const isFiltered = state.communityFilter !== "forYou" && state.communityFilter !== "nearby";
+  return `
+    <div class="notification-empty-state">
+      <span class="notification-empty-icon" aria-hidden="true">${icon("people")}</span>
+      <h3>${isFiltered ? t("community.emptyFilterTitle") : t("community.emptyFeedTitle")}</h3>
+      <p>${isFiltered ? t("community.emptyFilterHint") : t("community.emptyFeedHint")}</p>
+    </div>
+  `;
+}
+
+function renderCommunitySignalStrip() {
+  const needHelpCount = filteredHelpRequests().length;
+  const newPostsCount = feedPosts.length;
+  const alertsCount = feedPosts.filter((post) => post.type === "alert" && post.active).length;
+  return `
+    <div class="community-signal-strip">
+      <span class="community-signal-label">${t("community.aroundYouToday")}</span>
+      <div class="chip-row explore-category-row community-signal-chips">
+        <button type="button" data-view="needHelp">${t("community.needHelpChip")} <span class="chip-count">${needHelpCount}</span></button>
+        <button type="button" data-community-filter="forYou">${t("community.newPostsChip")} <span class="chip-count">${newPostsCount}</span></button>
+        <button type="button" data-community-filter="alert">${t("community.alertsChip")} <span class="chip-count">${alertsCount}</span></button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCommunityFilterRow() {
+  return renderCategoryChipRow(
+    COMMUNITY_FILTER_META.map(([value, labelKey, emoji]) => ({
+      label: t(labelKey),
+      iconGlyph: emoji,
+      isActive: state.communityFilter === value,
+      attrs: `data-community-filter="${value}"`
+    }))
+  );
+}
+
+/* A Nextdoor/Facebook-style "what's on your mind" trigger — tapping
+ * either the prompt or a quick-type chip opens the one real composer
+ * sheet (renderCommunityComposerSheet), pre-selecting the post type for
+ * the chips. "Add photo" is deliberately not offered here: unlike
+ * marketplace listings, community posts have no photo-upload backend in
+ * this app, and a button that can't actually attach anything would be
+ * exactly the kind of prototype signal this redesign is removing. */
+function renderCommunityComposerPrompt() {
+  const avatar = state.auth.status === "signedIn" ? state.auth.user.avatar : null;
+  const quickTypes = ["question", "recommendation", "alert", "help"];
+  return `
+    <div class="community-composer-card">
+      <button type="button" class="community-composer-prompt" data-sheet="communityComposer">
+        <span class="community-composer-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="" />` : icon("profile")}</span>
+        <span class="community-composer-placeholder">${t("community.composerPrompt")}</span>
+      </button>
+      <div class="chip-row explore-category-row community-composer-quick-actions">
+        ${quickTypes
+          .map((type) => {
+            const meta = communityPostTypeMeta(type);
+            const labelKey = { question: "community.composerQuickAsk", recommendation: "community.composerQuickRecommend", alert: "community.composerQuickAlert", help: "community.composerQuickOffer" }[type];
+            return `<button type="button" data-sheet="communityComposer" data-community-post-type="${type}">${meta.emoji} ${t(labelKey)}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderCommunityComposerSheet() {
+  if (state.auth.status !== "signedIn") {
+    return `
+      <div class="sheet-backdrop" data-sheet-close="true">
+        <section class="selection-sheet" aria-label="${t("community.createPost")}">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">
+            <div><h2>${t("community.createPost")}</h2></div>
+            <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
+          </div>
+          <div class="auth-card">
+            <p class="auth-hint">${t("community.composerSignInHint")}</p>
+            <button type="button" class="auth-primary-button" data-view="profile" data-sheet-close="true">${t("common.signIn")}</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+  const draft = state.communityPostDraft;
+  return `
+    <div class="sheet-backdrop" data-sheet-close="true">
+      <section class="selection-sheet community-composer-sheet" aria-label="${t("community.createPost")}">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">
+          <div><h2>${t("community.createPost")}</h2></div>
+          <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
+        </div>
+        <form data-action="submit-community-post">
+          <p class="composer-field-label">${t("community.composerPostTypeLabel")}</p>
+          <div class="chip-row explore-category-row">
+            ${COMMUNITY_POST_TYPES.map((type) => {
+              const meta = communityPostTypeMeta(type);
+              return `<button type="button" class="${draft.type === type ? "is-selected" : ""}" data-community-post-type="${type}">${meta.emoji} ${t(meta.labelKey)}</button>`;
+            }).join("")}
+          </div>
+          <label class="composer-field">
+            <span>${t("community.composerTitleLabel")}</span>
+            <input type="text" name="title" placeholder="${t("community.composerTitlePlaceholder")}" value="${escapeHtml(draft.title)}" required />
+          </label>
+          <label class="composer-field">
+            <span>${t("community.composerBodyLabel")}</span>
+            <textarea name="body" placeholder="${t("community.composerBodyPlaceholder")}" required>${escapeHtml(draft.body)}</textarea>
+          </label>
+          <button type="submit" class="auth-primary-button">${t("community.composerSubmit")}</button>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function renderPostActionsSheet() {
+  const post = feedPosts.find((item) => item.id === state.activePostId);
+  if (!post) return "";
+  const isReported = state.reportedPeople.includes(post.author);
+  const isBlocked = state.blockedPeople.includes(post.author);
+  const isHidden = state.hiddenPostIds.includes(post.id);
+  const isMuted = state.mutedTopics.includes(post.type);
+  return `
+    <div class="sheet-backdrop" data-sheet-close="true">
+      <section class="selection-sheet post-actions-sheet" aria-label="${t("community.postActionsTitle")}">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">
+          <div><h2>${t("community.postActionsTitle")}</h2></div>
+          <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
+        </div>
+        <div class="post-actions-sheet-list">
+          <button type="button" data-action="toggle-post-save" data-post-id="${post.id}" data-sheet-close="true">${icon("heart")} ${t("common.favourite")}</button>
+          <button type="button" data-action="share-post" data-post-id="${post.id}" data-sheet-close="true">${icon("arrow")} ${t("common.share")}</button>
+          <button type="button" class="${isHidden ? "is-active" : ""}" data-action="hide-post" data-post-id="${post.id}" ${isHidden ? "disabled" : ""}>${icon("exit")} ${t("community.hidePost")}</button>
+          <button type="button" class="${isMuted ? "is-active" : ""}" data-action="mute-topic" data-post-id="${post.id}" ${isMuted ? "disabled" : ""}>${icon("bell")} ${t("community.muteTopic")}</button>
+          <button type="button" class="${isReported ? "is-active" : ""}" data-action="report-post-author" data-post-id="${post.id}" ${isReported ? "disabled" : ""}>${isReported ? t("common.reportedConfirmation") : t("common.reportPersonCta")}</button>
+          <button type="button" class="${isBlocked ? "is-active" : ""}" data-action="block-post-author" data-post-id="${post.id}" ${isBlocked ? "disabled" : ""}>${isBlocked ? t("common.blockedConfirmation") : t("common.blockPersonCta")}</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+/* The only place a post's full text + replies are shown together —
+ * "Answer"/"Offer help"/"I've seen this"/"Join discussion"/"View" all
+ * open this same sheet (see COMMUNITY_PRIMARY_ACTION_KIND), since the
+ * underlying mechanic for all of them is the same: read the post, reply
+ * to it. Replies are a flat list, not threaded — proportionate to a
+ * feed that has no comment system anywhere else in the app yet. */
+function renderPostDetailSheet() {
+  const post = feedPosts.find((item) => item.id === state.activePostId);
+  if (!post) return "";
+  const meta = communityPostTypeMeta(post.type);
+  return `
+    <div class="sheet-backdrop" data-sheet-close="true">
+      <section class="selection-sheet post-detail-sheet" aria-label="${t(meta.labelKey)}">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">
+          <div>
+            <p class="eyebrow">${meta.emoji} ${t(meta.labelKey)}</p>
+            <h2>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h2>
+          </div>
+          <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
+        </div>
+        <p class="post-detail-body">${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
+        <div class="post-detail-replies">
+          ${(post.replyList || [])
+            .map(
+              (reply) => `
+                <div class="post-detail-reply">
+                  <strong>${escapeHtml(reply.author)}</strong>
+                  <p>${escapeHtml(reply.text)}</p>
+                </div>
+              `
+            )
+            .join("") || `<p class="post-detail-no-replies">${t("community.emptyFeedHint")}</p>`}
+        </div>
+        <form class="post-detail-composer" data-action="reply-to-post" data-post-id="${post.id}">
+          <input type="text" name="reply" placeholder="${t(meta.actionKey)}…" aria-label="${t(meta.actionKey)}" autocomplete="off" />
+          <button type="submit">${t("messages.send")}</button>
+        </form>
+      </section>
+    </div>
   `;
 }
 
@@ -3925,37 +4221,92 @@ function renderCreate() {
   `;
 }
 
+function renderCommunityRail() {
+  const trending = [...visibleFeedPosts()].sort((a, b) => (b.helpful || 0) - (a.helpful || 0)).slice(0, 3);
+  const activeAlerts = visibleFeedPosts().filter((post) => post.type === "alert" && post.active).slice(0, 3);
+  const suggestedPeople = [...new Map(visibleFeedPosts().map((post) => [post.authorId, post])).values()].slice(0, 3);
+  return `
+    <aside class="community-rail">
+      <div class="notification-rail-card">
+        <h3>${t("community.trendingNearby")}</h3>
+        ${trending.length
+          ? `<ul class="notification-rail-list">${trending.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+          : `<p class="notification-rail-empty">${t("community.emptyFeedHint")}</p>`}
+      </div>
+      <div class="notification-rail-card">
+        <h3>${t("community.alertsChip")}</h3>
+        ${activeAlerts.length
+          ? `<ul class="notification-rail-list">${activeAlerts.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+          : `<p class="notification-rail-empty">${t("community.alertResolved")}</p>`}
+      </div>
+      <div class="notification-rail-card">
+        <h3>${t("community.suggestedPeople")}</h3>
+        <ul class="notification-rail-list community-rail-people">
+          ${suggestedPeople
+            .map(
+              (post) => `
+                <li role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, verified: post.verified, context: "community" })}>
+                  <img src="${post.avatar || reputationProfile.portrait}" alt="" />
+                  <span>${escapeHtml(post.author)}<small>${escapeHtml(post.area)}</small></span>
+                </li>
+              `
+            )
+            .join("")}
+        </ul>
+      </div>
+      <div class="notification-rail-card">
+        <h3>${t("community.guidelines")}</h3>
+        <p class="notification-rail-hint">${t("community.guidelinesHint")}</p>
+      </div>
+      <div class="notification-rail-card">
+        <h3>${t("alwen.alwenWorkspace")}</h3>
+        <p class="notification-rail-hint">${t("alwen.alwenWorkspaceTitle")}</p>
+        <button type="button" class="notification-rail-button" data-alwen-toggle>${t("community.askAlwen")}</button>
+      </div>
+    </aside>
+  `;
+}
+
 function renderCommunity() {
+  const posts = filteredCommunityPosts();
   return `
     <section class="section-shell community-shell">
-      <section class="city-hero page-hero community-hero-photo" aria-labelledby="community-hero-title">
+      <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
           <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
           <p>${t("community.communityHeroSubtitle")}</p>
         </div>
-        ${renderAiSearch("community")}
+        <div class="community-header-actions">
+          <button type="button" class="community-header-primary" data-sheet="communityComposer">${t("community.createPost")}</button>
+          <button type="button" class="community-header-secondary" data-alwen-toggle>${t("community.askAlwen")}</button>
+        </div>
       </section>
-      <div class="community-summary">
-        <article><strong>23</strong><span>${t("common.peopleLookingForHelp")}</span></article>
-        <article><strong>8</strong><span>${t("common.newNeighbourPosts")}</span></article>
-        <article><strong>5</strong><span>${t("common.localAlerts")}</span></article>
-      </div>
-      <div class="pulse-list">
-        ${feedPosts.map(renderPulse).join("")}
-      </div>
-      ${/* Community's own feed and stats are the neighbourhood's actual
-         content — Nearby picks/Alwen found used to sit above them,
-         right under the hero, and outranked the real feed. Pushed
-         below the feed so it reads as a supplementary find, not the
-         headline. */
-        renderAiSearchResults(6, "community")}
-      <div class="section-title">
-        <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
-        <button data-view="needHelp">${t("needHelp.needHelpCta")}</button>
-      </div>
-      <div class="request-list">
-        ${helpRequests.map(renderHelpRequest).join("")}
+      <div class="community-layout">
+        <div class="community-main">
+          ${renderAiSearch("community")}
+          ${renderCommunityComposerPrompt()}
+          ${renderCommunitySignalStrip()}
+          ${renderCommunityFilterRow()}
+          <div class="pulse-list">
+            ${posts.length ? posts.map(renderPulse).join("") : renderCommunityFeedEmptyState()}
+          </div>
+          ${posts.length ? `<p class="community-end-of-feed">${t("community.endOfFeed")}</p>` : ""}
+          ${/* Community's own feed and stats are the neighbourhood's actual
+             content — Nearby picks/Alwen found used to sit above them,
+             right under the hero, and outranked the real feed. Pushed
+             below the feed so it reads as a supplementary find, not the
+             headline. */
+            renderAiSearchResults(6, "community")}
+          <div class="section-title">
+            <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
+            <button data-view="needHelp">${t("needHelp.needHelpCta")}</button>
+          </div>
+          <div class="request-list">
+            ${filteredHelpRequests().map(renderHelpRequest).join("") || renderEmptyState(t("community.emptyFeedHint"))}
+          </div>
+        </div>
+        ${renderCommunityRail()}
       </div>
     </section>
   `;
@@ -7705,6 +8056,115 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-community-filter]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.communityFilter = button.dataset.communityFilter;
+      render();
+    });
+  });
+
+  // Shared by the composer-prompt quick-type chips (which also carry
+  // data-sheet="communityComposer", handled by the generic [data-sheet]
+  // listener above) and the post-type row inside the composer sheet
+  // itself — both just need to record which type is selected.
+  document.querySelectorAll("[data-community-post-type]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.communityPostDraft.type = button.dataset.communityPostType;
+      render();
+    });
+  });
+
+  document.querySelector('[data-action="submit-community-post"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const title = String(formData.get("title") || "").trim();
+    const body = String(formData.get("body") || "").trim();
+    if (!title || !body) return;
+    const nextId = feedPosts.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+    feedPosts.unshift({
+      id: nextId,
+      authorId: `community-user-${nextId}`,
+      author: state.auth.user.name,
+      avatar: state.auth.user.avatar || null,
+      area: currentAreaLabel(),
+      time: t("notification.groupNow"),
+      type: state.communityPostDraft.type,
+      verified: false,
+      title,
+      body,
+      tags: [],
+      replies: 0,
+      helpful: 0,
+      saves: 0,
+      replyList: []
+    });
+    state.communityPostDraft = { title: "", body: "", type: "discussion" };
+    state.activeSheet = null;
+    trackEvent("community_post_created", { type: feedPosts[0].type });
+    render();
+  });
+
+  document.querySelectorAll('[data-action="open-post-actions"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.activePostId = Number(button.dataset.postId);
+      state.activeSheet = "postActions";
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="open-post-detail"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.activePostId = Number(button.dataset.postId);
+      state.activeSheet = "postDetail";
+      render();
+    });
+  });
+
+  document.querySelector('[data-action="hide-post"]')?.addEventListener("click", () => {
+    const id = state.activePostId;
+    if (id != null && !state.hiddenPostIds.includes(id)) state.hiddenPostIds.push(id);
+    state.activeSheet = null;
+    render();
+  });
+
+  document.querySelector('[data-action="mute-topic"]')?.addEventListener("click", () => {
+    const post = feedPosts.find((item) => item.id === state.activePostId);
+    if (post && !state.mutedTopics.includes(post.type)) state.mutedTopics.push(post.type);
+    state.activeSheet = null;
+    render();
+  });
+
+  document.querySelector('[data-action="report-post-author"]')?.addEventListener("click", () => {
+    const post = feedPosts.find((item) => item.id === state.activePostId);
+    if (post && !state.reportedPeople.includes(post.author)) state.reportedPeople.push(post.author);
+    render();
+  });
+
+  document.querySelector('[data-action="block-post-author"]')?.addEventListener("click", () => {
+    const post = feedPosts.find((item) => item.id === state.activePostId);
+    if (post && !state.blockedPeople.includes(post.author)) state.blockedPeople.push(post.author);
+    render();
+  });
+
+  document.querySelector('[data-action="reply-to-post"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const text = String(formData.get("reply") || "").trim();
+    if (!text) return;
+    const post = feedPosts.find((item) => item.id === Number(form.dataset.postId));
+    if (post) {
+      post.replyList = post.replyList || [];
+      post.replyList.push({ author: t("common.you"), text });
+      post.replies = (post.replies || 0) + 1;
+    }
+    render();
+  });
+
   document.querySelectorAll('[data-action="toggle-listing-save"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -8346,7 +8806,10 @@ function bindAiSearchPlaceholderRotation() {
   let index = 0;
   let tytIndex = 0;
   window.setInterval(() => {
-    const prompts = t("common.aiSearchPrompts");
+    // Community gets its own contextual prompt set — the generic list
+    // includes prompts like "Register my business" that don't belong on
+    // a neighbourhood feed.
+    const prompts = state.activeView === "community" ? t("community.communityPromptExamples") : t("common.aiSearchPrompts");
     const input = document.getElementById("global-search");
     if (input && document.activeElement !== input && !input.value) {
       index = (index + 1) % prompts.length;

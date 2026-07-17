@@ -303,6 +303,15 @@ export const neighbourhoods = [
   "Paupys"
 ];
 
+/**
+ * type: canonical machine-readable post type — drives the type label,
+ * filter chips, and which primary action a card shows. Distinct from
+ * the old free-text categoryKey (kept only on posts that still use it
+ * for display continuity elsewhere); type is the field everything new
+ * branches on. verified: whether the author's identity is verified
+ * (shown as a badge next to their name). active: for "alert"-type
+ * posts only — whether the alert is still current (shown/resolved).
+ */
 export const feedPosts = [
   {
     id: 1,
@@ -311,7 +320,8 @@ export const feedPosts = [
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=240&q=80",
     area: "Užupis",
     time: "12 min",
-    categoryKey: "mock.feed.feed1Category",
+    type: "recommendation",
+    verified: true,
     titleKey: "mock.feed.feed1Title",
     bodyKey: "mock.feed.feed1Body",
     image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80",
@@ -328,7 +338,8 @@ export const feedPosts = [
     avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=240&q=80",
     area: "Naujamiestis",
     time: "38 min",
-    categoryKey: "mock.feed.feed2Category",
+    type: "offer",
+    verified: false,
     titleKey: "mock.feed.feed2Title",
     bodyKey: "mock.feed.feed2Body",
     image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=900&q=80",
@@ -345,7 +356,8 @@ export const feedPosts = [
     avatar: "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=240&q=80",
     area: "Old Town",
     time: "1 h",
-    categoryKey: "mock.feed.feed3Category",
+    type: "recommendation",
+    verified: false,
     titleKey: "mock.feed.feed3Title",
     bodyKey: "mock.feed.feed3Body",
     image: "https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=900&q=80",
@@ -362,7 +374,8 @@ export const feedPosts = [
     avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=240&q=80",
     area: "Žvėrynas",
     time: "2 h",
-    categoryKey: "mock.feed.feed4Category",
+    type: "lostFound",
+    verified: false,
     titleKey: "mock.feed.feed4Title",
     bodyKey: "mock.feed.feed4Body",
     image: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=900&q=80",
@@ -379,7 +392,8 @@ export const feedPosts = [
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80",
     area: "Antakalnis",
     time: "3 h",
-    categoryKey: "mock.feed.feed5Category",
+    type: "question",
+    verified: true,
     titleKey: "mock.feed.feed5Title",
     bodyKey: "mock.feed.feed5Body",
     image: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&w=900&q=80",
@@ -388,8 +402,95 @@ export const feedPosts = [
     replies: 16,
     helpful: 29,
     saves: 14
+  },
+  {
+    id: 6,
+    authorId: "community-6",
+    author: "Vilnius Water Utility",
+    avatar: "https://images.unsplash.com/photo-1590650046871-92c887180603?auto=format&fit=crop&w=240&q=80",
+    area: "Naujamiestis",
+    time: "45 min",
+    type: "alert",
+    verified: true,
+    active: true,
+    titleKey: "mock.feed.feed6Title",
+    bodyKey: "mock.feed.feed6Body",
+    alwenSummaryKey: "mock.feed.feed6AlwenSummary",
+    tags: ["water", "maintenance"],
+    replies: 5,
+    helpful: 9,
+    saves: 2
+  },
+  {
+    id: 7,
+    authorId: "community-7",
+    author: "Gabija",
+    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=240&q=80",
+    area: "Paupys",
+    time: "4 h",
+    type: "event",
+    verified: false,
+    titleKey: "mock.feed.feed7Title",
+    bodyKey: "mock.feed.feed7Body",
+    image: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=900&q=80",
+    alwenSummaryKey: "mock.feed.feed7AlwenSummary",
+    tags: ["market", "weekend"],
+    replies: 6,
+    helpful: 22,
+    saves: 15
+  },
+  {
+    id: 8,
+    authorId: "community-8",
+    author: "Vilnius City Council",
+    avatar: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=240&q=80",
+    area: "Šnipiškės",
+    time: "6 h",
+    type: "update",
+    verified: true,
+    titleKey: "mock.feed.feed8Title",
+    bodyKey: "mock.feed.feed8Body",
+    alwenSummaryKey: "mock.feed.feed8AlwenSummary",
+    tags: ["cycling", "infrastructure"],
+    replies: 14,
+    helpful: 37,
+    saves: 8
+  },
+  {
+    id: 9,
+    authorId: "community-9",
+    author: "Tomas",
+    avatar: "https://images.unsplash.com/photo-1500048993953-d23a436266cf?auto=format&fit=crop&w=240&q=80",
+    area: "Žvėrynas",
+    time: "8 h",
+    type: "discussion",
+    verified: false,
+    titleKey: "mock.feed.feed9Title",
+    bodyKey: "mock.feed.feed9Body",
+    tags: ["neighbourhood", "green-space"],
+    replies: 27,
+    helpful: 19,
+    saves: 4
+  },
+  {
+    id: 10,
+    authorId: "community-10",
+    author: "Simona",
+    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=240&q=80",
+    area: "Antakalnis",
+    time: "1 d",
+    type: "help",
+    verified: false,
+    titleKey: "mock.feed.feed10Title",
+    bodyKey: "mock.feed.feed10Body",
+    tags: ["moving", "heavy-lifting"],
+    replies: 4,
+    helpful: 13,
+    saves: 3
   }
 ];
+
+export const COMMUNITY_POST_TYPES = ["question", "recommendation", "alert", "offer", "help", "lostFound", "event", "update", "discussion"];
 
 export const livingCitySignals = [
   { labelKey: "home.signals.weatherLabel", value: "22°C", detailKey: "home.signals.weatherDetail" },

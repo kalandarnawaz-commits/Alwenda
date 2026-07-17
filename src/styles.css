@@ -10398,6 +10398,7 @@ strong:has(> .verified-check) {
 .inbox-tabs button {
   min-height: 40px;
   border-radius: 999px;
+  background: transparent;
   color: var(--muted);
   font-weight: 800;
   font-size: 0.86rem;
@@ -11085,5 +11086,546 @@ strong:has(> .verified-check) {
   .notification-hub {
     max-width: 1080px;
     margin-inline: auto;
+  }
+}
+
+/* ==========================================================================
+   Community — premium neighbourhood feed redesign
+   ========================================================================== */
+
+/* Compact header — three-class selector to reliably beat every legacy
+   single/two-class .city-hero override, same technique the marketplace
+   and explore picker heroes already use. No AI-search bar crammed in
+   here anymore; just identity + the two real actions (Create post /
+   Ask Alwen), so first feed content starts closer to the fold. */
+.community-header-compact.city-hero.page-hero {
+  min-height: clamp(200px, 26vw, 280px);
+  gap: 14px;
+}
+
+.community-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.community-header-primary,
+.community-header-secondary {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.community-header-primary {
+  background: #ffffff;
+  color: #111111;
+}
+
+.community-header-secondary {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+}
+
+.community-layout {
+  display: grid;
+  gap: var(--sp-16);
+}
+
+.community-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+.community-rail {
+  display: none;
+}
+
+.community-rail-people {
+  gap: 10px !important;
+}
+
+.community-rail-people li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: none !important;
+  cursor: pointer;
+}
+
+.community-rail-people li img {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.community-rail-people li span {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.community-rail-people li small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* "What's happening in your neighbourhood?" composer trigger — a
+   Nextdoor/Facebook-style fake-input row plus quick-type chips, all of
+   which open the one real composer sheet (renderCommunityComposerSheet). */
+.community-composer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.community-composer-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  text-align: left;
+}
+
+.community-composer-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.community-composer-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.community-composer-placeholder {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.community-composer-quick-actions button {
+  font-size: 0.78rem;
+}
+
+/* "Around you today" — a compact clickable strip replacing the old
+   vertical 23/8/5 stat cards. Counts are derived from real data
+   (feedPosts.length, active alerts, filteredHelpRequests().length),
+   not hardcoded — a filter with zero matches shows 0, honestly. */
+.community-signal-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.community-signal-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.community-signal-chips button {
+  font-weight: 800;
+}
+
+/* Post cards */
+.pulse-card {
+  border-left: 3px solid transparent;
+}
+
+.pulse-card.type-alert {
+  border-left-color: #e5484d;
+}
+
+.pulse-card.type-help,
+.pulse-card.type-lostFound {
+  border-left-color: #d99a1f;
+}
+
+.pulse-card.type-recommendation,
+.pulse-card.type-event {
+  border-left-color: var(--emerald-text);
+}
+
+.pulse-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pulse-author-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  /* A legacy same-specificity .pulse-author-row rule earlier in this
+     file pins height: 42px (for a different, single-line-name layout)
+     — overridden here since long names now wrap instead of clipping,
+     which needs the row free to grow taller. */
+  height: auto;
+  min-height: 42px;
+}
+
+.pulse-author-row .post-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.pulse-author-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* Scoped with the parent class (rather than the bare .pulse-author-name)
+   to out-specify the legacy ".pulse-author-row span" descendant rule
+   further up this file, which would otherwise still clip these — same
+   root cause .pulse-author-row span was originally written to solve for
+   the old markup, now firing on unrelated new spans nested one level
+   deeper. Long official names (e.g. "Vilnius City Council") need to
+   wrap, not clip — no-clipped-text is an explicit requirement here. */
+.pulse-author-copy .pulse-author-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.pulse-author-name .pulse-verified {
+  flex: 0 0 auto;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  color: var(--emerald-text);
+  font-size: 0.76rem;
+}
+
+.pulse-author-copy .pulse-meta-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.post-type-label {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.post-type-label.type-alert {
+  background: rgba(229, 72, 77, 0.14);
+  color: #e5484d;
+}
+
+.post-type-label.type-help,
+.post-type-label.type-lostFound {
+  background: rgba(217, 154, 31, 0.16);
+  color: #d99a1f;
+}
+
+.post-type-label.type-recommendation,
+.post-type-label.type-event {
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--emerald-text);
+}
+
+.pulse-overflow {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.pulse-overflow:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.pulse-alert-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.pulse-alert-context .is-active {
+  color: #e5484d;
+}
+
+.pulse-alert-context .is-resolved {
+  color: var(--emerald-text);
+}
+
+.pulse-alert-source {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* One clear primary action per card (its label depends on post type —
+   see COMMUNITY_POST_TYPE_META); helpful/comment/save stay as smaller,
+   equal-weight icon-only actions so they read as secondary. */
+.post-primary-action {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+:root[data-theme="dark"] .post-primary-action {
+  background: var(--emerald-600);
+}
+
+.post-icon-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  min-width: 44px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.post-icon-action:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.post-icon-action.is-active {
+  color: var(--emerald-text);
+}
+
+.community-end-of-feed {
+  margin: 4px 0 0;
+  padding: 12px 0 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Composer sheet */
+.community-composer-sheet form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.composer-field-label {
+  margin: 4px 0 -6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.composer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.composer-field span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.composer-field input,
+.composer-field textarea {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-family: inherit;
+}
+
+.composer-field textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+/* Post overflow menu (Report / Block / Hide / Mute / Save / Share) */
+.post-actions-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.post-actions-sheet-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.post-actions-sheet-list button:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.post-actions-sheet-list button:disabled {
+  color: var(--emerald-text);
+  opacity: 0.8;
+}
+
+/* Post detail sheet — full text + a flat reply list + composer */
+.post-detail-body {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.post-detail-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.post-detail-reply {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.post-detail-reply strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.78rem;
+}
+
+.post-detail-reply p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.post-detail-no-replies {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.post-detail-composer {
+  display: flex;
+  gap: 8px;
+}
+
+.post-detail-composer input {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.post-detail-composer button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--emerald-600);
+  color: var(--ink-inverse);
+  font-weight: 800;
+}
+
+/* Desktop — centred main column + right rail, matching the pattern
+   already established for the Notification hub. */
+@media (min-width: 900px) {
+  .community-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+
+  .community-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-12);
+    position: sticky;
+    top: 16px;
+  }
+
+  .community-shell {
+    max-width: 1080px;
+    margin-inline: auto;
+  }
+
+  .community-main {
+    max-width: 720px;
   }
 }
