@@ -1457,6 +1457,54 @@ body.has-open-sheet {
   font-size: 0.68rem;
 }
 
+/* Match the TYT sheet's premium dark-emerald material: gradient shell,
+   frosted translucent cards, circular emerald icon badges, white text —
+   instead of the light card + pastel mint/gold/sky/rose tone tiles used
+   everywhere else in the app. Scoped to just these two picker screens
+   (not the shared .category-tile-grid component in general) so it
+   doesn't bleed into the full Marketplace/Explore pages' own category
+   row, which keeps its usual light styling. */
+.marketplace-picker-shell,
+.explore-picker-shell {
+  background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.marketplace-picker-shell .category-tile.tone-mint,
+.marketplace-picker-shell .category-tile.tone-gold,
+.marketplace-picker-shell .category-tile.tone-sky,
+.marketplace-picker-shell .category-tile.tone-rose,
+.explore-picker-shell .category-tile.tone-mint,
+.explore-picker-shell .category-tile.tone-gold,
+.explore-picker-shell .category-tile.tone-sky,
+.explore-picker-shell .category-tile.tone-rose {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.marketplace-picker-shell .category-tile:hover,
+.explore-picker-shell .category-tile:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.marketplace-picker-shell .category-tile.is-active,
+.explore-picker-shell .category-tile.is-active {
+  box-shadow: inset 0 0 0 2px #ffffff;
+}
+
+.marketplace-picker-shell .category-tile-icon,
+.explore-picker-shell .category-tile-icon {
+  background: rgba(52, 211, 153, 0.24);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.marketplace-picker-shell .category-tile-label,
+.explore-picker-shell .category-tile-label {
+  color: #ffffff;
+}
+
 /* Every page-hero used to share the exact same background photo
    (assets/vilnius-hero.png) — Home keeps that one, but each of these
    gets its own distinct photo instead so the screens read apart from
