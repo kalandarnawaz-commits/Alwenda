@@ -1387,6 +1387,8 @@ function submitClaim(formData) {
 const iconMap = {
   home: "⌂",
   explore: "🧭",
+  navMarketplace: "🛍️",
+  navCommunity: "💬",
   search: "⌕",
   city: "◫",
   building: "▥",
@@ -2177,8 +2179,8 @@ function renderShell() {
   }
   const navItems = [
     ["home", "nav.home", "app"],
-    ["marketplace", "nav.marketplace", "shop"],
-    ["community", "nav.community", "message"],
+    ["marketplace", "nav.marketplace", "navMarketplace"],
+    ["community", "nav.community", "navCommunity"],
     ["explore", "nav.explore", "explore"]
   ];
   const isHome = state.activeView === "home";
