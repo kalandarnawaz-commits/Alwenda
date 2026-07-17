@@ -121,6 +121,7 @@ const state = {
   translateCameraErrorMessage: null,
   query: "",
   discoverOpen: false,
+  marketplaceCategoryChosen: false,
   activeSheet: null,
   headerSolid: false,
   alwenOpen: false,
@@ -4037,7 +4038,29 @@ function renderMarketplaceCollections(items) {
   `;
 }
 
+/** Marketplace's own landing screen is the category picker, not the
+ * listings page — every arrival here (bottom-nav tab, any other "go to
+ * Marketplace" link) resets state.marketplaceCategoryChosen to false
+ * (see the [data-view] handler in bindEvents), so this branch is what
+ * actually shows first. Picking any tile below — including "All" — sets
+ * it back to true (see the [data-category] handler) and re-renders into
+ * the full page underneath. */
+function renderMarketplacePicker() {
+  return `
+    <section class="section-shell marketplace-picker-shell">
+      <div class="screen-heading">
+        <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
+        <h1>${t("marketplace.marketplaceHeroTitle")}</h1>
+        <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
+      </div>
+      ${renderCategoryTabs("marketplace")}
+    </section>
+  `;
+}
+
 function renderMarketplace() {
+  if (!state.marketplaceCategoryChosen) return renderMarketplacePicker();
+
   const items = filteredListings();
   const pros = filteredProfessionals();
 
@@ -7017,6 +7040,11 @@ function bindEvents() {
          needs its own explicit "scroll this page back to top" here,
          matching the tap-active-tab convention from native tab bars. */
       const isReturningToSameView = state.activeView === button.dataset.view && !state.activeSheet;
+      /* Marketplace's own landing screen is the category-tile picker, not
+         the listings page — every navigation TO marketplace (bottom-nav
+         tab, any other "go to Marketplace" link) should land there fresh,
+         not stay wherever a previous category selection left it. */
+      if (button.dataset.view === "marketplace") state.marketplaceCategoryChosen = false;
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.alwenOpen = false;
@@ -7080,6 +7108,7 @@ function bindEvents() {
       state.activeView = button.dataset.targetView || "marketplace";
       state.activeSheet = null;
       state.alwenOpen = false;
+      if (state.activeView === "marketplace") state.marketplaceCategoryChosen = true;
       render();
     });
   });
