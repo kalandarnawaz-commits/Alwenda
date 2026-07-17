@@ -110,3 +110,18 @@ test("supabaseClient exposes real listing photo upload/fetch, not a mock", async
   assert.match(source, /supabase\.storage\.from\("listing-photos"\)\.upload/);
   assert.match(source, /export async function fetchListingImages/);
 });
+
+test("supabaseClient exposes a real help_requests insert/fetch, not a mock", async () => {
+  const source = await readRepoFile("src/services/auth/supabaseClient.js");
+  assert.match(source, /export async function createHelpRequest/);
+  assert.match(source, /\.from\("help_requests"\)\s*\.insert/);
+  assert.match(source, /export async function fetchMyHelpRequests/);
+  assert.match(source, /\.from\("help_requests"\)\s*\.select/);
+});
+
+test("the manual Need Help form posts a real help request instead of only updating local state", async () => {
+  const source = await readRepoFile("src/main.js");
+  assert.match(source, /async function submitHelpRequest\(\)/);
+  assert.match(source, /await createHelpRequest\(/);
+  assert.doesNotMatch(source, /function submitHelpRequest\(\) \{[\s\S]{0,200}id: Date\.now\(\)/);
+});

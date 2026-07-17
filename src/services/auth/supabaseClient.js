@@ -303,6 +303,45 @@ export async function fetchMyListings() {
   return withImages;
 }
 
+/** Real backing insert for a Hire "post a request" — mirrors createListing.
+ * Used by both the manual Need Help form and (via the create_hire_request
+ * tool in supabase/functions/alwen-chat) Alwen's own request creation, so
+ * a request either path creates is the same real, RLS-scoped row. */
+export async function createHelpRequest({ category, description, urgency, area, city }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const { data, error } = await supabase
+    .from("help_requests")
+    .insert({
+      requester_user_id: user.id,
+      category,
+      description,
+      urgency: urgency || "flexible",
+      area: area || null,
+      city: city || "Vilnius"
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchMyHelpRequests() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("help_requests")
+    .select("*")
+    .eq("requester_user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 /** For a public profile's "Active listings" section — anyone's published
  * listings are readable by RLS regardless of who's asking, so no auth
  * check is needed here (unlike fetchMyListings, which is about the

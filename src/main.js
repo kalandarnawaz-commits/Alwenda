@@ -88,8 +88,10 @@ import {
   fetchMyListings,
   uploadListingPhoto,
   fetchListingsByOwner,
+  createHelpRequest,
+  fetchMyHelpRequests,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=identity-redesign-1";
+} from "./services/auth/supabaseClient.js?v=identity-redesign-2";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
@@ -166,6 +168,7 @@ const state = {
   helpRequestDraft: { text: "", urgency: "flexible" },
   helpRequestPosted: null,
   helpRequestError: null,
+  helpRequestSubmitStatus: "idle",
   listingDraft: {
     title: "",
     description: "",
@@ -182,6 +185,7 @@ const state = {
   listingSubmitStatus: "idle",
   listingSubmitError: null,
   myListings: [],
+  myHelpRequests: [],
   bookingDraft: { dateIndex: null, time: null },
   bookingConfirmed: null,
   directionsOptions: null,
@@ -568,9 +572,10 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   state.auth.authError = null;
   state.hasOnboarded = true;
   writeLocalStorage(ONBOARDED_KEY, true);
-  // Fire-and-forget — "My Listings" in Profile shouldn't block sign-in on
-  // this, and refreshMyListings() already renders once it resolves.
+  // Fire-and-forget — "My Listings"/"My Requests" in Profile shouldn't
+  // block sign-in on this; each refresh renders once it resolves.
   refreshMyListings();
+  refreshMyHelpRequests();
 
   try {
     const profiles = await ensureUserProfiles();
@@ -3496,7 +3501,7 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
     state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
     state.alwenChat.input = "";
     trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
-    if (result.createdHelpRequest) applyAlwenCreatedHelpRequest(result.createdHelpRequest);
+    if (result.createdHelpRequest) applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
     if (result.createdListing) applyCreatedListing(result.createdListing);
   } catch (error) {
     const code = error?.code || "";
@@ -4566,7 +4571,7 @@ function renderPostRequestForm() {
           ${HELP_URGENCY_OPTIONS.map(([value, labelKey]) => `<button type="button" class="chip ${draft.urgency === value ? "is-active" : ""}" data-help-urgency="${value}">${t(labelKey)}</button>`).join("")}
         </div>
       </div>
-      <button type="button" class="auth-primary-button post-request-submit" data-role="submit-help-request">${t("needHelp.needHelpCta")}</button>
+      <button type="button" class="auth-primary-button post-request-submit" data-role="submit-help-request" ${state.helpRequestSubmitStatus === "loading" ? "disabled" : ""}>${state.helpRequestSubmitStatus === "loading" ? t("needHelp.needHelpPosting") : t("needHelp.needHelpCta")}</button>
     </section>
   `;
 }
@@ -4608,7 +4613,55 @@ function renderInlineProSuggestions(category) {
   `;
 }
 
-function submitHelpRequest() {
+/** Shared shape for a real help_requests row (whichever path created it —
+ * see applyCreatedHelpRequest below) so Hire/Need Help renders it the same
+ * way regardless of source. */
+function shapeHelpRequestForDisplay(created) {
+  const matchedCategory = professionalCategories.find((item) => item.value.toLowerCase() === String(created.category || "").toLowerCase());
+  const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === created.urgency);
+  return {
+    id: created.id,
+    title: created.description,
+    area: created.area || created.city || city.name || "Vilnius",
+    budget: null,
+    urgency: t(matchedUrgency?.[1] || "needHelp.urgencyFlexible"),
+    status: t(`status.${created.status}`) || t("status.open"),
+    quotes: [],
+    category: matchedCategory ? t(matchedCategory.labelKey) : created.category
+  };
+}
+
+/** Called after a real insert — either the manual Need Help form
+ * (submitHelpRequest) or Alwen's own request creation (the
+ * create_hire_request tool in supabase/functions/alwen-chat) — so a
+ * request either path creates shows up in Hire/Need Help identically,
+ * not as a second, differently-shaped kind of card. */
+function applyCreatedHelpRequest(created, { source = "manual" } = {}) {
+  const request = shapeHelpRequestForDisplay(created);
+  helpRequests.unshift(request);
+  state.myHelpRequests.unshift(created);
+  trackEvent("help_request_posted", { hasCategory: Boolean(created.category), urgency: created.urgency, source });
+  return request;
+}
+
+/** Fire-and-forget, called both right after sign-in and every time the user
+ * opens Profile or Hire — mirrors refreshMyListings() so a transient network
+ * hiccup doesn't leave "My Requests" empty for the rest of the session. */
+async function refreshMyHelpRequests() {
+  try {
+    state.myHelpRequests = await fetchMyHelpRequests();
+    for (const item of state.myHelpRequests) {
+      if (!helpRequests.some((existing) => String(existing.id) === String(item.id))) {
+        helpRequests.unshift(shapeHelpRequestForDisplay(item));
+      }
+    }
+    render();
+  } catch (error) {
+    console.warn("[helpRequests] Failed to load my help requests.", error);
+  }
+}
+
+async function submitHelpRequest() {
   const draft = state.helpRequestDraft;
   const text = draft.text.trim();
   if (text.length < 8) {
@@ -4616,45 +4669,32 @@ function submitHelpRequest() {
     render();
     return;
   }
+  if (state.auth.status !== "signedIn") {
+    state.helpRequestError = t("needHelp.signInToPost");
+    render();
+    return;
+  }
 
-  const category = QUICK_HELP_CATEGORIES.find((item) => item.value === state.hireCategory);
-  const request = {
-    id: Date.now(),
-    title: text,
-    area: state.area === "All" ? city.name : state.area,
-    budget: null,
-    urgency: t(HELP_URGENCY_OPTIONS.find(([value]) => value === draft.urgency)?.[1] || "needHelp.urgencyFlexible"),
-    status: t("status.open"),
-    quotes: [],
-    category: category ? t(category.labelKey) : null
-  };
-
-  helpRequests.unshift(request);
-  trackEvent("help_request_posted", { hasCategory: Boolean(category), urgency: draft.urgency });
-  state.helpRequestPosted = request;
+  state.helpRequestSubmitStatus = "loading";
   state.helpRequestError = null;
   render();
-}
 
-/** Mirrors submitHelpRequest()'s request shape so a request Alwen creates
- * (after the user confirms it in chat — see the create_hire_request tool in
- * supabase/functions/alwen-chat) shows up in Hire/Need Help exactly like a
- * manually posted one, not as a second, differently-shaped kind of card. */
-function applyAlwenCreatedHelpRequest(created) {
-  const matchedCategory = professionalCategories.find((item) => item.value.toLowerCase() === String(created.category || "").toLowerCase());
-  const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === created.urgency);
-  const request = {
-    id: created.id,
-    title: created.description,
-    area: created.area || created.city || city.name || "Vilnius",
-    budget: null,
-    urgency: t(matchedUrgency?.[1] || "needHelp.urgencyFlexible"),
-    status: t("status.open"),
-    quotes: [],
-    category: matchedCategory ? t(matchedCategory.labelKey) : created.category
-  };
-  helpRequests.unshift(request);
-  trackEvent("help_request_posted", { hasCategory: Boolean(matchedCategory), urgency: created.urgency, source: "alwen" });
+  try {
+    const created = await createHelpRequest({
+      category: state.hireCategory || "general",
+      description: text,
+      urgency: draft.urgency,
+      area: state.area === "All" ? null : state.area,
+      city: city.name
+    });
+    const request = applyCreatedHelpRequest(created);
+    state.helpRequestPosted = request;
+    state.helpRequestSubmitStatus = "idle";
+  } catch (error) {
+    state.helpRequestSubmitStatus = "idle";
+    state.helpRequestError = error?.message || t("needHelp.postError");
+  }
+  render();
 }
 
 function resetHelpRequestDraft() {
@@ -6047,6 +6087,7 @@ function renderProfile() {
 
       ${renderProfileQuickActions()}
       ${renderMyListings()}
+      ${renderMyHelpRequests()}
       ${renderMyBusinesses()}
 
       <div class="settings-section trust-section">
@@ -6155,6 +6196,35 @@ function renderMyListings() {
           </button>
         `
           )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/** state.myHelpRequests holds real rows straight from the help_requests
+ * table (populated by refreshMyHelpRequests()) — mirrors renderMyListings()
+ * above. There's no dedicated per-request detail screen, so each row just
+ * opens Hire, where the request also appears in the general list. */
+function renderMyHelpRequests() {
+  if (state.auth.status !== "signedIn" || !state.myHelpRequests.length) return "";
+  return `
+    <div class="settings-section">
+      <h3>${t("needHelp.myRequestsTitle")}</h3>
+      <div class="my-business-list">
+        ${state.myHelpRequests
+          .map((item) => {
+            const matchedCategory = professionalCategories.find((category) => category.value.toLowerCase() === String(item.category || "").toLowerCase());
+            return `
+          <button type="button" class="my-business-row" data-view="hire">
+            <div>
+              <strong>${escapeHtml(item.description)}</strong>
+              <span>${matchedCategory ? t(matchedCategory.labelKey) : escapeHtml(item.category)} · ${t(`status.${item.status}`) || item.status}</span>
+            </div>
+            ${icon("arrow")}
+          </button>
+        `;
+          })
           .join("")}
       </div>
     </div>
@@ -6873,6 +6943,9 @@ function bindEvents() {
       // for the rest of the session if that one attempt hit any hiccup.
       if ((button.dataset.view === "profile" || button.dataset.view === "marketplace") && state.auth.status === "signedIn") {
         refreshMyListings();
+      }
+      if ((button.dataset.view === "profile" || button.dataset.view === "hire" || button.dataset.view === "needHelp") && state.auth.status === "signedIn") {
+        refreshMyHelpRequests();
       }
       if (button.dataset.seeAllCategory) {
         state.exploreCategory = button.dataset.seeAllCategory;
