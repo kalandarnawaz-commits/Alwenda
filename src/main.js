@@ -1697,15 +1697,13 @@ function bindCoverflow() {
       window.requestAnimationFrame(update);
     }, { passive: true });
 
-    slides.forEach((slide) => {
-      slide.addEventListener("click", (event) => {
-        if (slide.classList.contains("is-active")) return;
-        event.preventDefault();
-        event.stopPropagation();
-        slide.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }, { capture: true });
-    });
-
+    /* A capture-phase click handler used to swallow taps on any slide that
+       wasn't already centered (recentering it instead of opening it), so a
+       card only opened on a second tap — and for a slide that could never
+       become "active" (e.g. the first/last one, with nowhere left to
+       scroll to center it), it never opened at all. Every other card type
+       in the app opens on a single tap; this rail should match that
+       instead of requiring a hidden double-tap. */
     update();
   });
 }
@@ -1938,6 +1936,15 @@ function matchesQuery(text) {
 
   if (!tokens.length) return true;
 
+  /* "service"/"professional"/"available" used to be included here on
+     nearly every hire-related entry as generic catch-all synonyms — but
+     those words show up as substrings of totally unrelated content (a
+     bicycle listing described as "Recently serviced", a business typed
+     "service-apartments"), so a search for "cleaner" was matching a bike.
+     Kept only the specific synonyms that actually discriminate; a hire
+     professional's own category text ("Cleaning & childcare", "Plumbing &
+     repairs") already contains these words, so nothing true-positive is
+     lost by dropping the generic ones. */
   const intentTerms = {
     dinner: ["restaurant", "bistro", "food", "lunch"],
     eat: ["restaurant", "bistro", "food", "lunch"],
@@ -1950,24 +1957,24 @@ function matchesQuery(text) {
     bicycle: ["bike", "vehicle", "sell"],
     sell: ["buy-sell", "marketplace", "available"],
     sleep: ["hotel", "apartment", "suite"],
-    fix: ["repair", "service", "screen", "phone"],
-    plumber: ["plumbing", "repair", "service", "professional"],
-    cleaner: ["cleaning", "service", "professional"],
-    book: ["booking", "available", "professional", "restaurant"],
-    help: ["service", "professional", "quote", "available"],
-    assemble: ["ikea", "furniture", "repair", "service", "professional"],
-    ikea: ["assembly", "furniture", "repair", "service", "professional"],
-    furniture: ["assembly", "moving", "repair", "service", "professional"],
-    plumbing: ["plumber", "repair", "service"],
-    cleaning: ["cleaning", "service"],
-    electrical: ["electrical", "repair", "service"],
-    tutoring: ["tutoring", "teacher", "service"],
-    childcare: ["childcare", "service"],
-    photography: ["photography", "events", "service"],
-    moving: ["moving", "service"],
-    legal: ["legal", "contracts", "service"],
-    accounting: ["accounting", "tax", "service"],
-    support: ["it support", "devices", "service"],
+    fix: ["repair", "screen", "phone"],
+    plumber: ["plumbing", "repair"],
+    cleaner: ["cleaning"],
+    book: ["booking", "restaurant"],
+    help: ["quote"],
+    assemble: ["ikea", "furniture", "repair"],
+    ikea: ["assembly", "furniture", "repair"],
+    furniture: ["assembly", "moving", "repair"],
+    plumbing: ["plumber", "repair"],
+    cleaning: ["cleaner"],
+    electrical: ["electrical", "repair"],
+    tutoring: ["tutoring", "teacher"],
+    childcare: ["childcare"],
+    photography: ["photography", "events"],
+    moving: ["moving"],
+    legal: ["legal", "contracts"],
+    accounting: ["accounting", "tax"],
+    support: ["it support", "devices"],
     doctor: ["clinic", "medical", "health"],
     medicine: ["pharmacy", "health"],
     job: ["barista", "hiring", "shift"],
@@ -1976,7 +1983,10 @@ function matchesQuery(text) {
 
   const expanded = tokens.flatMap((token) => [token, ...(intentTerms[token] || [])]);
   const normalizedText = text.toLowerCase();
-  return expanded.some((token) => normalizedText.includes(token));
+  /* Word-boundary match, not a raw substring check — otherwise a term
+     like "service" would also match "serviced" or "service-apartments",
+     content that has nothing to do with what was actually typed. */
+  return expanded.some((token) => new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(normalizedText));
 }
 
 function queryScore(text) {
@@ -2092,7 +2102,7 @@ function filteredHelpRequests() {
   });
 }
 
-function topMatches() {
+function topMatches(limit = 4) {
   const routed = routeForQuery();
   const translationMatches =
     routed === "translate"
@@ -2158,7 +2168,7 @@ function topMatches() {
           ? [...translationMatches, ...placeMatches, ...importedMatches]
           : [...placeMatches, ...importedMatches, ...proMatches, ...listingMatches, ...helpMatches, ...offerMatches];
 
-  return ordered.slice(0, 4);
+  return ordered.slice(0, limit);
 }
 
 function renderNavButton([view, label, iconName]) {
@@ -2711,6 +2721,7 @@ function renderAlwenWorkspace() {
         <p class="eyebrow">${t("alwen.alwenWorkspace")}</p>
         <h1>${t("alwen.alwenWorkspaceTitle")}</h1>
         ${renderAiSearch("home")}
+        ${renderAiSearchResults()}
         ${renderAlwenInputModes()}
         <div class="conversation-router">
           ${[
@@ -2890,7 +2901,6 @@ const LIVING_SIGNAL_DESTINATION = [
 ];
 
 function renderHome() {
-  const matches = topMatches();
   const daySuffix = timeOfDaySuffix();
   const displayName = state.auth.status === "signedIn" ? `, ${escapeHtml(state.auth.user.name.split(" ")[0])}` : "";
   const digest = buildTodayDigest();
@@ -2927,14 +2937,7 @@ function renderHome() {
       </div>
     </section>
 
-    ${
-      state.query.trim()
-        ? `<section class="section-shell">
-            <div class="section-title"><h2>${t("common.aiResults")}</h2><button data-view="${routeForQuery()}">${t("common.seeAll")}</button></div>
-            <div class="match-list">${matches.map(renderMatch).join("") || renderEmptyState(t("common.noResults"))}</div>
-          </section>`
-        : ""
-    }
+    ${renderAiSearchResults()}
 
     ${renderLiveAroundYou()}
     ${renderTrendingMarketplace()}
@@ -3348,8 +3351,24 @@ function renderAiSearch(context) {
     <div class="ai-search ${context === "home" ? "is-large" : ""}">
       <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
       <input id="global-search" value="${escapeHtml(state.query)}" placeholder="${t("common.aiSearchPlaceholder")}" aria-label="${t("common.aiSearchPlaceholder")}" />
-      <button data-view="${routeForQuery()}">${t("common.tellAlwen")}</button>
+      <button type="button" data-action="ai-search-submit">${t("common.tellAlwen")}</button>
     </div>
+  `;
+}
+
+/** Cross-entity "here's what matches what you typed" panel — shown under
+ * every renderAiSearch() call site so Tell Alwen surfaces relevant results
+ * in place instead of navigating to a different screen. Results already
+ * update live as the user types, since the #global-search input handler
+ * re-renders the whole screen on every keystroke. */
+function renderAiSearchResults(limit = 6) {
+  if (!state.query.trim()) return "";
+  const matches = topMatches(limit);
+  return `
+    <section class="section-shell ai-search-results" data-role="ai-search-results">
+      <div class="section-title"><h2>${t("common.aiResults")}</h2></div>
+      <div class="match-list">${matches.map(renderMatch).join("") || renderEmptyState(t("common.noResults"))}</div>
+    </section>
   `;
 }
 
@@ -3813,6 +3832,7 @@ function renderCreate() {
         <h1>${t("common.createTitle")}</h1>
       </div>
       ${renderAiSearch("create")}
+      ${renderAiSearchResults()}
       <div class="create-command-centre" aria-label="${t("nav.create")}">
         <div class="create-primary-actions">
           ${primaryCreationActions.map(([iconName, titleKey, hintKey, view]) => `
@@ -3855,6 +3875,7 @@ function renderCommunity() {
         </div>
         ${renderAiSearch("community")}
       </section>
+      ${renderAiSearchResults()}
       <div class="community-summary">
         <article><strong>23</strong><span>${t("common.peopleLookingForHelp")}</span></article>
         <article><strong>8</strong><span>${t("common.newNeighbourPosts")}</span></article>
@@ -3938,9 +3959,7 @@ function renderExplore() {
         </div>
         ${renderAiSearch("explore")}
       </section>
-      <div class="match-list roomy">
-        ${topMatches().map(renderMatch).join("") || renderEmptyState(t("common.noResults"))}
-      </div>
+      ${renderAiSearchResults()}
       <div class="section-title">
         <div><h2>${t("import.importedDirectory")}</h2><p>${t("import.importedDirectoryHint")}</p></div>
       </div>
@@ -4026,6 +4045,7 @@ function renderMarketplace() {
         </div>
         ${renderAiSearch("marketplace")}
       </section>
+      ${renderAiSearchResults()}
       ${renderCapabilityRail()}
       <div class="need-help-card">
         <div>
@@ -4099,6 +4119,7 @@ function renderContribute() {
         <h1>${t("common.contributeTitle")}</h1>
       </div>
       ${renderAiSearch("contribute")}
+      ${renderAiSearchResults()}
       <div class="score-grid">
         ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.id] || "spark", t(score.labelKey), score.value, undefined, CONTRIBUTION_SCORE_TONE[score.id])).join("")}
         ${reputationTile(streakTile.icon, streakTile.label, streakTile.value)}
@@ -4466,6 +4487,7 @@ function renderHire() {
         </div>
         ${renderAiSearch("hire")}
       </section>
+      ${renderAiSearchResults()}
       <button class="need-help-wide" data-view="needHelp">${icon("help")}<span class="need-help-wide-text"><strong>${t("needHelp.needHelpTitle")}</strong><small>${t("needHelp.needHelpHint")}</small></span></button>
       ${renderPostRequestForm()}
       <div class="category-cloud">
@@ -4927,6 +4949,7 @@ function renderBusinesses() {
         </div>
         ${renderAiSearch("businesses")}
       </section>
+      ${renderAiSearchResults()}
       <div class="visual-business-grid">
         ${items
           .map(
@@ -5203,6 +5226,8 @@ function renderReservations() {
         </div>
         ${renderAiSearch("reservations")}
       </section>
+
+      ${renderAiSearchResults()}
 
       <div class="request-form-card">
         <h2>${t("common.newRequestTitle")}</h2>
@@ -7111,6 +7136,14 @@ function bindEvents() {
       state.savedListingIds = state.savedListingIds.includes(id) ? state.savedListingIds.filter((existing) => existing !== id) : [...state.savedListingIds, id];
       trackEvent("place_saved", { listingId: id });
       render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("global-search")?.blur();
+      if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
+      document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
