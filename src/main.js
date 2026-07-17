@@ -4048,11 +4048,13 @@ function renderMarketplaceCollections(items) {
 function renderMarketplacePicker() {
   return `
     <section class="section-shell marketplace-picker-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
-        <h1>${t("marketplace.marketplaceHeroTitle")}</h1>
-        <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
-      </div>
+      <section class="city-hero page-hero marketplace-picker-hero" aria-labelledby="marketplace-picker-title">
+        <div class="city-hero-copy">
+          <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
+          <h1 id="marketplace-picker-title">${t("marketplace.marketplaceHeroTitle")}</h1>
+          <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
+        </div>
+      </section>
       ${renderCategoryTabs("marketplace")}
     </section>
   `;

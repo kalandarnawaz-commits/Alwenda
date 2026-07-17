@@ -1382,6 +1382,44 @@ body.has-open-sheet {
   background: radial-gradient(circle, var(--ink) 0 40%, transparent 42%);
 }
 
+/* Marketplace's landing picker needs to read as one screen — photo, then
+   the tiles, nothing to scroll past on a typical phone — so this trims
+   the shared .city-hero/.page-hero sizing down from its normal 300-420px
+   band to a short photo strip, and tightens the tile grid's own spacing
+   a little further on top of the general compact-tile-grid rule. */
+.marketplace-picker-hero.city-hero.page-hero {
+  min-height: clamp(120px, 20vw, 170px);
+  padding: clamp(14px, 3.5vw, 24px);
+}
+
+.marketplace-picker-hero.city-hero.page-hero h1 {
+  font-size: clamp(1.5rem, 4.5vw, 2.2rem);
+}
+
+.marketplace-picker-hero .city-hero-copy {
+  gap: 3px;
+}
+
+.marketplace-picker-shell .category-tile-grid {
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.marketplace-picker-shell .category-tile {
+  padding: 12px 4px 10px;
+  gap: 6px;
+}
+
+.marketplace-picker-shell .category-tile-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 1.4rem;
+}
+
+.marketplace-picker-shell .category-tile-label {
+  font-size: 0.68rem;
+}
+
 .intent-suggestions,
 .chip-row,
 .mode-tabs {
