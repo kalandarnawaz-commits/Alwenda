@@ -3901,7 +3901,6 @@ function renderCommunity() {
         </div>
         ${renderAiSearch("community")}
       </section>
-      ${renderAiSearchResults(6, "community")}
       <div class="community-summary">
         <article><strong>23</strong><span>${t("common.peopleLookingForHelp")}</span></article>
         <article><strong>8</strong><span>${t("common.newNeighbourPosts")}</span></article>
@@ -3910,6 +3909,12 @@ function renderCommunity() {
       <div class="pulse-list">
         ${feedPosts.map(renderPulse).join("")}
       </div>
+      ${/* Community's own feed and stats are the neighbourhood's actual
+         content — Nearby picks/Alwen found used to sit above them,
+         right under the hero, and outranked the real feed. Pushed
+         below the feed so it reads as a supplementary find, not the
+         headline. */
+        renderAiSearchResults(6, "community")}
       <div class="section-title">
         <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
         <button data-view="needHelp">${t("needHelp.needHelpCta")}</button>
