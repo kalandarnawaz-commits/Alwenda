@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "production-foundation-20260715";
+const RELEASE_VERSION = "production-foundation-20260717-mobile-layout";
 const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
 const AUTH_CALLBACK_PATH = "/auth/callback";

@@ -1341,7 +1341,10 @@ body.has-open-sheet {
   color: var(--ink);
 }
 
-@media (max-width: 430px) {
+/* Keep phone-sized and narrow portrait layouts on a complete three-column
+   rhythm. Some larger phones report a CSS viewport above 430px, which used
+   to leave Marketplace and Explore on the desktop four-column layout. */
+@media (max-width: 600px) {
   .category-tile-grid {
     grid-template-columns: repeat(3, 1fr);
   }
