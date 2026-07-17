@@ -3998,7 +3998,7 @@ function renderExplore() {
       <div class="section-title">
         <div><h2>${t("import.importedDirectory")}</h2><p>${t("import.importedDirectoryHint")}</p></div>
       </div>
-      ${renderCategoryTileGrid(
+      ${renderCategoryChipRow(
         ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
           label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
           iconGlyph: cat === "All" ? "🧭" : EXPLORE_CATEGORY_EMOJI[cat] || "📍",
@@ -4120,7 +4120,7 @@ function renderMarketplace() {
         </div>
         <button data-view="needHelp">${t("needHelp.needHelpCta")}</button>
       </div>
-      ${renderCategoryTabs("marketplace")}
+      ${renderMarketplaceCategoryChipRow("marketplace")}
       ${renderDiscoverToggle()}
       ${renderAiSearchResults()}
       ${renderMarketplaceCollections(items)}
@@ -4964,8 +4964,8 @@ function renderHelpRequest(request) {
   `;
 }
 
-function renderCategoryTabs(targetView = "marketplace") {
-  return renderCategoryTileGrid([
+function marketplaceCategoryTiles(targetView) {
+  return [
     { label: t("common.allCategories"), iconGlyph: "🧭", isActive: state.category === "all", attrs: `data-category="all" data-target-view="${targetView}"` },
     ...categories.map((category) => ({
       label: t(category.labelKey),
@@ -4973,7 +4973,19 @@ function renderCategoryTabs(targetView = "marketplace") {
       isActive: state.category === category.id,
       attrs: `data-category="${category.id}" data-target-view="${targetView}"`
     }))
-  ]);
+  ];
+}
+
+function renderCategoryTabs(targetView = "marketplace") {
+  return renderCategoryTileGrid(marketplaceCategoryTiles(targetView));
+}
+
+/** Chip-row version for the full Marketplace results page — the picker
+ * screen in front of it already showed the box grid, so repeating it
+ * here would read as a second picker rather than a filter on results
+ * already in view. See renderCategoryChipRow. */
+function renderMarketplaceCategoryChipRow(targetView = "marketplace") {
+  return renderCategoryChipRow(marketplaceCategoryTiles(targetView));
 }
 
 function renderListings() {
@@ -6597,6 +6609,29 @@ function renderCategoryTileGrid(tiles) {
             <button type="button" class="category-tile tone-${CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length]} ${tile.isActive ? "is-active" : ""}" ${tile.attrs}>
               <span class="category-tile-icon">${tile.iconGlyph}</span>
               <span class="category-tile-label">${tile.label}</span>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+/** Compact pill-row version of the same tile data — used on the full
+ * Marketplace/Explore results pages instead of renderCategoryTileGrid's
+ * big boxes, since the box grid is what the picker screen in front of
+ * this page already showed; repeating it here just to let someone
+ * switch category reads as a second picker, not a filter. Same
+ * {label, iconGlyph, isActive, attrs} tile shape, so callers can reuse
+ * whatever list they already built for the box grid version. */
+function renderCategoryChipRow(tiles) {
+  return `
+    <div class="chip-row explore-category-row" role="list">
+      ${tiles
+        .map(
+          (tile) => `
+            <button type="button" class="${tile.isActive ? "is-selected" : ""}" ${tile.attrs}>
+              <span aria-hidden="true">${tile.iconGlyph}</span> ${tile.label}
             </button>
           `
         )
