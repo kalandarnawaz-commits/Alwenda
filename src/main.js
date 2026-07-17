@@ -3425,23 +3425,16 @@ function renderAlwenDock() {
         </div>
 
         <p class="alwen-panel-intro">${t("alwen.alwenDockHint")}</p>
-        <form class="alwen-chat-form" data-alwen-chat-form>
-          <label for="alwen-chat-input">${t("alwen.alwenChatLabel")}</label>
-          <div class="alwen-chat-compose">
-            <textarea id="alwen-chat-input" name="message" maxlength="2000" rows="3" placeholder="${t("alwen.alwenChatPlaceholder")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
-            <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
-          </div>
-        </form>
-        ${isLoading ? `
-          <div class="alwen-status-row" role="status">
-            <span class="alwen-status-dot" aria-hidden="true"></span>
-            <span>${t("alwen.alwenChatLooking")}</span>
-          </div>
-        ` : ""}
         ${chat.status === "success" ? `
           <div class="alwen-chat-answer" role="status">
             <strong>${t("alwen.alwenChatAnswerLabel")}</strong>
             <p>${escapeHtml(chat.answer)}</p>
+          </div>
+        ` : ""}
+        ${isLoading ? `
+          <div class="alwen-status-row" role="status">
+            <span class="alwen-status-dot" aria-hidden="true"></span>
+            <span>${t("alwen.alwenChatLooking")}</span>
           </div>
         ` : ""}
         ${chat.status === "error" ? `
@@ -3453,6 +3446,13 @@ function renderAlwenDock() {
             </div>
           </div>
         ` : ""}
+        <form class="alwen-chat-form" data-alwen-chat-form>
+          <label for="alwen-chat-input">${t("alwen.alwenChatLabel")}</label>
+          <div class="alwen-chat-compose">
+            <textarea id="alwen-chat-input" name="message" maxlength="2000" rows="3" placeholder="${t("alwen.alwenChatPlaceholder")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
+            <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
+          </div>
+        </form>
         <div class="alwen-mode-row">
           <button type="button" data-alwen-upload="image">${icon("uploadImageMode")}${t("common.uploadImage")}</button>
           <button type="button" data-alwen-upload="document">${icon("uploadDocumentMode")}${t("common.uploadDocument")}</button>
