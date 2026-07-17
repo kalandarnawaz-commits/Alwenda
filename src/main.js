@@ -1542,22 +1542,6 @@ function renderEmptyState(message, iconName = "search") {
    to actually look like their category (a handshake, a car, a building),
    which the app's abstract geometric glyph set (iconMap above) can't do,
    so they're hand-drawn inline SVGs instead of single Unicode characters. */
-const CATEGORY_ICON_SVG = {
-  "buy-sell": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 3.4 20 10.8a2 2 0 0 1 0 2.8l-6.4 6.4a2 2 0 0 1-2.8 0L3.4 12.6a2 2 0 0 1-.6-1.4V4.5A1.1 1.1 0 0 1 3.9 3.4h6.7c.5 0 1 .2 1.4.6z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>`,
-  rentals: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.5"/><path d="M10.5 10.5 20 20"/><path d="M16.7 16.7l2-2"/><path d="M19 19l2-2"/></svg>`,
-  jobs: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6.2" r="2.2"/><path d="M2.7 14.8c0-2.9 1.9-4.3 3.3-4.3s3.3 1.4 3.3 4.3"/><path d="M13 15.3h9l-1.2-3.3a1 1 0 0 0-.9-.6h-4.8a1 1 0 0 0-.9.6L13 15.3z"/><circle cx="15.4" cy="16.3" r="1.2"/><circle cx="19.6" cy="16.3" r="1.2"/></svg>`,
-  services: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5l-6 6a1.4 1.4 0 0 0 2 2l6-6a4 4 0 0 0 5-5.4l-2.5 2.5-2.1-2.1z"/></svg>`,
-  vehicles: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16l1.2-4.8A2 2 0 0 1 6.1 9.6h11.8a2 2 0 0 1 1.9 1.6L21 16"/><path d="M3 16h18v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-.5H6V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3z"/><circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/></svg>`,
-  property: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/><path d="M10 21v-4h4v4"/></svg>`,
-  "business-listings": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-4h16l1 4"/><path d="M3 9a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5"/></svg>`,
-  "community-requests": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="2.6"/><path d="M3.5 19c0-3.5 2.3-5.5 5.5-5.5s5.5 2 5.5 5.5"/><circle cx="17" cy="9" r="2.1"/><path d="M14.8 13.6c1-.5 1.9-.6 2.2-.6 2.6 0 4.5 1.7 4.5 4.6"/></svg>`
-};
-
-function categoryIcon(categoryId) {
-  const svg = CATEGORY_ICON_SVG[categoryId];
-  return svg ? `<span class="icon category-icon" aria-hidden="true">${svg}</span>` : "";
-}
-
 /* Inline SVG pin — the iconMap's "⌖" glyph renders as a stray coloured
    emoji-style symbol on some platforms, which read as broken/off-brand
    on the photo-overlay distance badge and address line. A drawn SVG
@@ -3966,7 +3950,7 @@ function renderExplore() {
       ${renderCategoryTileGrid(
         ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
           label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
-          iconGlyph: cat === "All" ? "◈" : CATEGORY_ICON[cat] || "◈",
+          iconGlyph: cat === "All" ? "🧭" : EXPLORE_CATEGORY_EMOJI[cat] || "📍",
           isActive: state.exploreCategory === cat,
           attrs: `data-explore-category="${cat}"`
         }))
@@ -4904,10 +4888,10 @@ function renderHelpRequest(request) {
 
 function renderCategoryTabs(targetView = "marketplace") {
   return renderCategoryTileGrid([
-    { label: t("common.allCategories"), iconGlyph: "◈", isActive: state.category === "all", attrs: `data-category="all" data-target-view="${targetView}"` },
+    { label: t("common.allCategories"), iconGlyph: "🧭", isActive: state.category === "all", attrs: `data-category="all" data-target-view="${targetView}"` },
     ...categories.map((category) => ({
       label: t(category.labelKey),
-      iconGlyph: categoryIcon(category.id),
+      iconGlyph: MARKETPLACE_CATEGORY_EMOJI[category.id] || "🏷️",
       isActive: state.category === category.id,
       attrs: `data-category="${category.id}" data-target-view="${targetView}"`
     }))
@@ -6542,6 +6526,39 @@ function renderCategoryTileGrid(tiles) {
     </div>
   `;
 }
+
+/** Real, colourful emoji instead of the app's usual minimal line-icons —
+ * deliberately a different, richer register for this one "browse by
+ * category" picker, matching the emoji already used for individual
+ * business subcategory badges elsewhere (SUBCATEGORY_ICON below) rather
+ * than inventing a new icon language. */
+const EXPLORE_CATEGORY_EMOJI = {
+  "Food & Drink": "🍽️",
+  Groceries: "🛒",
+  Pharmacy: "💊",
+  Healthcare: "🏥",
+  Hotels: "🏨",
+  Shops: "🛍️",
+  "Beauty & Wellness": "💆",
+  Transport: "🚌",
+  "Public Services": "🏛️",
+  Attractions: "🎡",
+  Parks: "🌳",
+  Finance: "🏦",
+  Education: "🎓",
+  Nightlife: "🌃"
+};
+
+const MARKETPLACE_CATEGORY_EMOJI = {
+  "buy-sell": "🏷️",
+  rentals: "🔑",
+  jobs: "💼",
+  services: "🛠️",
+  vehicles: "🚗",
+  property: "🏘️",
+  "business-listings": "🏢",
+  "community-requests": "🤝"
+};
 
 const CATEGORY_ICON = {
   "Food & Drink": "◒",
