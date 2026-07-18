@@ -99,6 +99,12 @@ import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
 const CITY_CENTER = { lat: 54.6872, lng: 25.2797 }; // Vilnius, Cathedral Square — stand-in for real geolocation
 
+const WEATHER_CONDITIONS = {
+  en: { clear: "Clear", cloudy: "Cloudy", fog: "Foggy", rain: "Rain", snow: "Snow", storm: "Storms" },
+  lt: { clear: "Giedra", cloudy: "Debesuota", fog: "Rūkas", rain: "Lietus", snow: "Sniegas", storm: "Audra" },
+  de: { clear: "Klar", cloudy: "Bewölkt", fog: "Nebel", rain: "Regen", snow: "Schnee", storm: "Gewitter" }
+};
+
 const state = {
   language: "en",
   activeView: "home",
@@ -128,6 +134,7 @@ const state = {
   headerSolid: false,
   alwenOpen: false,
   quickTranslateOpen: false,
+  localWeather: null,
   alwenChat: {
     input: "",
     lastMessage: "",
@@ -1483,6 +1490,52 @@ function timeOfDaySuffix() {
   return "";
 }
 
+function weatherCondition(code) {
+  const labels = WEATHER_CONDITIONS[state.language] || WEATHER_CONDITIONS.en;
+  if (code === 0) return ["☀️", labels.clear];
+  if ([1, 2, 3].includes(code)) return ["☁️", labels.cloudy];
+  if ([45, 48].includes(code)) return ["🌫️", labels.fog];
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return ["❄️", labels.snow];
+  if ([95, 96, 99].includes(code)) return ["⛈️", labels.storm];
+  return ["🌧️", labels.rain];
+}
+
+async function refreshLocalWeather() {
+  try {
+    const params = new URLSearchParams({
+      latitude: String(CITY_CENTER.lat),
+      longitude: String(CITY_CENTER.lng),
+      current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
+      timezone: "auto"
+    });
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!response.ok) throw new Error(`Weather request failed (${response.status})`);
+    const payload = await response.json();
+    if (!Number.isFinite(payload.current?.temperature_2m)) throw new Error("Weather response is incomplete");
+    state.localWeather = payload.current;
+    if (state.activeView === "home") render();
+  } catch {
+    /* Weather is progressive context: keep the existing neutral fallback
+       instead of surfacing network/provider errors in the Home hero. */
+  }
+}
+
+function currentLivingCitySignals() {
+  if (!state.localWeather) return livingCitySignals;
+  const [emoji, condition] = weatherCondition(state.localWeather.weather_code);
+  const temperature = Math.round(state.localWeather.temperature_2m);
+  const feelsLike = Math.round(state.localWeather.apparent_temperature);
+  const wind = Math.round(state.localWeather.wind_speed_10m);
+  return [
+    {
+      ...livingCitySignals[0],
+      value: `${temperature}°C`,
+      detail: `${emoji} ${condition} · 🌡️ ${feelsLike}°C · 💨 ${wind} km/h`
+    },
+    ...livingCitySignals.slice(1)
+  ];
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1703,6 +1756,21 @@ function bindCoverflow() {
       queued = true;
       window.requestAnimationFrame(update);
     }, { passive: true });
+
+    /* Transformed cover-flow slides do not consistently deliver their
+       bubbling click to the per-card listener in every browser (notably
+       iOS Safari). Handle activation at the stable viewport instead. */
+    viewport.addEventListener("click", (event) => {
+      const card = event.target.closest('[data-sheet="place"][data-place-id]');
+      if (!card || !viewport.contains(card)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      state.selectedPlaceId = card.dataset.placeId;
+      state.activeSheet = "place";
+      const item = importedBusinesses.find((business) => business.id === card.dataset.placeId);
+      trackEvent("business_viewed", { businessId: card.dataset.placeId, category: item?.category });
+      render();
+    });
 
     /* A capture-phase click handler used to swallow taps on any slide that
        wasn't already centered (recentering it instead of opening it), so a
@@ -2986,13 +3054,13 @@ function renderHome() {
         ].map(([label, view]) => `<button data-view="${view}">${t(label)}</button>`).join("")}
       </div>
       <div class="living-signal-row">
-        ${livingCitySignals.map((signal, index) => {
+        ${currentLivingCitySignals().map((signal, index) => {
           const dest = LIVING_SIGNAL_DESTINATION[index] || { view: "explore" };
           return `
             <article class="living-signal-tile" role="button" tabindex="0" data-view="${dest.view}" ${dest.category ? `data-category="${dest.category}"` : ""}>
               <span>${t(signal.labelKey)}</span>
               <strong>${signal.value}</strong>
-              <p>${t(signal.detailKey)}</p>
+              <p>${signal.detail || t(signal.detailKey)}</p>
               <span class="living-signal-tile-arrow">${icon("arrow")}</span>
             </article>
           `;
@@ -4449,9 +4517,9 @@ function marketplaceListingRail(titleKey, hintKey, items) {
       titleKey,
       "living-rail marketplace-rail",
       items.map((item) => `
-        <article class="market-mini-card" data-view="marketplace">
+        <article class="market-mini-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
           <div class="card-photo" style="background-image: url('${item.image}')"></div>
-          <button class="mini-save" aria-label="${t("common.favourite")}">${icon("heart")}</button>
+          <button type="button" class="mini-save ${state.savedListingIds.includes(String(item.id)) ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
           <span>${categoryLabel(item.type)}</span>
           <h3>${t(item.titleKey)}</h3>
           <div class="mini-price-line"><strong>${item.price}</strong><em>${item.popularity}</em></div>
@@ -9071,6 +9139,19 @@ registerServiceWorker();
 bindInstallPrompt();
 bindErrorTracking();
 bindPhotoZoom();
+refreshLocalWeather();
+
+/* Keep the greeting synchronized if Home stays open across noon/evening,
+   and refresh current conditions periodically without a page reload. */
+let lastGreetingSuffix = timeOfDaySuffix();
+window.setInterval(() => {
+  const nextSuffix = timeOfDaySuffix();
+  if (nextSuffix !== lastGreetingSuffix) {
+    lastGreetingSuffix = nextSuffix;
+    if (state.activeView === "home") render();
+  }
+}, 60_000);
+window.setInterval(refreshLocalWeather, 15 * 60_000);
 
 /* ============================================================
    SplashScreen — reusable, one-time-per-session brand moment.
