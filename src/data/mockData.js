@@ -1351,11 +1351,19 @@ export const alwenActions = [
   { view: "home", labelKey: "mock.action.action9" }
 ];
 
+/**
+ * What Alwen can genuinely do today via the real chat backend
+ * (supabase/functions/alwen-chat) — its two live tool calls
+ * (create_hire_request, create_marketplace_listing), its per-conversation
+ * memory (conversationId persisted server-side), and its language-aware
+ * system prompt. Deliberately not a wishlist — every entry here maps to
+ * something the Edge Function actually does.
+ */
 export const alwenCapabilities = [
-  { id: "talk", label: "Talk", detail: "Voice messages and spoken city requests" },
-  { id: "image", label: "Image", detail: "Menus, products, documents, street signs" },
-  { id: "document", label: "Document", detail: "Leases, invoices, forms, business papers" },
-  { id: "handle", label: "Handle it", detail: "Multi-step city work that waits for approval" }
+  { id: "hire", emoji: "🛠️", labelKey: "alwen.skill.hireLabel", detailKey: "alwen.skill.hireDetail" },
+  { id: "sell", emoji: "🏷️", labelKey: "alwen.skill.sellLabel", detailKey: "alwen.skill.sellDetail" },
+  { id: "memory", emoji: "🧠", labelKey: "alwen.skill.memoryLabel", detailKey: "alwen.skill.memoryDetail" },
+  { id: "language", emoji: "🌍", labelKey: "alwen.skill.languageLabel", detailKey: "alwen.skill.languageDetail" }
 ];
 
 export const alwenWorkflows = [

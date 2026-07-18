@@ -11630,3 +11630,608 @@ strong:has(> .verified-check) {
     max-width: 720px;
   }
 }
+
+/* ==========================================================================
+   Alwen workspace — personal city concierge, not a chatbot page
+   ========================================================================== */
+
+.alwen-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: clamp(16px, 4vw, 28px) clamp(14px, 3vw, 0px) 40px;
+}
+
+@keyframes alwenCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes alwenGradientDrift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Hero */
+.alwen-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: clamp(28px, 6vw, 44px) clamp(20px, 5vw, 32px);
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.14), rgba(52, 211, 153, 0) 45%),
+    linear-gradient(315deg, rgba(120, 170, 255, 0.1), rgba(120, 170, 255, 0) 50%),
+    var(--surface);
+  background-size: 220% 220%, 220% 220%, 100% 100%;
+  animation: alwenGradientDrift 18s ease-in-out infinite;
+  box-shadow: var(--shadow-card);
+}
+
+.alwen-hero-greeting {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.alwen-hero h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4.5vw, 2.2rem);
+  font-weight: 850;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.alwen-hero-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 12px 12px 12px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-translucent);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.alwen-hero-form:focus-within {
+  border-color: rgba(52, 211, 153, 0.5);
+  box-shadow: var(--shadow-glow);
+}
+
+.alwen-hero-form textarea {
+  flex: 1 1 auto;
+  max-height: 120px;
+  min-height: 26px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+}
+
+.alwen-hero-form textarea::placeholder {
+  color: var(--muted);
+}
+
+.alwen-hero-send {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--emerald-600);
+  color: var(--ink-inverse);
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.alwen-hero-send:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.alwen-hero-send:disabled {
+  opacity: 0.7;
+}
+
+/* Response card — a single premium surface, never a chat bubble */
+.alwen-response-card {
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: alwenCardIn 320ms ease both;
+}
+
+.alwen-response-card.is-error {
+  border-color: rgba(229, 72, 77, 0.35);
+}
+
+.alwen-response-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.alwen-response-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alwen-response-label {
+  color: var(--emerald-text);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.alwen-response-body p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+
+.alwen-response-generated {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.alwen-response-generated span {
+  grid-column: 1 / -1;
+  color: var(--emerald-text);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.alwen-response-generated strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.alwen-response-generated button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--emerald-600);
+  color: var(--ink-inverse);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.alwen-response-error p {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.alwen-response-error div {
+  display: flex;
+  gap: 8px;
+}
+
+.alwen-response-error button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.alwen-response-error button[data-alwen-retry] {
+  background: var(--accent);
+  color: var(--ink-inverse);
+}
+
+:root[data-theme="dark"] .alwen-response-error button[data-alwen-retry] {
+  background: var(--emerald-600);
+}
+
+/* Shared section shell used by every panel below the hero */
+.alwen-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: alwenCardIn 360ms ease both;
+}
+
+.alwen-section h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
+.alwen-section-hint {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.alwen-section-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+/* Quick actions — living suggestion cards, not chips */
+.alwen-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.alwen-quick-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+  font-size: 0.86rem;
+  font-weight: 750;
+  color: var(--ink);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.alwen-quick-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+.alwen-quick-emoji {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.14);
+  font-size: 1.05rem;
+}
+
+/* Running tasks */
+.alwen-task-list,
+.alwen-waiting-list,
+.alwen-suggestion-list,
+.alwen-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alwen-task-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+.alwen-task-pulse {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--emerald-text);
+  animation: alwenStatusPulse 1.8s ease-in-out infinite;
+}
+
+.alwen-task-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.alwen-task-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+}
+
+.alwen-task-copy small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+/* Waiting for you */
+.alwen-waiting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(217, 154, 31, 0.35);
+  background: rgba(217, 154, 31, 0.08);
+}
+
+.alwen-waiting-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.alwen-waiting-copy strong {
+  font-size: 0.92rem;
+}
+
+.alwen-waiting-copy small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.alwen-waiting-row button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #d99a1f;
+  color: #1a1300;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+/* Suggestions */
+.alwen-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.alwen-suggestion-context {
+  display: block;
+  color: var(--emerald-text);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.alwen-suggestion-row p {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.alwen-suggestion-row button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+/* City memory */
+.alwen-memory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.alwen-memory-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+.alwen-memory-card span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.alwen-memory-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.94rem;
+}
+
+.alwen-memory-card small {
+  color: var(--emerald-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+/* Skills */
+.alwen-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.alwen-skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.alwen-skill-emoji {
+  font-size: 1.4rem;
+}
+
+.alwen-skill-card strong {
+  font-size: 0.9rem;
+}
+
+.alwen-skill-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+/* Connected services */
+.alwen-connected-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.alwen-connected-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: center;
+}
+
+.alwen-connected-card.is-connected {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.alwen-connected-emoji {
+  font-size: 1.3rem;
+}
+
+.alwen-connected-card strong {
+  font-size: 0.78rem;
+}
+
+.alwen-connected-card small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.alwen-connected-card.is-connected small {
+  color: var(--emerald-text);
+}
+
+/* City timeline */
+.alwen-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.alwen-timeline-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--emerald-text);
+}
+
+.alwen-timeline-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.alwen-timeline-copy strong {
+  font-size: 0.88rem;
+}
+
+.alwen-timeline-copy small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* Dark theme: keep every surface here on the shared dark tokens (already
+   theme-aware via var(--surface)/var(--line)/etc.) — only literal,
+   non-token colours need an explicit override. */
+:root[data-theme="dark"] .alwen-waiting-row {
+  border-color: rgba(217, 154, 31, 0.4);
+  background: rgba(217, 154, 31, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alwen-hero,
+  .alwen-task-pulse,
+  .alwen-section,
+  .alwen-response-card {
+    animation: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .alwen-quick-grid,
+  .alwen-memory-grid,
+  .alwen-skill-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

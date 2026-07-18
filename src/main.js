@@ -141,7 +141,9 @@ const state = {
     answer: "",
     conversationId: null,
     status: "idle",
-    error: null
+    error: null,
+    createdHelpRequest: null,
+    createdListing: null
   },
   selectedBusinessId: null,
   selectedListingId: null,
@@ -2316,7 +2318,13 @@ function renderShell() {
         <div class="bottom-nav-group">${navItems.slice(2).map(renderNavButton).join("")}</div>
       </nav>
       ${renderTytOrb()}
-      ${renderAlwenDock()}
+      ${/* The Alwen workspace page IS the Alwen experience now (its own
+         hero has the real chat form) — showing the floating dock on top
+         of it would be two chat surfaces reading the same state.alwenChat
+         stacked on one screen, exactly the "repeated Alwen controls"
+         problem this redesign was asked to remove. Every other screen
+         keeps the dock unchanged as the one consistent entry point. */
+        state.activeView !== "alwen" ? renderAlwenDock() : ""}
       ${/* Community deliberately drops this floating mic dock — with the
          Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
          already on screen, a third floating circle was competing
@@ -2845,83 +2853,404 @@ function renderView() {
   return `<section class="view">${views[state.activeView]?.() || renderHome()}</section>`;
 }
 
-function renderAlwenWorkspace() {
+/* ==========================================================================
+   Alwen workspace — "personal city concierge", not a chatbot page.
+   Every section below either (a) reads real state directly (myHelpRequests,
+   myListings, ownedBusinesses, auth.user) or (b) is explicit about being a
+   suggestion Alwen can act on right now via the real chat backend
+   (submitAlwenChat/sendAlwenMessage, untouched). Nothing here is a
+   decorative mock panel with no data behind it — the old version's
+   proactive-briefing/knowledge-graph/local-economy/automation-tasks/
+   business-ai/done-for-you-workflow panels and the raw "TODO:" developer
+   placeholder section are gone; renderEarningOpportunities() is kept (it's
+   also used by Contribute) but no longer duplicated here.
+   ========================================================================== */
+
+function alwenGreeting() {
+  if (state.auth.status !== "signedIn") return t("alwen.greetingGuest");
+  const daySuffix = timeOfDaySuffix();
+  const key = daySuffix === "Evening" ? "alwen.greetingEvening" : daySuffix === "Morning" ? "alwen.greetingMorning" : "alwen.greetingAfternoon";
+  return t(key, { name: escapeHtml(state.auth.user.name.split(" ")[0]) });
+}
+
+/* The hero form reuses the exact same data-alwen-chat-form/name="message"
+   contract the floating dock's form already uses (bindEvents() binds it
+   generically), so this is a second render surface for the identical real
+   state.alwenChat/submitAlwenChat() — not a fork. renderAlwenDock() is
+   suppressed specifically on this view (see renderShell()) so there's only
+   ever one chat surface on screen at a time. */
+function renderAlwenHero() {
+  const chat = state.alwenChat;
+  const isLoading = chat.status === "loading";
   return `
-    <section class="alwen-workspace">
-      <div class="workspace-hero">
-        <p class="eyebrow">${t("alwen.alwenWorkspace")}</p>
-        <h1>${t("alwen.alwenWorkspaceTitle")}</h1>
-        ${renderAiSearch("home")}
-        ${renderAiSearchResults()}
-        ${renderAlwenInputModes()}
-        <div class="conversation-router">
-          ${[
-            ["home.prompt.promptNeedPlumber", "I need a plumber."],
-            ["home.prompt.promptSellBicycle", "I want to sell my bicycle."],
-            ["home.prompt.promptMovingVilnius", "I'm moving to Vilnius."],
-            ["home.prompt.promptTranslateMenu", "Translate this menu."],
-            ["home.prompt.promptAirportPickup", "I need airport pickup."]
-          ].map(([labelKey, prompt]) => `<button data-view="${routeForPrompt(prompt)}">${t(labelKey)}</button>`).join("")}
-        </div>
-      </div>
-
-      <section class="workspace-grid">
-        <article class="workspace-panel is-primary">
-          <div class="section-title"><div><h2>${t("alwenWorkspace.todaysPriorities")}</h2><p>${t("alwenWorkspace.todaysPrioritiesHint")}</p></div></div>
-          <div class="step-list">${alwenWorkspace.priorities.map((item) => `<span>${t(item)}</span>`).join("")}</div>
-        </article>
-        <article class="workspace-panel">
-          <div class="section-title"><div><h2>${t("alwenWorkspace.runningTasks")}</h2><p>${t("alwenWorkspace.runningTasksHint")}</p></div></div>
-          <div class="task-list">${alwenWorkspace.runningTasks.map((task) => `<div><strong>${t(task.titleKey)}</strong><p>${t(task.statusKey)}</p><span>${t(task.cadenceKey)}</span></div>`).join("")}</div>
-        </article>
-        <article class="workspace-panel">
-          <div class="section-title"><div><h2>${t("home.cityMemory")}</h2><p>${t("home.cityMemoryHint")}</p></div></div>
-          <div class="memory-grid">${cityMemory.map((memory) => `<div><span>${t(memory.labelKey)}</span><strong>${t(memory.valueKey)}</strong></div>`).join("")}</div>
-        </article>
-      </section>
-
-      ${renderProactiveBriefing()}
-      ${renderAutomationTasks()}
-      ${renderEarningOpportunities()}
-      ${renderDoneForYouWorkflows()}
-      ${renderBusinessAi()}
-      ${renderLocalEconomyScores()}
-      ${renderKnowledgeGraph()}
-
-      <section class="workspace-grid">
-        <article class="workspace-panel">
-          <div class="section-title"><div><h2>${t("alwenWorkspace.savedWorkflows")}</h2><p>${t("alwenWorkspace.savedWorkflowsHint")}</p></div></div>
-          <div class="quote-list">${alwenWorkspace.savedWorkflows.map((item) => `<span>${t(item)}</span>`).join("")}</div>
-        </article>
-        <article class="workspace-panel">
-          <div class="section-title"><div><h2>${t("alwenWorkspace.pendingRequests")}</h2><p>${t("alwenWorkspace.pendingRequestsHint")}</p></div></div>
-          <div class="step-list">${alwenWorkspace.pendingRequests.map((item) => `<span>${t(item)}</span>`).join("")}</div>
-        </article>
-        <article class="workspace-panel">
-          <div class="section-title"><div><h2>${t("alwenWorkspace.recommendations")}</h2><p>${t("alwenWorkspace.recommendationsHint")}</p></div></div>
-          <div class="step-list">${alwenWorkspace.recommendations.map((item) => `<span>${t(item)}</span>`).join("")}</div>
-        </article>
-      </section>
-      ${renderBackendPlaceholders()}
-    </section>
+    <div class="alwen-hero">
+      <p class="alwen-hero-greeting">${alwenGreeting()}</p>
+      <h1>${t("alwen.heroQuestion")}</h1>
+      <form class="alwen-hero-form" data-alwen-chat-form>
+        <textarea id="alwen-hero-input" name="message" maxlength="2000" rows="1" placeholder="${t("common.tellAlwen")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
+        <button type="submit" class="alwen-hero-send" aria-label="${t("alwen.heroSend")}" title="${t("alwen.heroSend")}" ${isLoading ? "disabled" : ""}>${isLoading ? `<span class="alwen-status-dot" aria-hidden="true"></span>` : icon("arrow")}</button>
+      </form>
+      ${renderAlwenResponseCard()}
+    </div>
   `;
 }
 
-function renderProactiveBriefing() {
+/* A single premium card, not a chat bubble. When the backend's real tool
+   calls actually created something (createdHelpRequest/createdListing —
+   genuine structured data from the Edge Function, not parsed out of free
+   text), a small generated-UI card links straight to it instead of the
+   user having to go find what Alwen just did. */
+function renderAlwenResponseCard() {
+  const chat = state.alwenChat;
+  if (chat.status === "idle") return "";
+  const canRetry = chat.status === "error" && chat.lastMessage;
   return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.proactiveBriefing")}</h2><p>${t("alwenWorkspace.proactiveBriefingHint")}</p></div>
-      </div>
-      <div class="briefing-grid">
-        ${proactiveBriefing.map((item) => `
-          <article>
-            <span>${t(item.signalKey)}</span>
-            <h3>${t(item.titleKey)}</h3>
-            <p>${t(item.detailKey)}</p>
-          </article>
+    <div class="alwen-response-card is-${chat.status}" role="status">
+      ${chat.status === "loading" ? `
+        <div class="alwen-response-loading">
+          <span class="alwen-status-dot" aria-hidden="true"></span>
+          <span>${t("alwen.alwenChatLooking")}</span>
+        </div>
+      ` : ""}
+      ${chat.status === "success" ? `
+        <div class="alwen-response-body">
+          <span class="alwen-response-label">${t("alwen.responseLabel")}</span>
+          <p>${escapeHtml(chat.answer)}</p>
+        </div>
+        ${chat.createdHelpRequest ? `
+          <div class="alwen-response-generated">
+            <span>${t("alwen.responseCreatedRequestTitle")}</span>
+            <strong>${escapeHtml(chat.createdHelpRequest.description || "")}</strong>
+            <button type="button" data-view="needHelp">${t("alwen.responseCreatedRequestCta")}</button>
+          </div>
+        ` : ""}
+        ${chat.createdListing ? `
+          <div class="alwen-response-generated">
+            <span>${t("alwen.responseCreatedListingTitle")}</span>
+            <strong>${escapeHtml(chat.createdListing.title || "")}</strong>
+            <button type="button" data-view="listingDetail" data-listing-id="${chat.createdListing.id}">${t("alwen.responseCreatedListingCta")}</button>
+          </div>
+        ` : ""}
+      ` : ""}
+      ${chat.status === "error" ? `
+        <div class="alwen-response-error">
+          <p>${escapeHtml(chat.error || t("alwen.alwenChatGenericError"))}</p>
+          <div>
+            ${canRetry ? `<button type="button" data-alwen-retry>${t("alwen.alwenChatRetry")}</button>` : ""}
+            ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+/* "Living" suggestion cards, not prompt chips — each sends its example
+   straight into the real chat (submitAlwenChat), the same as if the user
+   had typed it themselves. */
+const ALWEN_QUICK_ACTIONS = [
+  ["🏠", "alwen.quickAction.apartments"],
+  ["💊", "alwen.quickAction.translate"],
+  ["🚲", "alwen.quickAction.sell"],
+  ["👨‍👩‍👧", "alwen.quickAction.family"],
+  ["🪪", "alwen.quickAction.residence"],
+  ["📶", "alwen.quickAction.internet"]
+];
+
+function renderAlwenQuickActions() {
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.quickActionsTitle")}</h2>
+      <div class="alwen-quick-grid">
+        ${ALWEN_QUICK_ACTIONS.map(([emoji, labelKey]) => `
+          <button type="button" class="alwen-quick-card" data-action="alwen-quick-prompt" data-prompt-key="${labelKey}">
+            <span class="alwen-quick-emoji" aria-hidden="true">${emoji}</span>
+            <span>${t(labelKey)}</span>
+          </button>
         `).join("")}
       </div>
+    </div>
+  `;
+}
+
+/* Real ongoing work — the user's own help requests (open, waiting on
+   quotes from professionals) and marketplace listings (live, waiting on
+   buyers) straight from state.myHelpRequests/myListings. Nothing here is
+   a fabricated progress percentage; the pulsing dot signals "in progress
+   in the background", not a fake completion number. */
+function alwenRunningTasks() {
+  if (state.auth.status !== "signedIn") return [];
+  const helpTasks = state.myHelpRequests.map((item) => ({
+    title: item.description,
+    status: t("alwen.runningTaskHelpStatus"),
+    view: "needHelp"
+  }));
+  const listingTasks = state.myListings.map((item) => ({
+    title: item.title,
+    status: t("alwen.runningTaskListingStatus"),
+    view: "listingDetail",
+    listingId: item.id
+  }));
+  return [...helpTasks, ...listingTasks];
+}
+
+function renderAlwenRunningTasks() {
+  const tasks = alwenRunningTasks();
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwenWorkspace.runningTasks")}</h2>
+      <p class="alwen-section-hint">${t("alwenWorkspace.runningTasksHint")}</p>
+      ${tasks.length
+        ? `
+          <div class="alwen-task-list">
+            ${tasks
+              .map(
+                (task) => `
+                  <button type="button" class="alwen-task-row" data-view="${task.view}" ${task.listingId ? `data-listing-id="${task.listingId}"` : ""}>
+                    <span class="alwen-task-pulse" aria-hidden="true"></span>
+                    <span class="alwen-task-copy"><strong>${escapeHtml(task.title)}</strong><small>${task.status}</small></span>
+                    ${icon("arrow")}
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        `
+        : `<p class="alwen-section-empty">${t("alwen.runningTasksEmpty")}</p>`}
+    </div>
+  `;
+}
+
+/* The only reliable "needs your input" signal in the real data today is a
+   business claim still pending verification — everything else that looked
+   like a quote/booking queue in the old mock panels had no real
+   accept/confirm mechanism behind it, so it isn't reproduced here rather
+   than faking a working button. */
+function alwenWaitingForYouItems() {
+  if (state.auth.status !== "signedIn") return [];
+  return ownedBusinesses()
+    .filter((business) => business.verificationStatus === "Pending")
+    .slice(0, 4)
+    .map((business) => ({ title: business.name, detail: t("alwen.businessVerificationPending"), placeId: business.id }));
+}
+
+function renderAlwenWaitingForYou() {
+  const items = alwenWaitingForYouItems();
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.waitingForYouTitle")}</h2>
+      <p class="alwen-section-hint">${t("alwen.waitingForYouHint")}</p>
+      ${items.length
+        ? `
+          <div class="alwen-waiting-list">
+            ${items
+              .map(
+                (item) => `
+                  <div class="alwen-waiting-row">
+                    <span class="alwen-waiting-copy"><strong>${escapeHtml(item.title)}</strong><small>${item.detail}</small></span>
+                    <button type="button" data-view="businessClaim" data-place-id="${item.placeId}">${t("alwen.uploadEvidenceCta")}</button>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        `
+        : `<p class="alwen-section-empty">${t("alwen.waitingForYouEmpty")}</p>`}
+    </div>
+  `;
+}
+
+/* Each suggestion names the real signal it's based on — a saved listing,
+   today's weather (the same mock signal already shown on Home, not a new
+   fabrication), or an incomplete profile — rather than a generic "you
+   might like" list. */
+function alwenSuggestions() {
+  const suggestions = [];
+  if (state.auth.status === "signedIn" && state.savedListingIds.length > 0) {
+    suggestions.push({ context: t("alwen.suggestionSavedListing"), detail: t("alwen.suggestionSavedListingDetail"), cta: t("alwen.suggestionViewCta"), view: "profile" });
+  }
+  const weather = currentLivingCitySignals()[0];
+  if (weather) {
+    suggestions.push({ context: t("alwen.suggestionWeather"), detail: weather.detail || t(weather.detailKey), cta: t("alwen.suggestionViewCta"), view: "explore" });
+  }
+  if (state.auth.status === "signedIn" && !state.auth.user.profileComplete) {
+    suggestions.push({ context: t("alwen.suggestionIncompleteProfile"), detail: t("alwen.suggestionIncompleteProfileDetail"), cta: t("alwen.suggestionCompleteCta"), view: "profile" });
+  }
+  return suggestions.slice(0, 4);
+}
+
+function renderAlwenSuggestions() {
+  const suggestions = alwenSuggestions();
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.alwenRecommendations")}</h2>
+      <p class="alwen-section-hint">${t("alwenWorkspace.recommendationsHint")}</p>
+      ${suggestions.length
+        ? `
+          <div class="alwen-suggestion-list">
+            ${suggestions
+              .map(
+                (item) => `
+                  <div class="alwen-suggestion-row">
+                    <div>
+                      <span class="alwen-suggestion-context">${item.context}</span>
+                      <p>${item.detail}</p>
+                    </div>
+                    <button type="button" data-view="${item.view}">${item.cta}</button>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        `
+        : `<p class="alwen-section-empty">${t("alwen.suggestionsEmpty")}</p>`}
+    </div>
+  `;
+}
+
+/* Only fields the app actually has and can genuinely edit — language
+   (real, via the language sheet), neighbourhood (real, via the city
+   sheet), profession (real, via profile edit), verification (real,
+   read-only). No fabricated budget/cuisine/interests fields — those
+   don't exist anywhere in the real profile schema. */
+function alwenCityMemoryItems() {
+  const items = [
+    { label: t("alwen.memoryLanguage"), value: SUPPORTED_LANGUAGES.find((lang) => lang.code === state.language)?.nativeName || state.language, sheet: "language" },
+    { label: t("alwen.memoryNeighbourhood"), value: currentAreaLabel(), sheet: "city" }
+  ];
+  if (state.auth.status === "signedIn") {
+    items.push({ label: t("alwen.memoryProfession"), value: state.auth.user.role || t("common.optionalSuffix"), view: "profile" });
+    items.push({ label: t("alwen.memoryVerification"), value: state.auth.user.emailVerified ? t("status.verified") : t("status.pending"), view: "profile" });
+  }
+  return items;
+}
+
+function renderAlwenCityMemory() {
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.memoryTitle")}</h2>
+      <p class="alwen-section-hint">${t("alwen.memoryHint")}</p>
+      <div class="alwen-memory-grid">
+        ${alwenCityMemoryItems()
+          .map(
+            (item) => `
+              <button type="button" class="alwen-memory-card" ${item.sheet ? `data-sheet="${item.sheet}"` : `data-view="${item.view}"`}>
+                <span>${item.label}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+                <small>${t("alwen.memoryEdit")}</small>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* alwenCapabilities (mockData.js) is now rewritten to only list what the
+   Edge Function's real tool calls actually do — see the comment there. */
+function renderAlwenSkills() {
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.skillsTitle")}</h2>
+      <p class="alwen-section-hint">${t("alwen.skillsHint")}</p>
+      <div class="alwen-skill-grid">
+        ${alwenCapabilities
+          .map(
+            (skill) => `
+              <div class="alwen-skill-card">
+                <span class="alwen-skill-emoji" aria-hidden="true">${skill.emoji}</span>
+                <strong>${t(skill.labelKey)}</strong>
+                <p>${t(skill.detailKey)}</p>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* Honest connection states: Google/Apple/Email identity via Supabase Auth
+   is genuinely real (state.auth.user.provider). Maps/Calendar/Payments/
+   Bookings have no OAuth flow or data access anywhere in this app yet —
+   shown as not connected rather than as fake toggles that do nothing. */
+function alwenConnectedServices() {
+  const provider = state.auth.status === "signedIn" ? state.auth.user.provider || "email" : null;
+  return [
+    { id: "google", emoji: "🔎", label: t("alwen.connectedIdentityGoogle"), connected: provider === "google" },
+    { id: "apple", emoji: "🍎", label: t("alwen.connectedIdentityApple"), connected: provider === "apple" },
+    { id: "email", emoji: "✉️", label: t("alwen.connectedIdentityEmail"), connected: provider === "email" },
+    { id: "maps", emoji: "🗺️", label: t("alwen.connectedMaps"), connected: false },
+    { id: "calendar", emoji: "📆", label: t("alwen.connectedCalendar"), connected: false },
+    { id: "payments", emoji: "💳", label: t("alwen.connectedPayments"), connected: false },
+    { id: "bookings", emoji: "🍽️", label: t("alwen.connectedBookings"), connected: false }
+  ];
+}
+
+function renderAlwenConnectedServices() {
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.connectedTitle")}</h2>
+      <p class="alwen-section-hint">${t("alwen.connectedHint")}</p>
+      <div class="alwen-connected-grid">
+        ${alwenConnectedServices()
+          .map(
+            (item) => `
+              <div class="alwen-connected-card ${item.connected ? "is-connected" : ""}">
+                <span class="alwen-connected-emoji" aria-hidden="true">${item.emoji}</span>
+                <strong>${item.label}</strong>
+                <small>${item.connected ? t("alwen.connectedStateConnected") : t("alwen.connectedStateNotConnected")}</small>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* Reuses deriveRealAchievements() as-is (already built for Profile, already
+   honest — derived from real emailVerified/myListings/ownedBusinesses state,
+   not a fabricated log) instead of a second, duplicate implementation. */
+function renderAlwenCityTimeline() {
+  const events = state.auth.status === "signedIn" ? deriveRealAchievements(state.auth.user) : [];
+  return `
+    <div class="alwen-section">
+      <h2>${t("alwen.timelineTitle")}</h2>
+      <p class="alwen-section-hint">${t("alwen.timelineHint")}</p>
+      ${events.length
+        ? `
+          <div class="alwen-timeline-list">
+            ${events
+              .map(
+                (event) => `
+                  <div class="alwen-timeline-row">
+                    <span class="alwen-timeline-icon" aria-hidden="true">${icon(event.icon)}</span>
+                    <span class="alwen-timeline-copy"><strong>${t(event.titleKey)}</strong><small>${event.date || ""}</small></span>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        `
+        : `<p class="alwen-section-empty">${t("alwen.timelineEmpty")}</p>`}
+    </div>
+  `;
+}
+
+function renderAlwenWorkspace() {
+  return `
+    <section class="alwen-workspace">
+      ${renderAlwenHero()}
+      ${renderAlwenQuickActions()}
+      ${renderAlwenRunningTasks()}
+      ${renderAlwenWaitingForYou()}
+      ${renderAlwenSuggestions()}
+      ${renderAlwenCityMemory()}
+      ${renderAlwenSkills()}
+      ${renderAlwenConnectedServices()}
+      ${renderAlwenCityTimeline()}
     </section>
   `;
 }
@@ -2942,49 +3271,6 @@ function renderEarningOpportunities() {
             <p>${t(item.matchKey)}</p>
           </article>
         `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderKnowledgeGraph() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.knowledgeGraphTitle")}</h2><p>${t("alwenWorkspace.knowledgeGraphHint")}</p></div>
-      </div>
-      <div class="knowledge-grid">
-        ${cityKnowledgeObjects.map((object) => `
-          <article>
-            <span class="badge">${object.type}</span>
-            <h3>${object.name}</h3>
-            <div class="quote-list">${object.connectsTo.map((item) => `<span>${item}</span>`).join("")}</div>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderBackendPlaceholders() {
-  return `
-    <section class="section-shell api-placeholder-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.apiReadyFoundation")}</h2><p>${t("alwenWorkspace.apiReadyFoundationHint")}</p></div>
-      </div>
-      <div class="step-list">${backendTodoPlaceholders.map((item) => `<span>${item}</span>`).join("")}</div>
-    </section>
-  `;
-}
-
-function renderLocalEconomyScores() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.localEconomyScores")}</h2><p>${t("alwenWorkspace.localEconomyScoresHint")}</p></div>
-      </div>
-      <div class="score-grid">
-        ${contributionScores.map((score) => `<article><strong>${score.value}</strong><span>${t(score.labelKey)}</span></article>`).join("")}
       </div>
     </section>
   `;
@@ -3648,6 +3934,11 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
   state.alwenChat.lastMessage = trimmed;
   state.alwenChat.answer = "";
   state.alwenChat.error = null;
+  // Bookkeeping only, additive to the existing success path below — lets
+  // the workspace page render a generated-UI card for whatever the Edge
+  // Function actually created, instead of parsing the free-text answer.
+  state.alwenChat.createdHelpRequest = null;
+  state.alwenChat.createdListing = null;
 
   if (!trimmed) {
     state.alwenChat.status = "error";
@@ -3678,8 +3969,14 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
     state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
     state.alwenChat.input = "";
     trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
-    if (result.createdHelpRequest) applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
-    if (result.createdListing) applyCreatedListing(result.createdListing);
+    if (result.createdHelpRequest) {
+      applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
+      state.alwenChat.createdHelpRequest = result.createdHelpRequest;
+    }
+    if (result.createdListing) {
+      applyCreatedListing(result.createdListing);
+      state.alwenChat.createdListing = result.createdListing;
+    }
   } catch (error) {
     const code = error?.code || "";
     state.alwenChat.status = "error";
@@ -3767,79 +4064,6 @@ function renderQuickTranslateDock() {
   `;
 }
 
-function renderAlwenInputModes() {
-  return `
-    <div class="alwen-input-modes" aria-label="${t("alwen.alwenInputModes")}">
-      ${[
-        ["mic", "common.talk"],
-        ["image", "common.uploadImage"],
-        ["file", "common.uploadDocument"],
-        ["message", "common.voiceMessage"]
-      ].map(([iconName, label]) => `<button>${icon(iconName)}<span>${t(label)}</span></button>`).join("")}
-    </div>
-  `;
-}
-
-function renderDoneForYouWorkflows() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.doneForYouWorkflows")}</h2><p>${t("alwenWorkspace.doneForYouWorkflowsHint")}</p></div>
-      </div>
-      <div class="workflow-grid">
-        ${alwenWorkflows.map((workflow) => `
-          <article class="workflow-card">
-            <span class="badge">${t(workflow.approvalKey)}</span>
-            <h3>${t(workflow.titleKey)}</h3>
-            <p>${t(workflow.promptKey)}</p>
-            <div class="step-list">${workflow.stepKeys.map((step) => `<span>${t(step)}</span>`).join("")}</div>
-            <button data-view="${workflow.id === "hire" ? "hire" : workflow.id === "marketplace" ? "marketplace" : "explore"}">${t("common.approveWithAlwen")}</button>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderAutomationTasks() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.taskAutomation")}</h2><p>${t("alwenWorkspace.taskAutomationHint")}</p></div>
-      </div>
-      <div class="automation-grid">
-        ${alwenAutomationTasks.map((task) => `
-          <article>
-            <span>${t(task.moduleKey)}</span>
-            <h3>${t(task.commandKey)}</h3>
-            <p>${t(task.outcomeKey)}</p>
-            <button>${t("alwenWorkspace.createAgent")}</button>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderBusinessAi() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("business.dashboard.businessAi")}</h2><p>${t("business.dashboard.businessAiHint")}</p></div>
-      </div>
-      <div class="business-ai-grid">
-        ${businessAiExamples.map((item) => `
-          <article>
-            <span class="badge">${item.agent}</span>
-            <h3>${item.business}</h3>
-            <div class="step-list">${item.questions.map((question) => `<span>${question}</span>`).join("")}</div>
-            <button data-view="reservations">${t("alwenWorkspace.askBusinessAi")}</button>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
 
 function renderHomeMarketplace() {
   const featured = [
@@ -7977,6 +8201,12 @@ function bindEvents() {
     submitAlwenChat(state.alwenChat.lastMessage);
   });
 
+  document.querySelectorAll('[data-action="alwen-quick-prompt"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      submitAlwenChat(t(button.dataset.promptKey));
+    });
+  });
+
   document.querySelectorAll("[data-category]").forEach((button) => {
     button.addEventListener("click", () => {
       state.category = button.dataset.category;
@@ -8890,6 +9120,7 @@ function bindHeaderTheme() {
 function bindAiSearchPlaceholderRotation() {
   let index = 0;
   let tytIndex = 0;
+  let alwenIndex = 0;
   window.setInterval(() => {
     // Community gets its own contextual prompt set — the generic list
     // includes prompts like "Register my business" that don't belong on
@@ -8906,6 +9137,13 @@ function bindAiSearchPlaceholderRotation() {
     if (tytInput && document.activeElement !== tytInput && !tytInput.value) {
       tytIndex = (tytIndex + 1) % tytPrompts.length;
       tytInput.placeholder = tytPrompts[tytIndex];
+    }
+
+    const alwenPrompts = t("alwen.heroPromptExamples");
+    const alwenInput = document.getElementById("alwen-hero-input");
+    if (alwenInput && document.activeElement !== alwenInput && !alwenInput.value) {
+      alwenIndex = (alwenIndex + 1) % alwenPrompts.length;
+      alwenInput.placeholder = alwenPrompts[alwenIndex];
     }
   }, 2600);
 }
