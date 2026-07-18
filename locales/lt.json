@@ -1312,7 +1312,7 @@
       "capabilityReviews": "Atsiliepimai",
       "capabilityRatings": "Įvertinimai",
       "capabilityAvailability": "Prieinamumas",
-      "capabilitySecurePayments": "Saugūs mokėjimai"
+      "capabilitySecurePayments": "Tiesioginiai susitarimai tarp naudotojų"
     },
     "condition": {
       "new": "Nauja",
@@ -1343,7 +1343,7 @@
     "needHelp": "Reikia pagalbos",
     "needHelpHint": "Paskelbkite užduotį",
     "needHelpTitle": "Reikia pagalbos?",
-    "needHelpBody": "Aprašykite poreikį vieną kartą. Netoliese esantys patikrinti specialistai galės atsakyti su laiku, kaina, pokalbiu, atsiliepimais ir saugiais mokėjimais ateityje.",
+    "needHelpBody": "Aprašykite poreikį vieną kartą. Netoliese esantys specialistai gali atsakyti dėl laiko, kainos ir pokalbio. Mokėjimus ir susitarimus naudotojai tvarko tiesiogiai.",
     "needHelpCta": "Skelbti užklausą",
     "needHelpPosting": "Skelbiama...",
     "postError": "Nepavyko paskelbti. Bandykite dar kartą.",
@@ -1889,7 +1889,7 @@
       "notif4Action": "Peržiūrėti",
       "notif5Category": "Sistema",
       "notif5Title": "Mokėjimų vietaženklis paruoštas",
-      "notif5Summary": "Saugūs mokėjimai bus pridėti prie rinkos, rezervacijų, darbų ir paslaugų būsimame etape.",
+      "notif5Summary": "Sandorių saugos pranešimai ir pranešimo funkcija pateikiami rinkoje, darbuose, nuomoje ir paslaugose.",
       "notif5Priority": "Ateityje",
       "notif5Time": "Šiandien",
       "notif5Action": "Sužinoti",

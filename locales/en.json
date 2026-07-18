@@ -1312,7 +1312,7 @@
       "capabilityReviews": "Reviews",
       "capabilityRatings": "Ratings",
       "capabilityAvailability": "Availability",
-      "capabilitySecurePayments": "Secure payments"
+      "capabilitySecurePayments": "Direct user-to-user arrangements"
     },
     "condition": {
       "new": "New",
@@ -1343,7 +1343,7 @@
     "needHelp": "Need Help",
     "needHelpHint": "Post a task, get quotes",
     "needHelpTitle": "Need Help?",
-    "needHelpBody": "Describe what you need once. Nearby verified professionals can respond with availability, quote, chat, reviews, and secure payment support in future phases.",
+    "needHelpBody": "Describe what you need once. Nearby professionals can respond with availability, quotes and chat. Payments and agreements are arranged directly between users.",
     "needHelpCta": "Post request",
     "needHelpPosting": "Posting...",
     "postError": "That didn't post. Please try again.",
@@ -1889,7 +1889,7 @@
       "notif4Action": "View",
       "notif5Category": "System",
       "notif5Title": "Payments placeholder ready",
-      "notif5Summary": "Secure payments will attach to marketplace, bookings, jobs, and services in a future phase.",
+      "notif5Summary": "Transaction safety notices and reporting are available across marketplace, jobs, rentals and services.",
       "notif5Priority": "Future",
       "notif5Time": "Today",
       "notif5Action": "Learn",
