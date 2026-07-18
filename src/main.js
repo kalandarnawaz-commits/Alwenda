@@ -1,30 +1,16 @@
 import {
   adminStats,
   alwenActions,
-  alwenAutomationTasks,
   alwenBusinessDraft,
   alwenCapabilities,
-  alwenCityCompanionPlan,
   alwenListingDraft,
-  alwenWorkspace,
-  alwenWorkflows,
   alwenRecommendations,
-  backendTodoPlaceholders,
   businesses,
-  businessAiExamples,
   categories,
   city,
-  cityGraphConnections,
   COMMUNITY_POST_TYPES,
-  contributionActions,
-  contributionScores,
   cityGraph,
-  cityKnowledgeObjects,
-  cityMemory,
-  economyMetrics,
-  earningOpportunities,
   earnToday,
-  events,
   exploreHighlights,
   feedPosts,
   helpRequests,
@@ -42,12 +28,10 @@ import {
   offers,
   professionalCategories,
   profileReviews,
-  proactiveBriefing,
   reservations,
   reputationProfile,
   SEED_CITY_META,
   serviceProfessionals,
-  smartAutocompleteExamples,
   trendingMarketplace
 } from "./data/mockData.js?v=production-sprint-24";
 import { integrations } from "./services/integrationPlaceholders.js";
@@ -56,9 +40,7 @@ import {
   setLanguage,
   loadLocale,
   getCurrentLanguage,
-  currentLocaleTag,
   formatDate,
-  formatNumber,
   formatCurrency,
   formatDistanceMeters,
   SUPPORTED_LANGUAGES
@@ -1078,26 +1060,6 @@ const WELCOME_SEQUENCE_STEPS = [
   "onboarding.welcome.welcomeSequenceStep3",
   "onboarding.welcome.welcomeSequenceStep4"
 ];
-
-function startWelcomeSequence() {
-  state.activeView = "welcomeSequence";
-  state.welcomeSequenceStep = 0;
-  render();
-  advanceWelcomeSequence();
-}
-
-function advanceWelcomeSequence() {
-  setTimeout(() => {
-    state.welcomeSequenceStep += 1;
-    if (state.welcomeSequenceStep >= WELCOME_SEQUENCE_STEPS.length) {
-      state.activeView = "home";
-      render();
-      return;
-    }
-    render();
-    advanceWelcomeSequence();
-  }, 850);
-}
 
 async function signInWithProvider(provider) {
   if (!isSupabaseConfigured()) {
@@ -3082,8 +3044,7 @@ function renderView() {
    decorative mock panel with no data behind it — the old version's
    proactive-briefing/knowledge-graph/local-economy/automation-tasks/
    business-ai/done-for-you-workflow panels and the raw "TODO:" developer
-   placeholder section are gone; renderEarningOpportunities() is kept (it's
-   also used by Contribute) but no longer duplicated here.
+   placeholder section are gone.
    ========================================================================== */
 
 function alwenGreeting() {
@@ -3473,35 +3434,6 @@ function renderAlwenWorkspace() {
       ${renderAlwenCityTimeline()}
     </section>
   `;
-}
-
-function renderEarningOpportunities() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.earningPlatform")}</h2><p>${t("alwenWorkspace.earningPlatformHint")}</p></div>
-        <button data-view="contribute">${t("common.startContributing")}</button>
-      </div>
-      <div class="earning-grid">
-        ${earningOpportunities.map((item) => `
-          <article>
-            <span>${item.time}</span>
-            <h3>${t(item.titleKey)}</h3>
-            <strong>${item.value}</strong>
-            <p>${t(item.matchKey)}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function routeForPrompt(prompt) {
-  const previousQuery = state.query;
-  state.query = prompt;
-  const route = routeForQuery();
-  state.query = previousQuery;
-  return route;
 }
 
 /** Honest signals only — every bullet here must trace back to real local
@@ -4013,35 +3945,6 @@ function renderAlwenRecommendations() {
   `;
 }
 
-function renderEconomyStrip() {
-  return `
-    <section class="economy-strip" aria-label="${t("alwen.alwendaEconomy")}">
-      ${economyMetrics.map((metric) => `<article><strong>${metric.value}</strong><span>${t(metric.labelKey)}</span></article>`).join("")}
-    </section>
-  `;
-}
-
-const GRAPH_CONNECTION_ICON = ["help", "city", "tag", "spark", "translate"];
-
-function renderGraphConnections() {
-  return `
-    <section class="section-shell graph-shell">
-      <div class="section-title">
-        <div><h2>${t("alwenWorkspace.connectedCity")}</h2><p>${t("alwenWorkspace.connectedCityHint")}</p></div>
-      </div>
-      <div class="connection-list">
-        ${cityGraphConnections.map((edge, index) => `
-          <article>
-            <span class="tile-icon">${icon(GRAPH_CONNECTION_ICON[index % GRAPH_CONNECTION_ICON.length])}</span>
-            <div class="connection-edge"><strong>${edge.from}</strong>${icon("arrow")}<strong>${edge.to}</strong></div>
-            <p>${edge.detail}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
 function renderCapabilityRail() {
   return `
     <div class="capability-rail" aria-label="${t("common.futureReady")}">
@@ -4351,83 +4254,6 @@ function renderQuickTranslateDock() {
   `;
 }
 
-
-function renderHomeMarketplace() {
-  const featured = [
-    ...listings.slice(0, 3),
-    ...listings.filter((item) => ["vehicles", "property", "community-requests"].includes(item.type))
-  ].slice(0, 6);
-
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("home.personalMarketplace")}</h2><p>${t("home.personalMarketplaceHint")}</p></div>
-        <button data-view="marketplace">${t("nav.marketplace")}</button>
-      </div>
-      <div class="mini-market-grid">
-        ${featured.map((item) => `
-          <article>
-            <span>${categoryLabel(item.type)}</span>
-            <h3>${listingTitle(item)}</h3>
-            <p>${item.area} · ${item.price}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderHomeOffersEvents() {
-  return `
-    <section class="commerce-band">
-      <div class="section-title">
-        <div><h2>${t("home.todayForYou")}</h2><p>${t("home.todayForYouHint")}</p></div>
-      </div>
-      <div class="offer-list compact">
-        ${offers.map((offer) => `<article class="offer-card"><span>${offer.expires}</span><h3>${offer.value}</h3><p>${t(offer.titleKey)}</p><small>${offer.vendor} · ${offer.area}</small></article>`).join("")}
-      </div>
-      <div class="event-list">
-        ${events.map((event) => `<article><span>${t(event.typeKey)}</span><h3>${t(event.titleKey)}</h3><p>${event.area} · ${event.time}</p><small>${t(event.signalKey)}</small></article>`).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderAlwenCityCompanion() {
-  return `
-    <div class="alwen-inline">
-      <div>
-        <p class="eyebrow">${t("home.cityCompanion")}</p>
-        <strong>${alwenCityCompanionPlan.prompt}</strong>
-        <span>${t("home.cityCompanionHint")}</span>
-      </div>
-      <button data-view="explore">${t("common.buildPlan")}</button>
-    </div>
-  `;
-}
-
-function renderSmartAutocomplete() {
-  return `
-    <section class="section-shell">
-      <div class="section-title">
-        <div><h2>${t("home.smartAutocomplete")}</h2><p>${t("home.smartAutocompleteHint")}</p></div>
-      </div>
-      <div class="autocomplete-grid">
-        ${smartAutocompleteExamples.map((item) => `<article><span>${item.label}</span><p>${item.typed}</p><strong>${item.suggestion}</strong></article>`).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderPrimaryAction(iconName, titleKey, textKey, view, category = "all") {
-  return `
-    <button class="primary-action" data-view="${view}" data-category="${category}">
-      ${icon(iconName)}
-      <span><strong>${t(titleKey)}</strong><small>${t(textKey)}</small></span>
-      ${icon("arrow")}
-    </button>
-  `;
-}
 
 function renderMatch(match) {
   const visual = match.image
@@ -5268,41 +5094,6 @@ function renderMarketplace() {
   `;
 }
 
-const CONTRIBUTION_SCORE_ICON = {
-  reputation: "trust",
-  trust: "verify",
-  contributionPoints: "spark",
-  marketplaceScore: "tag",
-  professionalScore: "briefcase",
-  communityScore: "people",
-  translationScore: "translate",
-  businessScore: "city"
-};
-
-/** Groups the economy stat tiles into three visual tiers so the grid
- * reads as categorized signal instead of nine identical black badges.
- * Keyed by the stable `id` (not the translated label) so switching
- * language doesn't break the lookup. */
-const CONTRIBUTION_SCORE_TONE = {
-  reputation: "mint",
-  trust: "mint",
-  contributionPoints: "mint",
-  marketplaceScore: "gold",
-  professionalScore: "gold",
-  businessScore: "gold",
-  communityScore: "sky",
-  translationScore: "sky"
-};
-
-const CONTRIBUTION_ACTION_ICON = {
-  answers: "chat",
-  "business-hours": "calendar",
-  "verify-location": "pin",
-  translate: "translate",
-  "local-task": "tool",
-  review: "star"
-};
-
 /** Real signals only — every count here traces to something the user
  * actually did (myListings/myHelpRequests carry a real created_at from
  * Supabase, ownedBusinesses() reflects a real claim, feedPosts is
@@ -5530,19 +5321,6 @@ function renderContribute() {
       ${renderContributeOpportunities()}
       ${renderContributeAchievements(user)}
     </section>
-  `;
-}
-
-function renderContributionAction(action) {
-  return `
-    <article class="contribution-card">
-      <span class="tile-icon">${icon(CONTRIBUTION_ACTION_ICON[action.id] || "spark")}</span>
-      <span class="badge status-badge-sky contribution-value">${action.value}</span>
-      <h3>${t(action.titleKey)}</h3>
-      <p>${action.description}</p>
-      <div class="quote-list">${action.connects.map((item) => `<span>${item}</span>`).join("")}</div>
-      <button type="button" data-view="alwen">${t("common.startContributing")}</button>
-    </article>
   `;
 }
 
@@ -8040,17 +7818,6 @@ function renderMyBusinesses() {
         `).join("")}
       </div>
     </div>
-  `;
-}
-
-function reputationTile(iconName, label, value, detail, toneClass) {
-  return `
-    <article${toneClass ? ` class="tone-${toneClass}"` : ""}>
-      <span class="tile-icon">${icon(iconName)}</span>
-      <span>${label}</span>
-      <strong>${value}</strong>
-      ${detail ? `<p>${detail}</p>` : ""}
-    </article>
   `;
 }
 
