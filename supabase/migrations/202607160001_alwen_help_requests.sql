@@ -1,6 +1,11 @@
 -- Real backing table for Hire "post a request" posts — including the ones
 -- Alwen creates via tool-calling after the user confirms. Forward-only
 -- migration for Supabase Postgres. Review before applying to a live project.
+--
+-- Rollback approach:
+-- 1. Export help_requests rows needed for support/audit.
+-- 2. Drop help_requests policies and trigger.
+-- 3. Drop public.help_requests only if no production requests need retention.
 
 create table if not exists public.help_requests (
   id uuid primary key default gen_random_uuid(),
