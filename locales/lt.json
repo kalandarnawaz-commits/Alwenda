@@ -1042,7 +1042,8 @@
       "claimSignInHint": "Pirmiausia prisijunkite arba susikurkite paskyrą — perimti verslai susiejami su jūsų Alwenda paskyra.",
       "claimAlreadyYours": "Jūs jau valdote šį verslą.",
       "claimAlreadyTaken": "Šį verslą jau perėmė jo savininkas.",
-      "claimOffer": "Gauti"
+      "claimOffer": "Gauti",
+      "claimThisPlace": "Pretenduoti į šią vietą"
     },
     "sourceLabel": "Šaltinis",
     "updatedLabel": "Atnaujinta",
@@ -1182,6 +1183,59 @@
       "communityScore": "Bendruomenės balas",
       "translationScore": "Vertimo balas",
       "businessScore": "Verslo balas"
+    },
+    "economyEyebrow": "Tavo miesto ekonomika",
+    "economyTitle": "Tavo reputacija atveria galimybes.",
+    "economyHeroSubtitle": "Kuo daugiau prisidedi, tuo labiau miestas tavimi pasitiki.",
+    "signedOutHint": "Prisijunk, kad matytum savo miesto tapatybę, veiklą ir galimybes.",
+    "identity": {
+      "viewProfileCta": "Peržiūrėti profilį",
+      "shareProfileCta": "Dalintis profiliu"
+    },
+    "ring": {
+      "title": "Tavo veikla mieste",
+      "hint": "Tikras vaizdas, ką jau padarei — ne išgalvotas įvertinimas.",
+      "emptyTitle": "Tavo miesto veikla prasideda čia.",
+      "emptyHint": "Įkelk skelbimą, paskelbk prašymą arba pretenduok į verslą — ir tai atsiras žemiau.",
+      "totalLabel": "veiksmai"
+    },
+    "activity": {
+      "marketplaceLabel": "Skelbimai",
+      "marketplaceEmpty": "Dar nėra skelbimų",
+      "marketplaceEmptyCta": "Įkelti skelbimą",
+      "marketplaceActiveCta": "Peržiūrėti skelbimus",
+      "helpLabel": "Pagalbos prašymai",
+      "helpEmpty": "Dar nėra prašymų",
+      "helpEmptyCta": "Paskelbti prašymą",
+      "helpActiveCta": "Peržiūrėti prašymus",
+      "communityLabel": "Bendruomenė",
+      "communityEmpty": "Dar nėra įrašų",
+      "communityEmptyCta": "Pasidalink kažkuo",
+      "communityActiveCta": "Peržiūrėti bendruomenę",
+      "businessLabel": "Verslas",
+      "businessEmpty": "Dar nėra verslo",
+      "businessEmptyCta": "Pretenduoti į verslą",
+      "businessActiveCta": "Valdyti verslą",
+      "savedLabel": "Išsaugota",
+      "savedEmpty": "Dar nieko neišsaugota",
+      "savedEmptyCta": "Atrasti vietas",
+      "savedActiveCta": "Peržiūrėti išsaugotus",
+      "activeDetail": "{count} aktyvūs"
+    },
+    "checklist": {
+      "title": "Kurk savo buvimą mieste",
+      "hint": "Liko keletas realių žingsnių.",
+      "addPhoto": "Pridėk profilio nuotrauką",
+      "addRole": "Nurodyk savo profesiją",
+      "verifyEmail": "Patvirtink el. paštą",
+      "firstActivity": "Paskelbk pirmą skelbimą ar prašymą",
+      "completeCta": "Atlikti"
+    },
+    "opportunities": {
+      "eyebrow": "Uždirbk mieste",
+      "title": "Galimybės netoliese",
+      "hint": "Tikri prašymai iš žmonių netoliese, kuriems dabar reikia pagalbos.",
+      "cta": "Naršyti galimybes"
     }
   },
   "translate": {
@@ -1349,7 +1403,7 @@
   "entity": {
     "professional": "Specialistas",
     "helpRequest": "Pagalbos užklausa",
-    "importedPlace": "Importuota vieta",
+    "importedPlace": "Vieta",
     "post": "Paskelbti",
     "place": "Vieta",
     "listing": "Skelbimas",
@@ -1391,8 +1445,61 @@
     "hireTitle": "Samdykite žmogų šalia."
   },
   "explore": {
-    "exploreTitle": "Atrask vietas aplink save.",
-    "exploreHeroSubtitle": "Patikimos įmonės tavo mieste."
+    "exploreEyebrow": "Tyrinėk",
+    "exploreTitle": "Atrask savo miestą.",
+    "exploreHeroSubtitle": "Vietos, paslaugos ir patirtys šalia tavęs.",
+    "filterHasPhoto": "Su nuotraukomis",
+    "exploreEmptyState": "Kol kas nieko šalia nėra. Pabandyk išplėsti paiešką arba paprašyk Alwen rasti alternatyvų.",
+    "category": {
+      "taglineAll": "Vietos, paslaugos ir patirtys šalia tavęs.",
+      "taglineFoodDrink": "Restoranai, kavinės ir mėgstamiausios vietinės vietos.",
+      "taglineGroceries": "Prekybos centrai ir parduotuvės netoliese.",
+      "taglinePharmacy": "Vaistinės, kai jų prireikia.",
+      "taglineHealthcare": "Gydytojai, klinikos ir skubi pagalba netoliese.",
+      "taglineHotels": "Nakvynės vietos — nuo svečių namų iki viešbučių.",
+      "taglineShops": "Parduotuvės ir prekybos centrai mieste.",
+      "taglineBeautyWellness": "Salonai, SPA ir vietos gerai savijautai.",
+      "taglineTransport": "Viskas, kas padeda judėti po miestą.",
+      "taglinePublicServices": "Valstybinės įstaigos ir viešosios paslaugos.",
+      "taglineAttractions": "Įžymybės ir vertos aplankyti vietos.",
+      "taglineParks": "Atsipalaiduok, žaisk ir tyrinėk gamtoje.",
+      "taglineFinance": "Bankai, bankomatai ir finansų tvarkymo vietos.",
+      "taglineEducation": "Mokyklos, universitetai ir mokymosi vietos.",
+      "taglineNightlife": "Barai, klubai ir vietos, kur miestas gyvas naktį.",
+      "taglineAutomobile": "Autoservisai, atstovybės ir degalinės.",
+      "taglinePetServices": "Veterinarai, kirpyklos ir priežiūra tavo augintiniui.",
+      "taglineHomeServices": "Santechnikai, elektrikai ir pagalba namuose."
+    },
+    "rail": {
+      "openNowTitle": "Dabar atidaryta netoliese",
+      "openNowHint": "Realios vietos, kurias gali aplankyti dabar pat.",
+      "nearSavedTitle": "Daugiau šalia to, ką išsaugojai",
+      "nearSavedHint": "Panašios vietos netoli tavo paskutinio išsaugojimo.",
+      "worthALookTitle": "Verta pažvelgti",
+      "worthALookHint": "Vietos su tikra nuotrauka, artimiausios pirmiausia.",
+      "newlyAddedTitle": "Naujai pridėta",
+      "newlyAddedHint": "Naujausi papildymai mieste."
+    },
+    "explorePromptExamples": [
+      "Geriausia kava netoliese",
+      "Reikia santechniko",
+      "Rasti halal restoranų",
+      "Artimiausia vaistinė",
+      "Parkai netoliese",
+      "Rasti barą šįvakar",
+      "Pasitikimas oro uoste",
+      "Elektrikas šiandien",
+      "Užsakyti valytoją",
+      "Kur galiu pasistatyti automobilį?"
+    ],
+    "backToHub": "Visos kategorijos",
+    "hub": {
+      "title": "Ko ieškai?",
+      "subtitle": "Viskas, ką Alwenda žino apie tavo miestą, vienoje vietoje.",
+      "placesCount": "{count} vietų",
+      "noPlacesYet": "Nauja čia",
+      "openNowCount": "{count} dabar atidaryta"
+    }
   },
   "import": {
     "cityImport": "Miesto duomenų importas",
@@ -1402,7 +1509,7 @@
     "importRadiusLabel": "Spindulys",
     "importRunning": "Importuojama…",
     "importFallbackNotice": "Gyvas šaltinis šiuo metu nepasiekiamas — rodomas pavyzdinis rinkinys.",
-    "importedDirectory": "Verslai netoliese",
+    "importedDirectory": "Tyrinėk netoliese",
     "importedDirectoryHint": "Tikros vietos Vilniuje. Verslai gali perimti ir patvirtinti savo profilius.",
     "importModeLabel": "Aprėptis",
     "importModeNearby": "Netoliese (2 km)",

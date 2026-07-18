@@ -130,6 +130,10 @@ const state = {
   discoverOpen: false,
   marketplaceCategoryChosen: false,
   exploreCategoryChosen: false,
+  exploreCategoryVisitCounts: {},
+  exploreOpenNowOnly: false,
+  exploreVerifiedOnly: false,
+  exploreHasPhotoOnly: false,
   activeSheet: null,
   opportunityFilter: "nearby",
   opportunityCategory: "all",
@@ -1226,6 +1230,15 @@ function shareListing(item) {
   navigator.clipboard?.writeText(url).catch(() => {});
 }
 
+function shareUserProfile(user) {
+  const text = `${user.name} on Alwenda — ${profilePrimaryRoleLabel(user)}.`;
+  if (navigator.share) {
+    navigator.share({ title: user.name, text }).catch(() => {});
+    return;
+  }
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
 async function fetchCategoryEntities(source, category, radius) {
   const cached = readCache(source, category, radius);
   if (cached) return { ok: true, fromCache: true, attribution: cached.payload.attribution, entities: cached.payload.entities };
@@ -2138,6 +2151,16 @@ const EXPLORE_SORTERS = {
   hasPhoto: (a, b) => Number(HAS_PHOTO_STATUSES.has(b.photoStatus)) - Number(HAS_PHOTO_STATUSES.has(a.photoStatus)) || (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity)
 };
 
+/** A place "counts" as verified for the customer-facing badge/filter when
+ * either the source record itself was validated during import
+ * (verificationStatus === "Validated") or a real owner has claimed it
+ * (claimStatus === "Claimed") — the two genuine trust signals that exist
+ * in this data. Never fabricated, never shown for the ~85% of records
+ * that are neither. */
+function isPlaceVerified(item) {
+  return item.verificationStatus === "Validated" || item.claimStatus === "Claimed";
+}
+
 function filteredImportedBusinesses() {
   return importedBusinesses
     .filter((item) => {
@@ -2147,11 +2170,17 @@ function filteredImportedBusinesses() {
         state.exploreCategory !== "Food & Drink" || state.exploreCuisine === "All" || item.tags.includes(state.exploreCuisine);
       const starsMatch =
         state.exploreCategory !== "Hotels" || state.exploreStars === "All" || item.rating === Number(state.exploreStars);
+      const openNowMatch = !state.exploreOpenNowOnly || isOpenNow(item.openingHours) === true;
+      const verifiedMatch = !state.exploreVerifiedOnly || isPlaceVerified(item);
+      const hasPhotoMatch = !state.exploreHasPhotoOnly || HAS_PHOTO_STATUSES.has(item.photoStatus);
       return (
         areaMatch &&
         categoryMatch &&
         cuisineMatch &&
         starsMatch &&
+        openNowMatch &&
+        verifiedMatch &&
+        hasPhotoMatch &&
         matchesQuery(`${item.name} ${item.category} ${item.address} ${item.neighbourhood} ${item.tags.join(" ")} ${item.aiAttributes.join(" ")} ${item.description}`)
       );
     })
@@ -2236,13 +2265,18 @@ function topMatches(limit = 4, context = "home") {
     action: "reservations",
     image: item.image
   }));
-  const importedMatches = filteredImportedBusinesses().map((item) => ({
-    kind: t("entity.importedPlace"),
-    title: item.name,
-    meta: `${item.neighbourhood} · ${item.category} · ${item.verificationStatus}`,
-    action: "explore",
-    image: item.photoUrl
-  }));
+  const importedMatches = filteredImportedBusinesses().map((item) => {
+    const distance = formatDistance(distanceFromCenter(item));
+    const open = isOpenNow(item.openingHours);
+    const statusPart = open === true ? t("status.openNow") : open === false ? t("status.closedNow") : "";
+    return {
+      kind: t("entity.importedPlace"),
+      title: item.name,
+      meta: [item.neighbourhood, distance, statusPart].filter(Boolean).join(" · "),
+      action: "explore",
+      image: item.photoUrl
+    };
+  });
   const listingMatches = filteredListings().map((item) => ({
     kind: t("entity.listing"),
     title: listingTitle(item),
@@ -2266,7 +2300,7 @@ function topMatches(limit = 4, context = "home") {
         : routed === "translate"
           ? [...translationMatches, ...placeMatches, ...importedMatches]
           : routed === "explore"
-            ? [...importedMatches, ...placeMatches, ...offerMatches, ...listingMatches, ...proMatches, ...helpMatches]
+            ? [...importedMatches, ...offerMatches, ...listingMatches, ...proMatches, ...helpMatches]
             : routed === "community"
               ? [...helpMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches, ...offerMatches]
               : routed === "contribute"
@@ -3455,12 +3489,12 @@ function renderEarnToday() {
   return renderLivingSection(
     "home.rail.earnToday",
     "home.rail.earnTodayHint",
-    "contribute",
+    "liveOpportunities",
     renderCarousel(
       "earnToday",
       "living-rail earn-rail",
       earnToday.map((item) => `
-        <article class="earn-card" data-view="contribute">
+        <article class="earn-card" data-view="liveOpportunities" data-opportunity-filter-target="today">
           <div class="earn-image" style="background-image: url('${item.image}')"></div>
           <div class="earn-body">
             <span>${item.time}</span>
@@ -3470,7 +3504,9 @@ function renderEarnToday() {
           </div>
         </article>
       `).join("")
-    )
+    ),
+    null,
+    "today"
   );
 }
 
@@ -3595,24 +3631,76 @@ function renderRealPlaceCompactCard(item) {
  * just decorates each slide's transform based on its actual scroll
  * position, recomputed on every scroll frame. Renders nothing if the
  * category has no real data yet, rather than an empty section. */
+/** The 3D coverflow scroller markup shared by every real-place rail —
+ * Home's per-category rails (below) and Explore's Discovery rails
+ * (renderExploreDiscoveryRail) both feed it an already-computed item
+ * list rather than duplicating this track/slide structure. */
+function renderPlaceCoverflowTrack(items, trackKey) {
+  return `
+    <div id="${carouselId(trackKey)}" class="coverflow-viewport" data-coverflow="true">
+      <div class="coverflow-track">
+        ${items.map((item, index) => `
+          <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderRealPlaceCompactCard(item)}</div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderRealPlacesSection(titleKey, hintKey, categories, trackKey, limit = 10, subcategoryFilter = null) {
   const items = realPlacesByCategory(categories, limit, subcategoryFilter);
   if (!items.length) return "";
-  return renderLivingSection(
-    titleKey,
-    hintKey,
-    "explore",
-    `
-      <div id="${carouselId(trackKey)}" class="coverflow-viewport" data-coverflow="true">
-        <div class="coverflow-track">
-          ${items.map((item, index) => `
-            <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderRealPlaceCompactCard(item)}</div>
-          `).join("")}
-        </div>
+  return renderLivingSection(titleKey, hintKey, "explore", renderPlaceCoverflowTrack(items, trackKey), categories.length === 1 ? categories[0] : null);
+}
+
+/** Explore's own "Discovery" rails — same coverflow presentation as the
+ * Home rails above, but each fed a bespoke, honestly-derived item list
+ * (open now / recently added / has a real photo / near what's saved)
+ * instead of a fixed category. No "see all" button since these already
+ * live on Explore itself — see renderExploreDiscoveryRails(). */
+function renderExploreDiscoveryRail(titleKey, hintKey, items, trackKey) {
+  if (!items.length) return "";
+  return `
+    <section class="living-section">
+      <div class="section-title">
+        <div><h2>${t(titleKey)}</h2><p>${t(hintKey)}</p></div>
       </div>
-    `,
-    categories.length === 1 ? categories[0] : null
-  );
+      ${renderPlaceCoverflowTrack(items, trackKey)}
+    </section>
+  `;
+}
+
+/** Every rail here is a real, independently-verifiable slice of the same
+ * imported dataset — nothing here is inferred (no "family friendly",
+ * "quiet", or "trending" claims, since no real signal for any of those
+ * exists in this data). "More near what you saved" is the one
+ * personalised rail: real distance from the user's most recently saved
+ * place, only shown once they've actually saved something. */
+function renderExploreDiscoveryRails() {
+  const openNowItems = importedBusinesses
+    .filter((item) => isOpenNow(item.openingHours) === true)
+    .sort((a, b) => (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity))
+    .slice(0, 10);
+  const newlyAddedItems = [...importedBusinesses].sort((a, b) => (b.lastUpdated || "").localeCompare(a.lastUpdated || "")).slice(0, 10);
+  const realPhotoItems = importedBusinesses
+    .filter((item) => HAS_PHOTO_STATUSES.has(item.photoStatus))
+    .sort((a, b) => (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity))
+    .slice(0, 10);
+  const lastSavedId = [...state.savedPlaceIds].reverse().find((id) => importedBusinesses.some((item) => item.id === id));
+  const lastSaved = lastSavedId ? importedBusinesses.find((item) => item.id === lastSavedId) : null;
+  const nearSavedItems = lastSaved
+    ? importedBusinesses
+        .filter((item) => item.id !== lastSaved.id && item.category === lastSaved.category)
+        .sort((a, b) => (distanceFromCenter(a) ?? Infinity) - (distanceFromCenter(b) ?? Infinity))
+        .slice(0, 10)
+    : [];
+
+  return `
+    ${renderExploreDiscoveryRail("explore.rail.openNowTitle", "explore.rail.openNowHint", openNowItems, "exploreOpenNow")}
+    ${nearSavedItems.length ? renderExploreDiscoveryRail("explore.rail.nearSavedTitle", "explore.rail.nearSavedHint", nearSavedItems, "exploreNearSaved") : ""}
+    ${renderExploreDiscoveryRail("explore.rail.worthALookTitle", "explore.rail.worthALookHint", realPhotoItems, "exploreWorthALook")}
+    ${renderExploreDiscoveryRail("explore.rail.newlyAddedTitle", "explore.rail.newlyAddedHint", newlyAddedItems, "exploreNewlyAdded")}
+  `;
 }
 
 /* Each rail below is deliberately narrowed to ONE real-world grouping
@@ -3776,11 +3864,18 @@ function renderCapabilityRail() {
 }
 
 function renderAiSearch(context) {
-  // Community gets its own contextual placeholder immediately (the
-  // rotation in bindAiSearchPlaceholderRotation() takes over from here
-  // on the next tick) rather than showing the generic city-wide prompt
-  // — including "Register my business" — for even a moment.
-  const placeholder = context === "community" ? t("community.communityPromptExamples")[0] : t("common.aiSearchPlaceholder");
+  // Community and Explore each get their own contextual placeholder
+  // immediately (the rotation in bindAiSearchPlaceholderRotation() takes
+  // over from here on the next tick) rather than showing the generic
+  // city-wide prompt — including "Register my business" — for even a
+  // moment. Explore is "what are you looking for in the city", not a
+  // business directory, so it needs need-based prompts, not the generic set.
+  const placeholder =
+    context === "community"
+      ? t("community.communityPromptExamples")[0]
+      : context === "explore"
+        ? t("explore.explorePromptExamples")[0]
+        : t("common.aiSearchPlaceholder");
   return `
     <div class="ai-search ${context === "home" ? "is-large" : ""}">
       <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
@@ -4659,65 +4754,200 @@ function renderExploreSubFilterRow() {
   return "";
 }
 
-/** Explore's own landing screen is the category picker, not the imported
- * directory — every arrival here (bottom-nav tab, any other "go to
- * Explore" link) resets state.exploreCategoryChosen to false (see the
- * [data-view] handler in bindEvents), so this branch is what actually
- * shows first. Picking any tile — including "All" — sets it back to true
- * (see the [data-explore-category] handler) and re-renders into the full
- * directory page underneath. Same pattern as renderMarketplacePicker(). */
-function renderExplorePicker() {
+/** Three universal trust/convenience toggles — every one backed by a
+ * genuinely real field (isOpenNow, isPlaceVerified, HAS_PHOTO_STATUSES).
+ * Deliberately does NOT include the brief's "family friendly"/"pet
+ * friendly"/"wheelchair accessible"/"halal"/"vegetarian"/"free parking"
+ * filters — none of those exist as real structured data anywhere in the
+ * imported dataset (checked the real OSM tag values on every record;
+ * see PLACE_SPECIALTY_TAG_KEY's own comment on why even the few loose
+ * tag fragments that exist are too ambiguous to filter on). Shipping
+ * them would mean filters that silently return nothing or filter on the
+ * wrong thing — worse than not having them. */
+function renderExploreFilterRow() {
   return `
-    <section class="section-shell explore-picker-shell">
-      <section class="city-hero page-hero explore-picker-hero" aria-labelledby="explore-picker-title">
+    <div class="chip-row explore-category-row explore-filter-row">
+      <button class="${state.exploreOpenNowOnly ? "is-selected" : ""}" data-explore-toggle="exploreOpenNowOnly">${t("status.openNow")}</button>
+      <button class="${state.exploreVerifiedOnly ? "is-selected" : ""}" data-explore-toggle="exploreVerifiedOnly">${t("status.verified")}</button>
+      <button class="${state.exploreHasPhotoOnly ? "is-selected" : ""}" data-explore-toggle="exploreHasPhotoOnly">${t("explore.filterHasPhoto")}</button>
+    </div>
+  `;
+}
+
+/** Real time-of-day context — genuinely the current hour/day, not a
+ * simulated or fabricated "AI mood". Used only to re-order the Hub's
+ * category cards; it never hides a category or invents data. */
+function currentExploreTimeContext() {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay();
+  let bucket;
+  if (hour >= 5 && hour < 10) bucket = "morning";
+  else if (hour >= 10 && hour < 14) bucket = "midday";
+  else if (hour >= 14 && hour < 17) bucket = "afternoon";
+  else if (hour >= 17 && hour < 22) bucket = "evening";
+  else bucket = "night";
+  return { bucket, isWeekendEvening: (day === 5 || day === 6) && hour >= 17 };
+}
+
+const EXPLORE_TIME_BOOST = {
+  morning: ["Food & Drink", "Groceries", "Pharmacy", "Transport"],
+  midday: ["Food & Drink", "Shops"],
+  afternoon: ["Shops", "Beauty & Wellness", "Public Services"],
+  evening: ["Food & Drink", "Nightlife", "Attractions"],
+  night: ["Nightlife", "Pharmacy"]
+};
+
+const EXPLORE_WEEKEND_EVENING_BOOST = ["Nightlife", "Food & Drink", "Attractions"];
+
+/** Keyword → category map used only to attribute a real, just-submitted
+ * search to a category for the visit-count signal below — never to
+ * silently rewrite or filter the query itself. */
+const EXPLORE_SEARCH_CATEGORY_HINTS = {
+  "Food & Drink": ["restaurant", "cafe", "coffee", "lunch", "dinner", "pizza", "sushi", "bakery"],
+  Groceries: ["grocery", "groceries", "supermarket", "convenience"],
+  Pharmacy: ["pharmacy", "medicine", "prescription"],
+  Healthcare: ["doctor", "clinic", "hospital", "dentist"],
+  Hotels: ["hotel", "hostel", "guesthouse"],
+  Shops: ["shop", "mall", "clothing", "electronics", "store"],
+  "Beauty & Wellness": ["salon", "spa", "barber", "haircut", "massage", "gym"],
+  Transport: ["taxi", "bus", "metro", "parking", "train"],
+  "Public Services": ["municipality", "embassy", "police"],
+  Attractions: ["museum", "landmark", "attraction"],
+  Parks: ["park", "playground"],
+  Finance: ["bank", "atm"],
+  Education: ["school", "university", "tutor"],
+  Nightlife: ["bar", "club", "nightlife", "pub"],
+  Automobile: ["mechanic", "garage", "fuel", "petrol", "tyres"],
+  "Pet Services": ["vet", "veterinary", "pet", "grooming"],
+  "Home Services": ["plumber", "electrician", "carpenter", "painter", "locksmith", "gardener", "handyman"]
+};
+
+function matchExploreSearchCategory(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  for (const [category, keywords] of Object.entries(EXPLORE_SEARCH_CATEGORY_HINTS)) {
+    if (keywords.some((word) => new RegExp(`\\b${word}\\b`).test(q))) return category;
+  }
+  return null;
+}
+
+/** Real session behaviour — incremented when the user actually selects a
+ * category or a search of theirs is attributed to one (see bindEvents).
+ * Not persisted beyond the session, same scope as state.query itself. */
+function bumpExploreCategorySignal(category) {
+  if (!category) return;
+  state.exploreCategoryVisitCounts[category] = (state.exploreCategoryVisitCounts[category] || 0) + 1;
+}
+
+/** Combines the two real signals above into a stable sort — ties keep
+ * CITY_ENTITY_CATEGORIES' original order (Array#sort is stable), so the
+ * grid never jitters for categories with equal, usually zero, score. */
+function sortedExploreHubCategories() {
+  const { bucket, isWeekendEvening } = currentExploreTimeContext();
+  const timeBoost = EXPLORE_TIME_BOOST[bucket] || [];
+  const visits = state.exploreCategoryVisitCounts;
+  const scoreOf = (category) => {
+    let score = 0;
+    if (timeBoost.includes(category)) score += 3;
+    if (isWeekendEvening && EXPLORE_WEEKEND_EVENING_BOOST.includes(category)) score += 3;
+    score += Math.min(visits[category] || 0, 5);
+    return score;
+  };
+  return [...CITY_ENTITY_CATEGORIES].sort((a, b) => scoreOf(b) - scoreOf(a));
+}
+
+/** Real counts only — how many imported places actually sit in this
+ * category, and how many of those are genuinely open right now
+ * (isOpenNow, not a guess). Omits the "open now" line entirely rather
+ * than showing 0, since a category can have real places with unknown
+ * hours. */
+function exploreCategoryHubMetadata(category) {
+  const items = importedBusinesses.filter((item) => item.category === category);
+  const openNowCount = items.filter((item) => isOpenNow(item.openingHours) === true).length;
+  return { total: items.length, openNowCount };
+}
+
+function renderExploreHubCard(category, index) {
+  const { total, openNowCount } = exploreCategoryHubMetadata(category);
+  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
+  return `
+    <button type="button" class="explore-hub-card tone-${tone}" data-explore-category="${category}">
+      <span class="explore-hub-card-icon">${EXPLORE_CATEGORY_EMOJI[category] || "📍"}</span>
+      <span class="explore-hub-card-name">${businessCategoryLabel(category)}</span>
+      <span class="explore-hub-card-meta">
+        ${total > 0 ? t("explore.hub.placesCount", { count: total }) : t("explore.hub.noPlacesYet")}
+        ${openNowCount > 0 ? `<span class="explore-hub-card-open">${t("explore.hub.openNowCount", { count: openNowCount })}</span>` : ""}
+      </span>
+      <span class="explore-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
+    </button>
+  `;
+}
+
+/** Stage 1 — orientation, not a filtered list. One search bar (jumps
+ * straight into Stage 2 unfiltered on submit, same "Tell Alwen" pattern
+ * as everywhere else) and a grid of destination cards, real-count
+ * metadata, ordered by real time-of-day + real session behaviour. */
+function renderExploreHub() {
+  const categories = sortedExploreHubCategories();
+  return `
+    <section class="section-shell explore-shell">
+      <section class="city-hero page-hero" aria-labelledby="explore-hub-title">
         <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.businesses")} · ${currentAreaLabel()}</p>
-          <h1 id="explore-picker-title">${t("explore.exploreTitle")}</h1>
-          <p>${t("explore.exploreHeroSubtitle")}</p>
+          <p class="eyebrow">${t("explore.exploreEyebrow")} · ${currentAreaLabel()}</p>
+          <h1 id="explore-hub-title">${t("explore.hub.title")}</h1>
+          <p>${t("explore.hub.subtitle")}</p>
         </div>
+        ${renderAiSearch("explore")}
       </section>
-      ${renderCategoryTileGrid(
-        ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
-          label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
-          iconGlyph: cat === "All" ? "🧭" : EXPLORE_CATEGORY_EMOJI[cat] || "📍",
-          isActive: state.exploreCategory === cat,
-          attrs: `data-explore-category="${cat}"`
-        }))
-      )}
+      <div class="explore-hub-grid">
+        ${categories.map((category, index) => renderExploreHubCard(category, index)).join("")}
+      </div>
     </section>
   `;
 }
 
+/** Stage 1 (orientation: "what do you need?") vs Stage 2 (the actual
+ * discover-and-filter experience for one category, or everything when
+ * exploreCategory === "All"). See renderExploreHub() for Stage 1. */
 function renderExplore() {
-  if (!state.exploreCategoryChosen) return renderExplorePicker();
+  if (!state.exploreCategoryChosen) return renderExploreHub();
+  return renderExploreCategoryPage();
+}
 
+function renderExploreCategoryPage() {
   const imported = filteredImportedBusinesses();
   const EXPLORE_PREVIEW_LIMIT = 30;
   const shown = imported.slice(0, EXPLORE_PREVIEW_LIMIT);
+  const category = state.exploreCategory || "All";
+  const isBrowsingAll = category === "All" && !state.query.trim();
   return `
     <section class="section-shell explore-shell">
+      <button type="button" class="back-button explore-back-to-hub" data-action="explore-back-to-hub">${icon("arrow")}${t("explore.backToHub")}</button>
       <section class="city-hero page-hero" aria-labelledby="explore-hero-title">
         <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.businesses")} · ${currentAreaLabel()}</p>
+          <p class="eyebrow">${t("explore.exploreEyebrow")} · ${currentAreaLabel()}</p>
           <h1 id="explore-hero-title">${t("explore.exploreTitle")}</h1>
           <p>${t("explore.exploreHeroSubtitle")}</p>
         </div>
         ${renderAiSearch("explore")}
       </section>
-      <div class="section-title">
-        <div><h2>${t("import.importedDirectory")}</h2><p>${t("import.importedDirectoryHint")}</p></div>
-      </div>
       ${renderCategoryChipRow(
         ["All", ...CITY_ENTITY_CATEGORIES].map((cat) => ({
           label: cat === "All" ? t("common.all") : businessCategoryLabel(cat),
           iconGlyph: cat === "All" ? "🧭" : EXPLORE_CATEGORY_EMOJI[cat] || "📍",
-          isActive: state.exploreCategory === cat,
+          isActive: category === cat,
           attrs: `data-explore-category="${cat}"`
         }))
       )}
+      <div class="section-title">
+        <div><h2>${category === "All" ? t("import.importedDirectory") : businessCategoryLabel(category)}</h2><p>${t(EXPLORE_CATEGORY_TAGLINE[category] || EXPLORE_CATEGORY_TAGLINE.All)}</p></div>
+      </div>
+      ${renderExploreFilterRow()}
+      ${renderExploreSubFilterRow()}
       ${renderDiscoverToggle()}
       ${renderAiSearchResults(6, "explore")}
-      ${renderExploreSubFilterRow()}
+      ${isBrowsingAll ? renderExploreDiscoveryRails() : ""}
       <label class="explore-sort">
         <span>${t("import.sort.sortLabel")}</span>
         <select data-role="explore-sort">
@@ -4730,7 +4960,7 @@ function renderExplore() {
       </label>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", shown.length).replace("{total}", imported.length)}</p>
       <div class="imported-list">
-        ${shown.map(renderImportedBusiness).join("") || renderEmptyState(t("common.noResults"))}
+        ${shown.map(renderImportedBusiness).join("") || renderEmptyState(t("explore.exploreEmptyState"))}
       </div>
     </section>
   `;
@@ -4886,25 +5116,232 @@ const CONTRIBUTION_ACTION_ICON = {
   review: "star"
 };
 
-function renderContribute() {
-  const streakTile = { label: t("profile.reputation.contributionStreak"), value: reputationProfile.contributionStreakCount, icon: "calendar" };
+/** Real signals only — every count here traces to something the user
+ * actually did (myListings/myHelpRequests carry a real created_at from
+ * Supabase, ownedBusinesses() reflects a real claim, feedPosts is
+ * filtered to posts this signed-in user actually composed, saved counts
+ * are real toggle state) rather than a fabricated 0-100 "trust score" or
+ * percentile claim. No leaderboard exists, so there is no "Top 4%" —
+ * that would require knowing every other user's score. */
+function contributeRealActivityBreakdown(user) {
+  const myPosts = feedPosts.filter((post) => post.author === user.name);
+  const savedCount = state.savedListingIds.length + state.savedPlaceIds.length;
+  return [
+    { key: "marketplace", icon: "tag", count: state.myListings.length, labelKey: "contribute.activity.marketplaceLabel", emptyKey: "contribute.activity.marketplaceEmpty", emptyCtaKey: "contribute.activity.marketplaceEmptyCta", emptyView: "createListing", activeCtaKey: "contribute.activity.marketplaceActiveCta", activeView: "profile" },
+    { key: "help", icon: "help", count: state.myHelpRequests.length, labelKey: "contribute.activity.helpLabel", emptyKey: "contribute.activity.helpEmpty", emptyCtaKey: "contribute.activity.helpEmptyCta", emptyView: "needHelp", activeCtaKey: "contribute.activity.helpActiveCta", activeView: "profile" },
+    { key: "community", icon: "chat", count: myPosts.length, labelKey: "contribute.activity.communityLabel", emptyKey: "contribute.activity.communityEmpty", emptyCtaKey: "contribute.activity.communityEmptyCta", emptyView: "community", activeCtaKey: "contribute.activity.communityActiveCta", activeView: "community" },
+    { key: "business", icon: "shop", count: ownedBusinesses().length, labelKey: "contribute.activity.businessLabel", emptyKey: "contribute.activity.businessEmpty", emptyCtaKey: "contribute.activity.businessEmptyCta", emptyView: "businessClaim", activeCtaKey: "contribute.activity.businessActiveCta", activeView: "businessDashboard" },
+    { key: "saved", icon: "heart", count: savedCount, labelKey: "contribute.activity.savedLabel", emptyKey: "contribute.activity.savedEmpty", emptyCtaKey: "contribute.activity.savedEmptyCta", emptyView: "explore", activeCtaKey: "contribute.activity.savedActiveCta", activeView: "savedPlaces" }
+  ];
+}
+
+/** Real proportions, not a fabricated score — a conic-gradient ring
+ * whose arcs are sized exactly by each category's real count out of the
+ * real total. Renders an honest empty state instead of a ring with
+ * nothing in it when the user hasn't done anything yet. */
+const ECONOMY_RING_COLOR = {
+  marketplace: "#0ea5e9",
+  help: "#f5a524",
+  community: "#34d399",
+  business: "#a855f7",
+  saved: "#f43f5e"
+};
+
+function renderContributeActivityRing(breakdown) {
+  const total = breakdown.reduce((sum, item) => sum + item.count, 0);
+  if (total === 0) {
+    return `
+      <div class="economy-ring-empty">
+        <span class="economy-ring-empty-icon">${icon("spark")}</span>
+        <p>${t("contribute.ring.emptyTitle")}</p>
+        <p class="economy-ring-empty-hint">${t("contribute.ring.emptyHint")}</p>
+      </div>
+    `;
+  }
+  let cumulative = 0;
+  const active = breakdown.filter((item) => item.count > 0);
+  const stops = active
+    .map((item) => {
+      const start = (cumulative / total) * 360;
+      cumulative += item.count;
+      const end = (cumulative / total) * 360;
+      return `${ECONOMY_RING_COLOR[item.key]} ${start}deg ${end}deg`;
+    })
+    .join(", ");
   return `
-    <section class="section-shell contribute-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${t("alwen.alwendaEconomy")}</p>
-        <h1>${t("common.contributeTitle")}</h1>
+    <div class="economy-ring-wrap">
+      <div class="economy-ring" style="background: conic-gradient(${stops})">
+        <div class="economy-ring-center"><strong>${total}</strong><span>${t("contribute.ring.totalLabel")}</span></div>
       </div>
-      ${renderAiSearch("contribute")}
+      <div class="economy-ring-legend">
+        ${active.map((item) => `<span><i style="background:${ECONOMY_RING_COLOR[item.key]}"></i>${t(item.labelKey)} · ${item.count}</span>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderContributeActivityCard(item) {
+  const hasActivity = item.count > 0;
+  return `
+    <article class="economy-activity-card">
+      <span class="tile-icon">${icon(item.icon)}</span>
+      <div>
+        <h3>${t(item.labelKey)}</h3>
+        <p>${hasActivity ? t("contribute.activity.activeDetail", { count: item.count }) : t(item.emptyKey)}</p>
+      </div>
+      <button type="button" data-view="${hasActivity ? item.activeView : item.emptyView}">${t(hasActivity ? item.activeCtaKey : item.emptyCtaKey)}</button>
+    </article>
+  `;
+}
+
+/** Expands profileCompletenessPercent's own checks (Profile's honest
+ * completeness bar) into an itemized list with a direct action per item,
+ * instead of duplicating that bar here. Same four real conditions, same
+ * source of truth, different presentation. */
+function contributeGrowthChecklist(user) {
+  return [
+    { done: Boolean(user.avatar), labelKey: "contribute.checklist.addPhoto", view: "settings" },
+    { done: Boolean(user.role && user.role.trim()), labelKey: "contribute.checklist.addRole", view: "settings" },
+    { done: Boolean(user.emailVerified), labelKey: "contribute.checklist.verifyEmail", view: "settings" },
+    { done: state.myListings.length > 0 || ownedBusinesses().length > 0, labelKey: "contribute.checklist.firstActivity", view: "createListing" }
+  ];
+}
+
+function renderContributeChecklist(user) {
+  const checks = contributeGrowthChecklist(user);
+  if (checks.every((item) => item.done)) return "";
+  return `
+    <div class="economy-section economy-checklist">
+      <div class="economy-section-title"><h2>${t("contribute.checklist.title")}</h2><p>${t("contribute.checklist.hint")}</p></div>
+      <div class="economy-checklist-list">
+        ${checks
+          .map(
+            (item) => `
+          <div class="economy-checklist-row ${item.done ? "is-done" : ""}">
+            <span class="economy-checklist-icon">${item.done ? icon("check") : ""}</span>
+            <span>${t(item.labelKey)}</span>
+            ${!item.done ? `<button type="button" data-view="${item.view}">${t("contribute.checklist.completeCta")}</button>` : ""}
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/** An honest entry point to the real opportunities feed (renderLiveOpportunities,
+ * already live and reachable elsewhere) — no fabricated per-user match
+ * percentage or "because" reasoning, since no real skill/schedule/trust
+ * matching engine exists to generate one. */
+function renderContributeOpportunities() {
+  return `
+    <div class="economy-section economy-opportunity-card">
+      <div>
+        <p class="eyebrow">${t("contribute.opportunities.eyebrow")}</p>
+        <h2>${t("contribute.opportunities.title")}</h2>
+        <p>${t("contribute.opportunities.hint")}</p>
+      </div>
+      <button type="button" data-view="liveOpportunities">${t("contribute.opportunities.cta")}</button>
+    </div>
+  `;
+}
+
+/** Reuses deriveRealAchievements() as-is (Profile's exact same real,
+ * verifiable-condition-derived list) rather than a second implementation —
+ * shown here too because on this page it reads as "what your reputation
+ * is built on" rather than "your account record". */
+function renderContributeAchievements(user) {
+  const achievements = deriveRealAchievements(user);
+  if (!achievements.length) return "";
+  return `
+    <div class="economy-section">
+      <div class="economy-section-title"><h2>${t("profile.achievements.achievements")}</h2></div>
+      <div class="achievement-grid">
+        ${achievements
+          .map(
+            (item) => `
+          <article>
+            <span>${icon(item.icon)}</span>
+            <h3>${t(item.titleKey)}</h3>
+            <p>${t(item.detailKey)}</p>
+            ${item.date ? `<span class="achievement-date">${item.date}</span>` : ""}
+          </article>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderContributeIdentityCard(user) {
+  const isVerified = profileVerificationBadges(user).length > 0;
+  const memberSince = profileMemberSince(user);
+  return `
+    <div class="economy-identity-card">
+      <span class="avatar-frame economy-identity-avatar">
+        ${user.avatar ? `<img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
+      </span>
+      <div class="economy-identity-copy">
+        <h2>${escapeHtml(user.name)}${isVerified ? verifiedCheck(t("status.verified")) : ""}</h2>
+        <p>${joinNonEmpty([profilePrimaryRoleLabel(user), memberSince ? t("profile.identity.memberSince", { date: memberSince }) : null])}</p>
+      </div>
+      <div class="economy-identity-actions">
+        <button type="button" data-view="profile">${t("contribute.identity.viewProfileCta")}</button>
+        <button type="button" data-action="share-profile">${t("contribute.identity.shareProfileCta")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderContribute() {
+  if (state.auth.status !== "signedIn") {
+    return `
+      <section class="section-shell contribute-shell economy-shell">
+        <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
+          <div class="city-hero-copy">
+            <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
+            <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
+            <p>${t("contribute.economyHeroSubtitle")}</p>
+          </div>
+        </div>
+        <div class="economy-signed-out">
+          <p>${t("contribute.signedOutHint")}</p>
+          <button type="button" class="auth-primary-button" data-auth-view="login">${t("profile.signedOut.profileSignInCta")}</button>
+        </div>
+      </section>
+    `;
+  }
+
+  const user = state.auth.user;
+  const breakdown = contributeRealActivityBreakdown(user);
+
+  return `
+    <section class="section-shell contribute-shell economy-shell">
+      <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
+        <div class="city-hero-copy">
+          <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
+          <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
+          <p>${t("contribute.economyHeroSubtitle")}</p>
+        </div>
+        ${renderAiSearch("contribute")}
+      </div>
       ${renderAiSearchResults(6, "contribute")}
-      <div class="score-grid">
-        ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.id] || "spark", t(score.labelKey), score.value, undefined, CONTRIBUTION_SCORE_TONE[score.id])).join("")}
-        ${reputationTile(streakTile.icon, streakTile.label, streakTile.value)}
+
+      ${renderContributeIdentityCard(user)}
+
+      <div class="economy-section economy-ring-section">
+        <div class="economy-section-title"><h2>${t("contribute.ring.title")}</h2><p>${t("contribute.ring.hint")}</p></div>
+        ${renderContributeActivityRing(breakdown)}
+        <div class="economy-activity-grid">
+          ${breakdown.map(renderContributeActivityCard).join("")}
+        </div>
       </div>
-      ${renderEarningOpportunities()}
-      <div class="contribution-grid">
-        ${contributionActions.map(renderContributionAction).join("")}
-      </div>
-      ${renderGraphConnections()}
+
+      ${renderContributeChecklist(user)}
+      ${renderContributeOpportunities()}
+      ${renderContributeAchievements(user)}
     </section>
   `;
 }
@@ -7683,6 +8120,33 @@ const EXPLORE_CATEGORY_EMOJI = {
   "Home Services": "🏠"
 };
 
+/** One-line editorial taglines shown under the section title when a
+ * specific category is selected on Explore, so each destination reads
+ * with its own personality instead of the generic "Places, services and
+ * experiences nearby." repeated everywhere. Pure copy, not derived from
+ * data — same category of decision as any other static UI string in
+ * this file (rail hints, empty-state text). */
+const EXPLORE_CATEGORY_TAGLINE = {
+  All: "explore.category.taglineAll",
+  "Food & Drink": "explore.category.taglineFoodDrink",
+  Groceries: "explore.category.taglineGroceries",
+  Pharmacy: "explore.category.taglinePharmacy",
+  Healthcare: "explore.category.taglineHealthcare",
+  Hotels: "explore.category.taglineHotels",
+  Shops: "explore.category.taglineShops",
+  "Beauty & Wellness": "explore.category.taglineBeautyWellness",
+  Transport: "explore.category.taglineTransport",
+  "Public Services": "explore.category.taglinePublicServices",
+  Attractions: "explore.category.taglineAttractions",
+  Parks: "explore.category.taglineParks",
+  Finance: "explore.category.taglineFinance",
+  Education: "explore.category.taglineEducation",
+  Nightlife: "explore.category.taglineNightlife",
+  Automobile: "explore.category.taglineAutomobile",
+  "Pet Services": "explore.category.taglinePetServices",
+  "Home Services": "explore.category.taglineHomeServices"
+};
+
 const MARKETPLACE_CATEGORY_EMOJI = {
   "buy-sell": "🏷️",
   rentals: "🔑",
@@ -7878,7 +8342,7 @@ function renderPlaceFooterActions(item) {
       <div class="place-footer-actions">
         <button type="button" class="icon-action ${isPlaceSaved(item) ? "is-active" : ""}" data-action="toggle-save" data-place-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
         <button type="button" class="icon-action" data-action="share-place" data-place-id="${item.id}" aria-label="${t("common.share")}">${icon("arrow")}</button>
-        <button type="button" class="claim-subtle" data-view="businessClaim" data-place-id="${item.id}">${t("business.claim.claimBusiness")}</button>
+        <button type="button" class="claim-subtle" data-view="businessClaim" data-place-id="${item.id}">${t("business.claim.claimThisPlace")}</button>
       </div>
     </div>
   `;
@@ -7900,7 +8364,10 @@ function renderImportedBusiness(item) {
         ${renderPlacePhoto(item)}
         <div class="place-photo-overlay place-photo-overlay-top">
           <span class="badge category-chip">${categoryIconFor(item)} ${businessCategoryLabel(item.category)}</span>
-          ${renderOpenStatusBadge(item)}
+          <span class="place-photo-overlay-right">
+            ${isPlaceVerified(item) ? `<span class="badge verified-badge">${icon("check")} ${t("status.verified")}</span>` : ""}
+            ${renderOpenStatusBadge(item)}
+          </span>
         </div>
         <div class="place-photo-overlay place-photo-overlay-bottom">
           ${distance ? `<span class="badge badge-distance">${pinIcon()}${distance}</span>` : ""}
@@ -8200,7 +8667,10 @@ function bindEvents() {
          tab, any other "go to Marketplace" link) should land there fresh,
          not stay wherever a previous category selection left it. */
       if (button.dataset.view === "marketplace") state.marketplaceCategoryChosen = false;
-      if (button.dataset.view === "explore") state.exploreCategoryChosen = false;
+      if (button.dataset.view === "explore") {
+        state.exploreCategory = "All";
+        state.exploreCategoryChosen = false;
+      }
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.alwenOpen = false;
@@ -8567,6 +9037,15 @@ function bindEvents() {
     button.addEventListener("click", () => {
       document.getElementById("global-search")?.blur();
       if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
+      if (state.activeView === "explore") {
+        const matched = matchExploreSearchCategory(state.query);
+        if (matched) bumpExploreCategorySignal(matched);
+        if (!state.exploreCategoryChosen) {
+          state.exploreCategory = "All";
+          state.exploreCategoryChosen = true;
+          render();
+        }
+      }
       document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
@@ -8576,6 +9055,14 @@ function bindEvents() {
       state.discoverOpen = !state.discoverOpen;
       render();
       if (state.discoverOpen) document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  });
+
+  document.querySelectorAll('[data-action="share-profile"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (state.auth.user) shareUserProfile(state.auth.user);
+      trackEvent("profile_shared", {});
     });
   });
 
@@ -8668,7 +9155,16 @@ function bindEvents() {
       state.exploreCategory = button.dataset.exploreCategory;
       state.exploreCuisine = "All";
       state.exploreStars = "All";
+      if (!state.exploreCategoryChosen) bumpExploreCategorySignal(state.exploreCategory);
       state.exploreCategoryChosen = true;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="explore-back-to-hub"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      state.exploreCategoryChosen = false;
+      state.exploreCategory = "All";
       render();
     });
   });
@@ -8683,6 +9179,14 @@ function bindEvents() {
   document.querySelectorAll("[data-explore-stars]").forEach((button) => {
     button.addEventListener("click", () => {
       state.exploreStars = button.dataset.exploreStars;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-explore-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.exploreToggle;
+      state[key] = !state[key];
       render();
     });
   });
@@ -9193,10 +9697,16 @@ function bindAiSearchPlaceholderRotation() {
   let tytIndex = 0;
   let alwenIndex = 0;
   window.setInterval(() => {
-    // Community gets its own contextual prompt set — the generic list
-    // includes prompts like "Register my business" that don't belong on
-    // a neighbourhood feed.
-    const prompts = state.activeView === "community" ? t("community.communityPromptExamples") : t("common.aiSearchPrompts");
+    // Community and Explore each get their own contextual prompt set —
+    // the generic list includes prompts like "Register my business" that
+    // don't belong on a neighbourhood feed or a "what do you need in the
+    // city" search.
+    const prompts =
+      state.activeView === "community"
+        ? t("community.communityPromptExamples")
+        : state.activeView === "explore"
+          ? t("explore.explorePromptExamples")
+          : t("common.aiSearchPrompts");
     const input = document.getElementById("global-search");
     if (input && document.activeElement !== input && !input.value) {
       index = (index + 1) % prompts.length;

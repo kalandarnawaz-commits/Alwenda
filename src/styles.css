@@ -1423,50 +1423,14 @@ body.has-open-sheet {
   font-size: 0.68rem;
 }
 
-/* Explore's landing picker mirrors Marketplace's — same compact hero strip
-   and tile density. Explore has 15 tiles (vs Marketplace's 9), so unlike
-   Marketplace this one isn't guaranteed to fit one screen without scroll,
-   but the visual treatment stays consistent. */
-.explore-picker-hero.city-hero.page-hero {
-  min-height: clamp(120px, 20vw, 170px);
-  padding: clamp(14px, 3.5vw, 24px);
-}
-
-.explore-picker-hero.city-hero.page-hero h1 {
-  font-size: clamp(1.5rem, 4.5vw, 2.2rem);
-}
-
-.explore-picker-hero .city-hero-copy {
-  gap: 3px;
-}
-
-.explore-picker-shell .category-tile-grid {
-  gap: 8px;
-  margin: 4px 0 0;
-}
-
-.explore-picker-shell .category-tile {
-  padding: 12px 4px 10px;
-  gap: 6px;
-}
-
-.explore-picker-shell .category-tile-icon {
-  width: 42px;
-  height: 42px;
-  font-size: 1.4rem;
-}
-
-.explore-picker-shell .category-tile-label {
-  font-size: 0.68rem;
-}
-
 /* Match the TYT sheet's premium dark-emerald material: gradient shell,
    frosted translucent cards, circular emerald icon badges, white text —
    instead of the light card + pastel mint/gold/sky/rose tone tiles used
-   everywhere else in the app. Scoped to just these two picker screens
-   (not the shared .category-tile-grid component in general) so it
-   doesn't bleed into the full Marketplace/Explore pages' own category
-   row, which keeps its usual light styling.
+   everywhere else in the app. Scoped to just the Marketplace picker (not
+   the shared .category-tile-grid component in general) so it doesn't
+   bleed into Marketplace's own full listings page, which keeps its
+   usual light styling. Explore no longer has an equivalent picker
+   screen — it now opens straight into the full page.
    Like .tyt-sheet, this is meant to look the same regardless of the
    site's light/dark theme setting — but .section-shell and
    .category-tile-icon both have their own `:root[data-theme="dark"] ...`
@@ -1477,8 +1441,7 @@ body.has-open-sheet {
    theme on equal specificity. !important pins these regardless of theme
    or source order, the same escape hatch already used for
    .create-primary-action above for the identical reason. */
-.marketplace-picker-shell,
-.explore-picker-shell {
+.marketplace-picker-shell {
   background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   /* .section-shell is `display: grid` with no grid-template-columns of its
@@ -1494,52 +1457,42 @@ body.has-open-sheet {
 .marketplace-picker-shell .category-tile.tone-mint,
 .marketplace-picker-shell .category-tile.tone-gold,
 .marketplace-picker-shell .category-tile.tone-sky,
-.marketplace-picker-shell .category-tile.tone-rose,
-.explore-picker-shell .category-tile.tone-mint,
-.explore-picker-shell .category-tile.tone-gold,
-.explore-picker-shell .category-tile.tone-sky,
-.explore-picker-shell .category-tile.tone-rose {
+.marketplace-picker-shell .category-tile.tone-rose {
   background: rgba(255, 255, 255, 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
 }
 
-.marketplace-picker-shell .category-tile:hover,
-.explore-picker-shell .category-tile:hover {
+.marketplace-picker-shell .category-tile:hover {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
 }
 
-.marketplace-picker-shell .category-tile.is-active,
-.explore-picker-shell .category-tile.is-active {
+.marketplace-picker-shell .category-tile.is-active {
   box-shadow: inset 0 0 0 2px #ffffff !important;
 }
 
-.marketplace-picker-shell .category-tile-icon,
-.explore-picker-shell .category-tile-icon {
+.marketplace-picker-shell .category-tile-icon {
   background: rgba(52, 211, 153, 0.24) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
 
-.marketplace-picker-shell .category-tile-label,
-.explore-picker-shell .category-tile-label {
+.marketplace-picker-shell .category-tile-label {
   color: #ffffff !important;
 }
 
 /* A separate "narrow-phone correction" further down this file pins every
    .city-hero to `width: calc(100vw - 32px)` below 480px, sized for the
    normal case where a hero sits directly inside the standard 16px page
-   margin. These two picker heroes are nested one level deeper, inside a
-   .marketplace-picker-shell/.explore-picker-shell that adds its own 13px
-   padding on top of that margin — so the fixed calc() came out wider
-   than the actual space available and the hero (and, before the
-   grid-template-columns fix above, the tile grid below it) overflowed
-   past the shell's right edge instead of sitting centred, with only a
-   ~2px gutter on the right against a ~14px gutter on the left. Higher
-   specificity + !important to beat that rule and let the hero just fill
-   its real container instead. */
-.marketplace-picker-hero.city-hero,
-.explore-picker-hero.city-hero {
+   margin. This picker hero is nested one level deeper, inside a
+   .marketplace-picker-shell that adds its own 13px padding on top of
+   that margin — so the fixed calc() came out wider than the actual
+   space available and the hero (and, before the grid-template-columns
+   fix above, the tile grid below it) overflowed past the shell's right
+   edge instead of sitting centred, with only a ~2px gutter on the right
+   against a ~14px gutter on the left. Higher specificity + !important to
+   beat that rule and let the hero just fill its real container instead. */
+.marketplace-picker-hero.city-hero {
   width: 100% !important;
   max-width: 100% !important;
   inline-size: 100% !important;
@@ -3403,183 +3356,21 @@ body.has-open-sheet {
   font-size: 0.88rem;
 }
 
-.memory-grid,
-.score-grid {
+.memory-grid {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
-.memory-grid div,
-.score-grid article {
+.memory-grid div {
   display: grid;
   gap: 6px;
   padding: 12px;
 }
 
-.memory-grid span,
-.score-grid span,
-.automation-grid span {
+.memory-grid span {
   color: var(--muted);
   font-size: 0.76rem;
   font-weight: 850;
   text-transform: uppercase;
-}
-
-.score-grid strong {
-  font-size: clamp(1.5rem, 4vw, 2.3rem);
-}
-
-/* Contribute page's action cards — was a single-column stack of
-   identical bordered boxes with zero internal spacing (icon-less badge
-   pill jammed against the heading, heading against the description),
-   reading as one dense undifferentiated wall. Multi-column tile grid,
-   breathing room, and a leading icon per action instead. */
-.contribution-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-items: start;
-}
-
-.contribution-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px !important;
-  border-radius: 22px !important;
-}
-
-.contribution-card h3 {
-  margin: 0;
-}
-
-.contribution-card > p {
-  margin: 0;
-  color: var(--muted);
-}
-
-.contribution-value {
-  justify-self: start;
-}
-
-.contribution-card button {
-  margin-top: 4px;
-  min-height: 42px;
-  border-radius: 10px;
-  background: #111;
-  color: white;
-  font-weight: 800;
-}
-
-/* "Connected city" graph — was a flat list of "From → To" text rows
-   with no icon and no card weight, reading like a debug dump of the
-   data model rather than a showcase of how the city connects. */
-.connection-list {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-items: start;
-}
-
-.connection-list article {
-  display: grid;
-  gap: 8px;
-  padding: 18px !important;
-  border-radius: 22px !important;
-}
-
-.connection-list article span.tile-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  background: #111;
-  color: white;
-  font-size: 0.85rem;
-}
-
-.connection-edge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.connection-edge strong {
-  font-size: 0.96rem;
-}
-
-.connection-edge .icon {
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.connection-list article > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.automation-grid,
-.business-ai-grid,
-.briefing-grid,
-.earning-grid,
-.knowledge-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.automation-grid article,
-.business-ai-grid article,
-.briefing-grid article,
-.earning-grid article,
-.knowledge-grid article {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-}
-
-.automation-grid h3,
-.automation-grid p,
-.business-ai-grid h3,
-.briefing-grid h3,
-.briefing-grid p,
-.earning-grid h3,
-.earning-grid p,
-.knowledge-grid h3 {
-  margin: 0;
-}
-
-.automation-grid p,
-.briefing-grid p,
-.earning-grid p {
-  color: var(--muted);
-}
-
-.automation-grid button,
-.business-ai-grid button {
-  min-height: 40px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  font-weight: 820;
-}
-
-.briefing-grid article {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.7)),
-    var(--surface);
-  box-shadow: 0 18px 42px rgba(28, 25, 20, 0.06);
-}
-
-.briefing-grid span,
-.earning-grid span {
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
-.earning-grid article {
-  background: linear-gradient(180deg, var(--surface), var(--mint));
-}
-
-.earning-grid strong {
-  font-size: clamp(1.4rem, 4vw, 2.2rem);
 }
 
 .knowledge-grid article {
@@ -4154,10 +3945,12 @@ select:focus-visible {
 
 .living-section .section-title h2 {
   font-size: clamp(1.35rem, 2.4vw, 2rem);
+  color: var(--ink);
 }
 
 .living-section .section-title p {
   max-width: 560px;
+  color: var(--muted);
 }
 
 .living-rail {
@@ -7185,8 +6978,7 @@ body {
 .reputation-grid,
 .signal-grid,
 .profile-list,
-.draft-grid,
-.score-grid {
+.draft-grid {
   display: grid !important;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px !important;
@@ -7195,8 +6987,7 @@ body {
 .reputation-grid article,
 .signal-grid article,
 .profile-list article,
-.draft-grid article,
-.score-grid article {
+.draft-grid article {
   align-content: start;
   padding: 16px !important;
   border: 1px solid rgba(20, 20, 20, 0.08);
@@ -7211,9 +7002,7 @@ body {
    system instead of some tiles having icons and others being bare text. */
 .draft-grid article span.tile-icon,
 .reputation-grid article span.tile-icon,
-.signal-grid article span.tile-icon,
-.score-grid article span.tile-icon,
-.contribution-card span.tile-icon {
+.signal-grid article span.tile-icon {
   display: grid;
   place-items: center;
   width: 36px;
@@ -7229,8 +7018,7 @@ body {
 .reputation-grid article span,
 .signal-grid article span,
 .profile-list article span,
-.draft-grid article span,
-.score-grid article span {
+.draft-grid article span {
   color: var(--muted);
   font-size: 0.76rem;
   font-weight: 850;
@@ -7241,8 +7029,7 @@ body {
 .reputation-grid article strong,
 .signal-grid article strong,
 .profile-list article strong,
-.draft-grid article strong,
-.score-grid article strong {
+.draft-grid article strong {
   color: var(--ink);
   font-size: clamp(1rem, 2vw, 1.25rem);
   line-height: 1.25;
@@ -7254,73 +7041,6 @@ body {
   min-height: 56px;
   border-radius: 18px;
   font-weight: 850;
-}
-
-/* Alwenda Economy stat grid — scoped to .score-grid only, doesn't touch
-   the shared .reputation-grid/.signal-grid/.draft-grid tile system above.
-   Three fixes: (1) a subtle hover-lift + shadow so tiles read as premium
-   cards instead of flat boxes, (2) tinted icon badges grouped by tier
-   (identity/earning/social) via CONTRIBUTION_SCORE_TONE in main.js so
-   nine near-identical black circles become scannable categories, and
-   (3) the last tile (Contribution Streak, always appended after the 8
-   scored tiles) spans the full row as a wide highlight bar instead of
-   sitting stranded alone when 9 tiles don't divide evenly into a row. */
-.score-grid article {
-  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.score-grid article:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(15, 31, 27, 0.1);
-}
-
-.score-grid article span.tile-icon {
-  width: 42px;
-  height: 42px;
-  font-size: 0.95rem;
-}
-
-.score-grid article.tone-mint span.tile-icon {
-  background: var(--mint);
-  color: var(--ink);
-}
-
-.score-grid article.tone-gold span.tile-icon {
-  background: var(--gold);
-  color: var(--ink);
-}
-
-.score-grid article.tone-sky span.tile-icon {
-  background: var(--sky);
-  color: var(--ink);
-}
-
-.score-grid article:last-child {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  align-items: center;
-  column-gap: 14px;
-  row-gap: 2px;
-  padding: 16px 20px !important;
-  background: linear-gradient(135deg, var(--mint), var(--surface));
-}
-
-.score-grid article:last-child span.tile-icon {
-  grid-row: 1 / 3;
-  margin-bottom: 0;
-}
-
-.score-grid article:last-child span:not(.tile-icon) {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.score-grid article:last-child strong {
-  grid-column: 2;
-  grid-row: 2;
 }
 
 :root[data-theme="dark"] .score-grid article:hover {
@@ -8384,10 +8104,44 @@ body {
   color: var(--emerald-text);
 }
 
+.place-photo-overlay-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.verified-badge {
+  background: rgba(52, 211, 153, 0.92);
+  color: #06281d;
+  font-weight: 800;
+}
+
 .imported-card-photo {
   margin: -16px -16px 0;
   cursor: pointer;
   position: relative;
+}
+
+/* Cards lift toward the viewer on hover — the same "premium, alive"
+   motion language already used for .real-place-card (Home's coverflow
+   rails); the directory grid never had it. */
+.imported-card {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.imported-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imported-card {
+    transition: none;
+  }
+  .imported-card:hover {
+    transform: none;
+  }
 }
 
 /* Category/open-status/distance/rating badges float directly on the
@@ -12239,3 +11993,466 @@ strong:has(> .verified-check) {
 /* Live opportunities — discovery-first demand marketplace */
 .opportunities-shell{max-width:1440px;margin-inline:auto}.opportunities-hero{padding:clamp(28px,5vw,72px);border-radius:32px;color:#fff;background:linear-gradient(110deg,rgba(5,35,29,.96),rgba(7,92,69,.78)),url('https://images.unsplash.com/photo-1569447891824-7a1758aa73a2?auto=format&fit=crop&w=1800&q=82') center/cover}.opportunities-hero h1{margin:8px 0 4px;font-size:clamp(2.5rem,7vw,6rem);line-height:.92;letter-spacing:-.06em}.opportunities-hero>p:last-of-type{font-size:clamp(1.05rem,2vw,1.5rem);opacity:.9}.opportunity-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:720px;margin-top:32px}.opportunity-stats article{display:flex;flex-direction:column;padding:18px;border:1px solid rgba(255,255,255,.24);border-radius:20px;background:rgba(0,0,0,.24);backdrop-filter:blur(14px)}.opportunity-stats strong{font-size:clamp(1.8rem,4vw,3rem)}.opportunity-stats span{opacity:.82}.opportunity-toolbar{position:sticky;top:72px;z-index:8;margin:18px 0 30px;padding:12px;border:1px solid var(--line);border-radius:20px;background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(18px)}.opportunity-filter-row{display:flex;gap:8px;overflow-x:auto;align-items:center;scrollbar-width:none}.opportunity-filter-row button,.opportunity-filter-row label{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);font-weight:750}.opportunity-filter-row button{padding:11px 16px}.opportunity-filter-row button.is-active{color:#fff;border-color:#096e54;background:#096e54}.opportunity-filter-row label{display:flex;align-items:center;gap:7px;padding:5px 8px 5px 14px}.opportunity-filter-row select{border:0;border-radius:999px;padding:7px 8px;background:var(--surface-2);color:var(--text);font:inherit}.opportunity-feed-heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:18px}.opportunity-feed-heading h2{margin:0;font-size:clamp(1.8rem,3vw,3rem);letter-spacing:-.04em}.opportunity-feed-heading p{margin:4px 0 0;color:var(--muted)}.opportunity-feed-heading>span{color:var(--muted);white-space:nowrap}.opportunity-feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.opportunity-card{overflow:hidden;border:1px solid var(--line);border-radius:26px;background:var(--surface);box-shadow:0 18px 45px rgba(17,35,29,.08)}.opportunity-cover{min-height:230px;padding:16px;display:flex;align-items:flex-start;justify-content:space-between;background-position:center;background-size:cover}.opportunity-cover span,.opportunity-cover strong{padding:8px 11px;border-radius:999px;color:#fff;background:rgba(7,23,19,.76);backdrop-filter:blur(10px)}.opportunity-cover strong{background:#d75332}.opportunity-body{padding:22px}.opportunity-price-row{display:flex;justify-content:space-between;gap:16px;align-items:start}.opportunity-price-row h2{margin:0;font-size:1.45rem}.opportunity-price-row b{color:#087255;font-size:1.45rem;white-space:nowrap}.opportunity-meta{color:var(--muted);font-weight:700}.opportunity-trust,.opportunity-tags,.opportunity-actions{display:flex;flex-wrap:wrap;gap:8px}.opportunity-trust{justify-content:space-between;padding:14px 0;color:#087255;font-weight:700}.opportunity-tags span{padding:7px 10px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:.82rem}.opportunity-actions{margin-top:20px}.opportunity-actions button,.opportunity-post-cta button{flex:1;padding:13px 18px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);font-weight:800}.opportunity-actions .opportunity-primary,.opportunity-post-cta button{color:#fff;border-color:#087255;background:#087255}.opportunity-post-cta{margin-top:56px;padding:clamp(28px,5vw,64px);border-radius:30px;text-align:center;background:var(--surface-2)}.opportunity-post-cta h2{margin:6px 0;font-size:clamp(2rem,4vw,3.5rem)}.opportunity-post-cta button{display:inline-flex;flex:initial;margin-top:16px}
 @media(max-width:760px){.opportunity-feed{grid-template-columns:1fr}.opportunity-stats{grid-template-columns:1fr}.opportunity-toolbar{top:8px}.opportunity-cover{min-height:190px}.opportunity-trust{flex-direction:column}}
+
+/* Alwenda Economy (Contribute) redesign — a calm identity/reputation
+   experience built entirely from real signals (see contributeRealActivityBreakdown
+   in main.js): a compact identity card, a proportional activity ring, honest
+   breakdown cards, a real completeness checklist, and a link out to the
+   real opportunities feed. No fabricated scores, streaks, or percentiles. */
+.economy-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.economy-hero.city-hero.page-hero {
+  gap: 18px;
+}
+
+.economy-signed-out {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 40px);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+}
+
+.economy-identity-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: clamp(18px, 4vw, 26px);
+  border-radius: 26px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  animation: alwenCardIn 360ms ease both;
+}
+
+.economy-identity-avatar {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.economy-identity-copy {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.economy-identity-copy h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.2rem;
+}
+
+.economy-identity-copy p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.economy-identity-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.economy-identity-actions button {
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.economy-identity-actions button:first-child {
+  background: #111;
+  color: #fff;
+}
+
+.economy-identity-actions button:last-child {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+
+.economy-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: alwenCardIn 360ms ease both;
+}
+
+.economy-section-title h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 850;
+}
+
+.economy-section-title p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.economy-ring-wrap {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: clamp(20px, 4vw, 32px);
+  border-radius: 26px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+}
+
+.economy-ring {
+  position: relative;
+  width: 156px;
+  height: 156px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.economy-ring::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.economy-ring-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.economy-ring-center strong {
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  line-height: 1;
+}
+
+.economy-ring-center span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.economy-ring-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 180px;
+}
+
+.economy-ring-legend span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.economy-ring-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.economy-ring-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: clamp(28px, 6vw, 44px);
+  border-radius: 26px;
+  text-align: center;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+}
+
+.economy-ring-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.economy-ring-empty p {
+  margin: 0;
+}
+
+.economy-ring-empty-hint {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.economy-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.economy-activity-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.economy-activity-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgba(15, 31, 27, 0.1);
+}
+
+.economy-activity-card .tile-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.economy-activity-card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.economy-activity-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.economy-activity-card p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.economy-activity-card button {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.economy-checklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.economy-checklist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.economy-checklist-row.is-done {
+  opacity: 0.6;
+}
+
+.economy-checklist-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--emerald-text);
+}
+
+.economy-checklist-row.is-done .economy-checklist-icon {
+  border-color: transparent;
+  background: var(--mint);
+}
+
+.economy-checklist-row span:nth-child(2) {
+  flex: 1;
+  font-weight: 700;
+}
+
+.economy-checklist-row button {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.economy-opportunity-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: clamp(20px, 4vw, 28px);
+  border-radius: 26px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--emerald-800), var(--emerald-900));
+}
+
+.economy-opportunity-card .eyebrow {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.economy-opportunity-card h2 {
+  margin: 4px 0;
+}
+
+.economy-opportunity-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 44ch;
+}
+
+.economy-opportunity-card button {
+  flex-shrink: 0;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--emerald-900);
+  font-weight: 850;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .economy-identity-card,
+  .economy-section,
+  .economy-activity-card {
+    animation: none;
+    transition: none;
+  }
+  .economy-activity-card:hover {
+    transform: none;
+  }
+}
+
+/* Explore Hub (Stage 1) — premium destination cards, real per-category
+   counts (exploreCategoryHubMetadata in main.js), ordered by real
+   time-of-day + real session behaviour (sortedExploreHubCategories).
+   Reuses the same mint/gold/sky/rose tone cycle as .category-tile so it
+   reads as one visual system with the rest of the app rather than a
+   new component language. */
+.explore-back-to-hub {
+  margin-bottom: 4px;
+}
+
+.explore-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.explore-hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  position: relative;
+  min-height: 128px;
+  padding: 20px;
+  border-radius: 24px;
+  text-align: left;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.explore-hub-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(15, 31, 27, 0.12);
+}
+
+.explore-hub-card.tone-mint {
+  background: linear-gradient(160deg, var(--mint), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-gold {
+  background: linear-gradient(160deg, var(--gold), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-sky {
+  background: linear-gradient(160deg, var(--sky), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-rose {
+  background: linear-gradient(160deg, var(--rose), var(--surface) 70%);
+}
+
+.explore-hub-card-icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.explore-hub-card-name {
+  font-size: 1.02rem;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.explore-hub-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.explore-hub-card-open {
+  color: var(--emerald-text);
+}
+
+.explore-hub-card-arrow {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-hub-card {
+    transition: none;
+  }
+  .explore-hub-card:hover {
+    transform: none;
+  }
+}

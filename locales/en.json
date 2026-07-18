@@ -1042,7 +1042,8 @@
       "claimSignInHint": "Sign in or create an account first — claimed businesses are linked to your Alwenda account.",
       "claimAlreadyYours": "You already manage this business.",
       "claimAlreadyTaken": "This business has already been claimed by its owner.",
-      "claimOffer": "Claim"
+      "claimOffer": "Claim",
+      "claimThisPlace": "Claim this place"
     },
     "sourceLabel": "Source",
     "updatedLabel": "Updated",
@@ -1182,6 +1183,59 @@
       "communityScore": "Community score",
       "translationScore": "Translation score",
       "businessScore": "Business score"
+    },
+    "economyEyebrow": "Your city economy",
+    "economyTitle": "Your reputation unlocks opportunities.",
+    "economyHeroSubtitle": "The more you contribute, the more the city trusts you.",
+    "signedOutHint": "Sign in to see your city identity, activity and opportunities.",
+    "identity": {
+      "viewProfileCta": "View profile",
+      "shareProfileCta": "Share profile"
+    },
+    "ring": {
+      "title": "Your city activity",
+      "hint": "A real picture of what you've done, not a fabricated score.",
+      "emptyTitle": "Your city activity starts here.",
+      "emptyHint": "List an item, post a request, or claim a business to see it appear below.",
+      "totalLabel": "actions"
+    },
+    "activity": {
+      "marketplaceLabel": "Marketplace",
+      "marketplaceEmpty": "No listings yet",
+      "marketplaceEmptyCta": "List an item",
+      "marketplaceActiveCta": "View listings",
+      "helpLabel": "Help requests",
+      "helpEmpty": "No requests yet",
+      "helpEmptyCta": "Post a request",
+      "helpActiveCta": "View requests",
+      "communityLabel": "Community",
+      "communityEmpty": "No posts yet",
+      "communityEmptyCta": "Share something",
+      "communityActiveCta": "View community",
+      "businessLabel": "Business",
+      "businessEmpty": "No business yet",
+      "businessEmptyCta": "Claim a business",
+      "businessActiveCta": "Manage business",
+      "savedLabel": "Saved",
+      "savedEmpty": "Nothing saved yet",
+      "savedEmptyCta": "Discover places",
+      "savedActiveCta": "View saved",
+      "activeDetail": "{count} active"
+    },
+    "checklist": {
+      "title": "Build your presence",
+      "hint": "A few real things left to complete.",
+      "addPhoto": "Add a profile photo",
+      "addRole": "Add your profession",
+      "verifyEmail": "Verify your email",
+      "firstActivity": "Post your first listing or request",
+      "completeCta": "Complete"
+    },
+    "opportunities": {
+      "eyebrow": "Earn in the city",
+      "title": "Opportunities near you",
+      "hint": "Real requests from people nearby who need help right now.",
+      "cta": "Browse opportunities"
     }
   },
   "translate": {
@@ -1349,7 +1403,7 @@
   "entity": {
     "professional": "Professional",
     "helpRequest": "Help request",
-    "importedPlace": "Imported place",
+    "importedPlace": "Place",
     "post": "Post",
     "place": "Place",
     "listing": "Listing",
@@ -1391,8 +1445,61 @@
     "hireTitle": "Hire someone nearby."
   },
   "explore": {
-    "exploreTitle": "Discover local places.",
-    "exploreHeroSubtitle": "Trusted businesses around you."
+    "exploreEyebrow": "Explore",
+    "exploreTitle": "Discover your city.",
+    "exploreHeroSubtitle": "Places, services and experiences nearby.",
+    "filterHasPhoto": "Real photos",
+    "exploreEmptyState": "Nothing nearby yet. Try widening your search, or ask Alwen to find alternatives.",
+    "category": {
+      "taglineAll": "Places, services and experiences nearby.",
+      "taglineFoodDrink": "Restaurants, cafés and hidden local favourites.",
+      "taglineGroceries": "Supermarkets and convenience stores near you.",
+      "taglinePharmacy": "Pharmacies for whenever you need them.",
+      "taglineHealthcare": "Doctors, clinics and urgent care nearby.",
+      "taglineHotels": "Places to stay, from guesthouses to hotels.",
+      "taglineShops": "Shops and shopping malls around the city.",
+      "taglineBeautyWellness": "Salons, spas and places to feel good.",
+      "taglineTransport": "Everything that gets you around the city.",
+      "taglinePublicServices": "Government offices and public services.",
+      "taglineAttractions": "Landmarks and things worth seeing.",
+      "taglineParks": "Relax, play and explore outdoors.",
+      "taglineFinance": "Banks, ATMs and places to manage money.",
+      "taglineEducation": "Schools, universities and places to learn.",
+      "taglineNightlife": "Bars, clubs and where the city comes alive.",
+      "taglineAutomobile": "Repair shops, dealers and fuel stations.",
+      "taglinePetServices": "Vets, groomers and care for your pets.",
+      "taglineHomeServices": "Plumbers, electricians and help around the home."
+    },
+    "rail": {
+      "openNowTitle": "Open now near you",
+      "openNowHint": "Real places you can walk into right now.",
+      "nearSavedTitle": "More near what you saved",
+      "nearSavedHint": "Similar places close to your last save.",
+      "worthALookTitle": "Worth a look",
+      "worthALookHint": "Places with a real photo, closest first.",
+      "newlyAddedTitle": "Newly added",
+      "newlyAddedHint": "The latest additions to the city."
+    },
+    "explorePromptExamples": [
+      "Best coffee nearby",
+      "Need a plumber",
+      "Find halal restaurants",
+      "Nearest pharmacy",
+      "Parks nearby",
+      "Find a bar tonight",
+      "Airport pickup",
+      "Electrician available today",
+      "Book a cleaner",
+      "Where can I park?"
+    ],
+    "backToHub": "All categories",
+    "hub": {
+      "title": "What are you looking for?",
+      "subtitle": "Everything Alwenda knows about your city, in one place.",
+      "placesCount": "{count} places",
+      "noPlacesYet": "New here",
+      "openNowCount": "{count} open now"
+    }
   },
   "import": {
     "cityImport": "Import City Data",
@@ -1402,7 +1509,7 @@
     "importRadiusLabel": "Radius",
     "importRunning": "Importing…",
     "importFallbackNotice": "Live source unavailable right now — showing a bundled sample instead.",
-    "importedDirectory": "Businesses around you",
+    "importedDirectory": "Explore nearby",
     "importedDirectoryHint": "Real places in Vilnius. Businesses can claim and verify their profiles.",
     "importModeLabel": "Coverage",
     "importModeNearby": "Nearby (2 km)",
