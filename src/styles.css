@@ -1423,50 +1423,14 @@ body.has-open-sheet {
   font-size: 0.68rem;
 }
 
-/* Explore's landing picker mirrors Marketplace's — same compact hero strip
-   and tile density. Explore has 15 tiles (vs Marketplace's 9), so unlike
-   Marketplace this one isn't guaranteed to fit one screen without scroll,
-   but the visual treatment stays consistent. */
-.explore-picker-hero.city-hero.page-hero {
-  min-height: clamp(120px, 20vw, 170px);
-  padding: clamp(14px, 3.5vw, 24px);
-}
-
-.explore-picker-hero.city-hero.page-hero h1 {
-  font-size: clamp(1.5rem, 4.5vw, 2.2rem);
-}
-
-.explore-picker-hero .city-hero-copy {
-  gap: 3px;
-}
-
-.explore-picker-shell .category-tile-grid {
-  gap: 8px;
-  margin: 4px 0 0;
-}
-
-.explore-picker-shell .category-tile {
-  padding: 12px 4px 10px;
-  gap: 6px;
-}
-
-.explore-picker-shell .category-tile-icon {
-  width: 42px;
-  height: 42px;
-  font-size: 1.4rem;
-}
-
-.explore-picker-shell .category-tile-label {
-  font-size: 0.68rem;
-}
-
 /* Match the TYT sheet's premium dark-emerald material: gradient shell,
    frosted translucent cards, circular emerald icon badges, white text —
    instead of the light card + pastel mint/gold/sky/rose tone tiles used
-   everywhere else in the app. Scoped to just these two picker screens
-   (not the shared .category-tile-grid component in general) so it
-   doesn't bleed into the full Marketplace/Explore pages' own category
-   row, which keeps its usual light styling.
+   everywhere else in the app. Scoped to just the Marketplace picker (not
+   the shared .category-tile-grid component in general) so it doesn't
+   bleed into Marketplace's own full listings page, which keeps its
+   usual light styling. Explore no longer has an equivalent picker
+   screen — it now opens straight into the full page.
    Like .tyt-sheet, this is meant to look the same regardless of the
    site's light/dark theme setting — but .section-shell and
    .category-tile-icon both have their own `:root[data-theme="dark"] ...`
@@ -1477,8 +1441,7 @@ body.has-open-sheet {
    theme on equal specificity. !important pins these regardless of theme
    or source order, the same escape hatch already used for
    .create-primary-action above for the identical reason. */
-.marketplace-picker-shell,
-.explore-picker-shell {
+.marketplace-picker-shell {
   background: linear-gradient(165deg, var(--emerald-800), var(--emerald-900) 60%, #0b1512) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   /* .section-shell is `display: grid` with no grid-template-columns of its
@@ -1494,52 +1457,42 @@ body.has-open-sheet {
 .marketplace-picker-shell .category-tile.tone-mint,
 .marketplace-picker-shell .category-tile.tone-gold,
 .marketplace-picker-shell .category-tile.tone-sky,
-.marketplace-picker-shell .category-tile.tone-rose,
-.explore-picker-shell .category-tile.tone-mint,
-.explore-picker-shell .category-tile.tone-gold,
-.explore-picker-shell .category-tile.tone-sky,
-.explore-picker-shell .category-tile.tone-rose {
+.marketplace-picker-shell .category-tile.tone-rose {
   background: rgba(255, 255, 255, 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
 }
 
-.marketplace-picker-shell .category-tile:hover,
-.explore-picker-shell .category-tile:hover {
+.marketplace-picker-shell .category-tile:hover {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
 }
 
-.marketplace-picker-shell .category-tile.is-active,
-.explore-picker-shell .category-tile.is-active {
+.marketplace-picker-shell .category-tile.is-active {
   box-shadow: inset 0 0 0 2px #ffffff !important;
 }
 
-.marketplace-picker-shell .category-tile-icon,
-.explore-picker-shell .category-tile-icon {
+.marketplace-picker-shell .category-tile-icon {
   background: rgba(52, 211, 153, 0.24) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
 
-.marketplace-picker-shell .category-tile-label,
-.explore-picker-shell .category-tile-label {
+.marketplace-picker-shell .category-tile-label {
   color: #ffffff !important;
 }
 
 /* A separate "narrow-phone correction" further down this file pins every
    .city-hero to `width: calc(100vw - 32px)` below 480px, sized for the
    normal case where a hero sits directly inside the standard 16px page
-   margin. These two picker heroes are nested one level deeper, inside a
-   .marketplace-picker-shell/.explore-picker-shell that adds its own 13px
-   padding on top of that margin — so the fixed calc() came out wider
-   than the actual space available and the hero (and, before the
-   grid-template-columns fix above, the tile grid below it) overflowed
-   past the shell's right edge instead of sitting centred, with only a
-   ~2px gutter on the right against a ~14px gutter on the left. Higher
-   specificity + !important to beat that rule and let the hero just fill
-   its real container instead. */
-.marketplace-picker-hero.city-hero,
-.explore-picker-hero.city-hero {
+   margin. This picker hero is nested one level deeper, inside a
+   .marketplace-picker-shell that adds its own 13px padding on top of
+   that margin — so the fixed calc() came out wider than the actual
+   space available and the hero (and, before the grid-template-columns
+   fix above, the tile grid below it) overflowed past the shell's right
+   edge instead of sitting centred, with only a ~2px gutter on the right
+   against a ~14px gutter on the left. Higher specificity + !important to
+   beat that rule and let the hero just fill its real container instead. */
+.marketplace-picker-hero.city-hero {
   width: 100% !important;
   max-width: 100% !important;
   inline-size: 100% !important;
@@ -8384,10 +8337,44 @@ body {
   color: var(--emerald-text);
 }
 
+.place-photo-overlay-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.verified-badge {
+  background: rgba(52, 211, 153, 0.92);
+  color: #06281d;
+  font-weight: 800;
+}
+
 .imported-card-photo {
   margin: -16px -16px 0;
   cursor: pointer;
   position: relative;
+}
+
+/* Cards lift toward the viewer on hover — the same "premium, alive"
+   motion language already used for .real-place-card (Home's coverflow
+   rails); the directory grid never had it. */
+.imported-card {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.imported-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imported-card {
+    transition: none;
+  }
+  .imported-card:hover {
+    transform: none;
+  }
 }
 
 /* Category/open-status/distance/rating badges float directly on the

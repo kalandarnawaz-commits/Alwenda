@@ -1042,7 +1042,8 @@
       "claimSignInHint": "Melde dich zuerst an oder erstelle ein Konto — beanspruchte Unternehmen werden mit deinem Alwenda-Konto verknüpft.",
       "claimAlreadyYours": "Du verwaltest dieses Unternehmen bereits.",
       "claimAlreadyTaken": "Dieses Unternehmen wurde bereits von seinem Inhaber beansprucht.",
-      "claimOffer": "Beanspruchen"
+      "claimOffer": "Beanspruchen",
+      "claimThisPlace": "Diesen Ort beanspruchen"
     },
     "sourceLabel": "Quelle",
     "updatedLabel": "Aktualisiert",
@@ -1349,7 +1350,7 @@
   "entity": {
     "professional": "Fachkraft",
     "helpRequest": "Hilfeanfrage",
-    "importedPlace": "Importierter Ort",
+    "importedPlace": "Ort",
     "post": "Beitrag",
     "place": "Ort",
     "listing": "Anzeige",
@@ -1391,8 +1392,53 @@
     "hireTitle": "Jemanden in der Nähe beauftragen."
   },
   "explore": {
-    "exploreTitle": "Entdecke lokale Orte.",
-    "exploreHeroSubtitle": "Vertrauenswürdige Unternehmen in deiner Nähe."
+    "exploreEyebrow": "Entdecken",
+    "exploreTitle": "Entdecke deine Stadt.",
+    "exploreHeroSubtitle": "Orte, Dienstleistungen und Erlebnisse in deiner Nähe.",
+    "filterHasPhoto": "Echte Fotos",
+    "exploreEmptyState": "Noch nichts in der Nähe. Erweitere deine Suche oder bitte Alwen um Alternativen.",
+    "category": {
+      "taglineAll": "Orte, Dienstleistungen und Erlebnisse in deiner Nähe.",
+      "taglineFoodDrink": "Restaurants, Cafés und beliebte lokale Adressen.",
+      "taglineGroceries": "Supermärkte und Lebensmittelgeschäfte in der Nähe.",
+      "taglinePharmacy": "Apotheken, wann immer du sie brauchst.",
+      "taglineHealthcare": "Ärzte, Kliniken und Notfallversorgung in der Nähe.",
+      "taglineHotels": "Unterkünfte, von Gästehäusern bis Hotels.",
+      "taglineShops": "Geschäfte und Einkaufszentren in der Stadt.",
+      "taglineBeautyWellness": "Salons, Spas und Orte zum Wohlfühlen.",
+      "taglineTransport": "Alles, was dich durch die Stadt bringt.",
+      "taglinePublicServices": "Behörden und öffentliche Dienstleistungen.",
+      "taglineAttractions": "Sehenswürdigkeiten und Ausflugsziele.",
+      "taglineParks": "Entspannen, spielen und die Natur entdecken.",
+      "taglineFinance": "Banken, Geldautomaten und Finanzdienste.",
+      "taglineEducation": "Schulen, Universitäten und Lernorte.",
+      "taglineNightlife": "Bars, Clubs und das Nachtleben der Stadt.",
+      "taglineAutomobile": "Werkstätten, Autohäuser und Tankstellen.",
+      "taglinePetServices": "Tierärzte, Pflege und Service für dein Haustier.",
+      "taglineHomeServices": "Klempner, Elektriker und Hilfe rund ums Haus."
+    },
+    "rail": {
+      "openNowTitle": "Jetzt geöffnet in der Nähe",
+      "openNowHint": "Echte Orte, die du jetzt sofort besuchen kannst.",
+      "nearSavedTitle": "Mehr in der Nähe deiner Merkliste",
+      "nearSavedHint": "Ähnliche Orte nahe deinem letzten gespeicherten Ort.",
+      "worthALookTitle": "Einen Blick wert",
+      "worthALookHint": "Orte mit einem echten Foto, die nächsten zuerst.",
+      "newlyAddedTitle": "Neu hinzugefügt",
+      "newlyAddedHint": "Die neuesten Ergänzungen der Stadt."
+    },
+    "explorePromptExamples": [
+      "Bester Kaffee in der Nähe",
+      "Klempner gesucht",
+      "Halal-Restaurants finden",
+      "Nächste Apotheke",
+      "Parks in der Nähe",
+      "Heute Abend eine Bar finden",
+      "Flughafentransfer",
+      "Elektriker heute verfügbar",
+      "Reinigungskraft buchen",
+      "Wo kann ich parken?"
+    ]
   },
   "import": {
     "cityImport": "Stadtdaten importieren",
@@ -1402,7 +1448,7 @@
     "importRadiusLabel": "Radius",
     "importRunning": "Wird importiert…",
     "importFallbackNotice": "Live-Quelle gerade nicht verfügbar — zeigt stattdessen ein gebündeltes Beispiel.",
-    "importedDirectory": "Unternehmen in deiner Nähe",
+    "importedDirectory": "In der Nähe entdecken",
     "importedDirectoryHint": "Echte Orte in Vilnius. Unternehmen können ihre Profile beanspruchen und verifizieren.",
     "importModeLabel": "Abdeckung",
     "importModeNearby": "In der Nähe (2 km)",

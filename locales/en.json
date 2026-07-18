@@ -1042,7 +1042,8 @@
       "claimSignInHint": "Sign in or create an account first — claimed businesses are linked to your Alwenda account.",
       "claimAlreadyYours": "You already manage this business.",
       "claimAlreadyTaken": "This business has already been claimed by its owner.",
-      "claimOffer": "Claim"
+      "claimOffer": "Claim",
+      "claimThisPlace": "Claim this place"
     },
     "sourceLabel": "Source",
     "updatedLabel": "Updated",
@@ -1349,7 +1350,7 @@
   "entity": {
     "professional": "Professional",
     "helpRequest": "Help request",
-    "importedPlace": "Imported place",
+    "importedPlace": "Place",
     "post": "Post",
     "place": "Place",
     "listing": "Listing",
@@ -1391,8 +1392,53 @@
     "hireTitle": "Hire someone nearby."
   },
   "explore": {
-    "exploreTitle": "Discover local places.",
-    "exploreHeroSubtitle": "Trusted businesses around you."
+    "exploreEyebrow": "Explore",
+    "exploreTitle": "Discover your city.",
+    "exploreHeroSubtitle": "Places, services and experiences nearby.",
+    "filterHasPhoto": "Real photos",
+    "exploreEmptyState": "Nothing nearby yet. Try widening your search, or ask Alwen to find alternatives.",
+    "category": {
+      "taglineAll": "Places, services and experiences nearby.",
+      "taglineFoodDrink": "Restaurants, cafés and hidden local favourites.",
+      "taglineGroceries": "Supermarkets and convenience stores near you.",
+      "taglinePharmacy": "Pharmacies for whenever you need them.",
+      "taglineHealthcare": "Doctors, clinics and urgent care nearby.",
+      "taglineHotels": "Places to stay, from guesthouses to hotels.",
+      "taglineShops": "Shops and shopping malls around the city.",
+      "taglineBeautyWellness": "Salons, spas and places to feel good.",
+      "taglineTransport": "Everything that gets you around the city.",
+      "taglinePublicServices": "Government offices and public services.",
+      "taglineAttractions": "Landmarks and things worth seeing.",
+      "taglineParks": "Relax, play and explore outdoors.",
+      "taglineFinance": "Banks, ATMs and places to manage money.",
+      "taglineEducation": "Schools, universities and places to learn.",
+      "taglineNightlife": "Bars, clubs and where the city comes alive.",
+      "taglineAutomobile": "Repair shops, dealers and fuel stations.",
+      "taglinePetServices": "Vets, groomers and care for your pets.",
+      "taglineHomeServices": "Plumbers, electricians and help around the home."
+    },
+    "rail": {
+      "openNowTitle": "Open now near you",
+      "openNowHint": "Real places you can walk into right now.",
+      "nearSavedTitle": "More near what you saved",
+      "nearSavedHint": "Similar places close to your last save.",
+      "worthALookTitle": "Worth a look",
+      "worthALookHint": "Places with a real photo, closest first.",
+      "newlyAddedTitle": "Newly added",
+      "newlyAddedHint": "The latest additions to the city."
+    },
+    "explorePromptExamples": [
+      "Best coffee nearby",
+      "Need a plumber",
+      "Find halal restaurants",
+      "Nearest pharmacy",
+      "Parks nearby",
+      "Find a bar tonight",
+      "Airport pickup",
+      "Electrician available today",
+      "Book a cleaner",
+      "Where can I park?"
+    ]
   },
   "import": {
     "cityImport": "Import City Data",
@@ -1402,7 +1448,7 @@
     "importRadiusLabel": "Radius",
     "importRunning": "Importing…",
     "importFallbackNotice": "Live source unavailable right now — showing a bundled sample instead.",
-    "importedDirectory": "Businesses around you",
+    "importedDirectory": "Explore nearby",
     "importedDirectoryHint": "Real places in Vilnius. Businesses can claim and verify their profiles.",
     "importModeLabel": "Coverage",
     "importModeNearby": "Nearby (2 km)",
