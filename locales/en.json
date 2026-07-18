@@ -317,7 +317,9 @@
       "bizCatFinance": "Finance",
       "bizCatEducation": "Education",
       "bizCatNightlife": "Nightlife",
-      "bizCatAutomobile": "Automobile"
+      "bizCatAutomobile": "Automotive",
+      "bizCatPetServices": "Pet Services",
+      "bizCatHomeServices": "Home Services"
     },
     "marketplace": {
       "catBuySell": "Buy/Sell",

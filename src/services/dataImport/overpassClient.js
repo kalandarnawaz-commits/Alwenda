@@ -31,7 +31,9 @@ export const OVERPASS_CATEGORY_FILTERS = {
   Attractions: ['["tourism"~"^(attraction|museum)$"]', '["historic"~"^(monument|memorial)$"]'],
   Parks: ['["leisure"="park"]'],
   Finance: ['["amenity"~"^(bank|atm)$"]'],
-  Education: ['["amenity"~"^(school|university|college)$"]']
+  Education: ['["amenity"~"^(school|university|college)$"]'],
+  "Pet Services": ['["amenity"~"^(veterinary|animal_boarding)$"]', '["shop"~"^(pet|pet_grooming)$"]'],
+  "Home Services": ['["craft"~"^(plumber|electrician|carpenter|painter|locksmith|gardener)$"]']
 };
 
 export const IMPORT_CATEGORIES = Object.keys(OVERPASS_CATEGORY_FILTERS);

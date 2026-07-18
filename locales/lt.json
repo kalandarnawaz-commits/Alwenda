@@ -317,7 +317,9 @@
       "bizCatFinance": "Finansai",
       "bizCatEducation": "Švietimas",
       "bizCatNightlife": "Naktinis gyvenimas",
-      "bizCatAutomobile": "Automobiliai"
+      "bizCatAutomobile": "Automobiliai",
+      "bizCatPetServices": "Gyvūnų paslaugos",
+      "bizCatHomeServices": "Namų paslaugos"
     },
     "marketplace": {
       "catBuySell": "Pirk/Parduok",

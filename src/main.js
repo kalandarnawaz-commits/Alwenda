@@ -7395,7 +7395,10 @@ const EXPLORE_CATEGORY_EMOJI = {
   Parks: "🌳",
   Finance: "🏦",
   Education: "🎓",
-  Nightlife: "🌃"
+  Nightlife: "🌃",
+  Automobile: "🚗",
+  "Pet Services": "🐾",
+  "Home Services": "🏠"
 };
 
 const MARKETPLACE_CATEGORY_EMOJI = {
@@ -7424,7 +7427,9 @@ const CATEGORY_ICON = {
   Parks: "✤",
   Finance: "€",
   Education: "◫",
-  Automobile: "▲"
+  Automobile: "▲",
+  "Pet Services": "●",
+  "Home Services": "⌂"
 };
 
 /** Real subcategory strings (OSM/Wikidata `subcategory` values, lowercased)
@@ -7471,7 +7476,17 @@ const SUBCATEGORY_ICON = {
   "car repair": "🔧",
   "car dealer": "🚗",
   tyres: "🛞",
-  "petrol station": "⛽"
+  "petrol station": "⛽",
+  "veterinary clinic": "🐾",
+  "pet boarding": "🐕",
+  "pet shop": "🐾",
+  "pet grooming": "✂️",
+  plumber: "🔧",
+  electrician: "⚡",
+  carpenter: "🪚",
+  painter: "🖌️",
+  locksmith: "🔐",
+  gardener: "🌿"
 };
 
 /** Best available icon for a place: a distinct emoji for its real
@@ -7501,7 +7516,9 @@ const BUSINESS_CATEGORY_TRANSLATION_KEY = {
   Finance: "category.business.bizCatFinance",
   Education: "category.business.bizCatEducation",
   Nightlife: "category.business.bizCatNightlife",
-  Automobile: "category.business.bizCatAutomobile"
+  Automobile: "category.business.bizCatAutomobile",
+  "Pet Services": "category.business.bizCatPetServices",
+  "Home Services": "category.business.bizCatHomeServices"
 };
 
 function businessCategoryLabel(category) {

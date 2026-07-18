@@ -54,7 +54,10 @@ export const CITY_ENTITY_CATEGORIES = [
   "Parks",
   "Finance",
   "Education",
-  "Nightlife"
+  "Nightlife",
+  "Automobile",
+  "Pet Services",
+  "Home Services"
 ];
 
 /** Google Maps + Waze links — coordinates when known, otherwise a

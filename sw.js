@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "production-foundation-20260717-marketplace-hero";
+const RELEASE_VERSION = "production-foundation-20260717-explore-categories";
 const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
 const AUTH_CALLBACK_PATH = "/auth/callback";

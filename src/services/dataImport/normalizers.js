@@ -84,12 +84,22 @@ const OSM_TAG_TO_CATEGORY = {
   atm: ["Finance", "ATM"],
   school: ["Education", "School"],
   university: ["Education", "University"],
-  college: ["Education", "College"]
+  college: ["Education", "College"],
+  veterinary: ["Pet Services", "Veterinary clinic"],
+  animal_boarding: ["Pet Services", "Pet boarding"],
+  pet: ["Pet Services", "Pet shop"],
+  pet_grooming: ["Pet Services", "Pet grooming"],
+  plumber: ["Home Services", "Plumber"],
+  electrician: ["Home Services", "Electrician"],
+  carpenter: ["Home Services", "Carpenter"],
+  painter: ["Home Services", "Painter"],
+  locksmith: ["Home Services", "Locksmith"],
+  gardener: ["Home Services", "Gardener"]
 };
 
 /** Reads amenity/shop/tourism/leisure/historic/highway/railway off raw OSM tags. */
 export function categorizeOsmTags(tags = {}) {
-  for (const key of ["amenity", "shop", "tourism", "leisure", "historic", "highway", "railway"]) {
+  for (const key of ["amenity", "shop", "tourism", "leisure", "historic", "highway", "railway", "craft"]) {
     const value = tags[key];
     if (value && OSM_TAG_TO_CATEGORY[value]) return OSM_TAG_TO_CATEGORY[value];
   }
