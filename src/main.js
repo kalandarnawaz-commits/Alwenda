@@ -131,6 +131,9 @@ const state = {
   marketplaceCategoryChosen: false,
   exploreCategoryChosen: false,
   activeSheet: null,
+  opportunityFilter: "nearby",
+  opportunityCategory: "all",
+  opportunityDistance: "all",
   headerSolid: false,
   alwenOpen: false,
   quickTranslateOpen: false,
@@ -688,6 +691,7 @@ const DEEP_LINK_VIEWS = new Set([
   "contribute",
   "hire",
   "needHelp",
+  "liveOpportunities",
   "businesses",
   "businessProfile",
   "businessClaim",
@@ -2826,6 +2830,7 @@ function renderView() {
     contribute: renderContribute,
     hire: renderHire,
     needHelp: renderNeedHelp,
+    liveOpportunities: renderLiveOpportunities,
     createListing: renderCreateListingForm,
     listings: renderListings,
     listingDetail: renderListingDetail,
@@ -3405,7 +3410,7 @@ function renderLiveAroundYou() {
   return renderLivingSection(
     "home.rail.liveAroundYou",
     "home.rail.liveAroundYouHint",
-    "needHelp",
+    "liveOpportunities",
     renderCarousel(
       "liveAroundYou",
       "living-rail live-rail",
@@ -5301,6 +5306,59 @@ function renderNeedHelp() {
       </div>
     </section>
   `;
+}
+
+const LIVE_OPPORTUNITIES = [
+  { id: "airport-pickup", title: "Airport pickup", category: "Transport", price: 25, priceLabel: "€25", distance: 2, time: "Starts in 30 min", requester: "Verified traveller", trust: 4.9, urgent: true, today: true, description: "Pick up one traveller at Vilnius Airport and drive them to the Old Town.", tags: ["Car required", "1 passenger"], action: "Accept", image: "https://images.unsplash.com/photo-1515569067071-ec3b51335dd0?auto=format&fit=crop&w=1200&q=82" },
+  { id: "babysitter", title: "Need babysitter", category: "Childcare", price: 40, priceLabel: "€40/hr", distance: 1.4, time: "Tonight · 19:00", requester: "Verified family", trust: 4.8, urgent: true, today: true, description: "Help with two children for three hours while their parents attend an event.", tags: ["Experience required", "3 hours"], action: "Apply", image: "https://images.unsplash.com/photo-1602030028438-4cf153cbae9e?auto=format&fit=crop&w=1200&q=82" },
+  { id: "furniture", title: "Furniture assembly", category: "Home services", price: 60, priceLabel: "€60", distance: 3.1, time: "Flexible timing", requester: "Verified homeowner", trust: 5.0, urgent: false, today: false, description: "Assemble a wardrobe and two bedside tables in a new apartment.", tags: ["Tools preferred", "Indoor"], action: "View details", image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=1200&q=82" },
+  { id: "dog-walk", title: "Evening dog walk", category: "Pet care", price: 18, priceLabel: "€18", distance: 0.8, time: "Today · 18:30", requester: "Verified neighbour", trust: 4.7, urgent: false, today: true, description: "Take a friendly golden retriever for a 45-minute walk around Bernardine Garden.", tags: ["Pet friendly", "45 min"], action: "Accept", image: "https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=1200&q=82" },
+  { id: "photo-event", title: "Event photographer", category: "Creative", price: 120, priceLabel: "€120", distance: 4.2, time: "Saturday · 16:00", requester: "Verified organiser", trust: 4.9, urgent: false, today: false, description: "Photograph a small community event and deliver a curated digital gallery.", tags: ["Portfolio", "2 hours"], action: "Apply", image: "https://images.unsplash.com/photo-1502982720700-bfff97f2ecac?auto=format&fit=crop&w=1200&q=82" },
+  { id: "grocery-delivery", title: "Grocery delivery", category: "Delivery", price: 22, priceLabel: "€22", distance: 1.1, time: "Within 1 hour", requester: "Verified resident", trust: 4.6, urgent: true, today: true, description: "Collect a prepaid grocery order and deliver it to a nearby apartment.", tags: ["Quick task", "No stairs"], action: "Accept", image: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=82" },
+  { id: "language-help", title: "Lithuanian conversation practice", category: "Tutoring", price: 30, priceLabel: "€30/hr", distance: 2.7, time: "Tomorrow · 17:00", requester: "Verified learner", trust: 4.8, urgent: false, today: false, description: "Friendly conversation practice for an English speaker learning Lithuanian.", tags: ["Lithuanian", "Beginner"], action: "View details", image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=82" },
+  { id: "moving-boxes", title: "Help moving boxes", category: "Moving", price: 75, priceLabel: "€75", distance: 3.6, time: "Today · 15:00", requester: "Verified homeowner", trust: 4.9, urgent: true, today: true, description: "Move packed boxes from a second-floor flat into a waiting van.", tags: ["Physical task", "2 hours"], action: "Accept", image: "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1200&q=82" }
+];
+
+function filteredLiveOpportunities() {
+  let items = LIVE_OPPORTUNITIES.filter((item) => {
+    const categoryMatch = state.opportunityCategory === "all" || item.category === state.opportunityCategory;
+    const distanceMatch = state.opportunityDistance === "all" || item.distance <= Number(state.opportunityDistance);
+    const filterMatch = state.opportunityFilter === "nearby" || (state.opportunityFilter === "today" && item.today) || (state.opportunityFilter === "urgent" && item.urgent) || state.opportunityFilter === "verified" || state.opportunityFilter === "highest";
+    return categoryMatch && distanceMatch && filterMatch;
+  });
+  if (state.opportunityFilter === "highest") items = [...items].sort((a, b) => b.price - a.price);
+  else items = [...items].sort((a, b) => a.distance - b.distance);
+  return items;
+}
+
+function renderOpportunityCard(item) {
+  return `<article class="opportunity-card">
+    <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${item.category}</span>${item.urgent ? '<strong>Urgent</strong>' : ''}</div>
+    <div class="opportunity-body"><div class="opportunity-price-row"><h2>${item.title}</h2><b>${item.priceLabel}</b></div>
+    <p class="opportunity-meta">${item.distance} km away · ${item.time}</p>
+    <p>${item.description}</p><div class="opportunity-trust"><span>✓ ${item.requester}</span><span>★ ${item.trust} trust score</span></div>
+    <div class="opportunity-tags">${item.tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
+    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${item.action}</button><button type="button" data-view="messages">View details</button></div></div>
+  </article>`;
+}
+
+function renderLiveOpportunities() {
+  const items = filteredLiveOpportunities();
+  const categories = [...new Set(LIVE_OPPORTUNITIES.map((item) => item.category))];
+  const earnings = LIVE_OPPORTUNITIES.filter((item) => item.today).reduce((sum, item) => sum + item.price, 0);
+  return `<section class="section-shell opportunities-shell">
+    <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>LIVE OPPORTUNITIES</h1><p>Earn money by helping people nearby.</p>
+      <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>active opportunities nearby</span></article><article><strong>€${earnings}</strong><span>estimated earnings available today</span></article></div>
+    </header>
+    <div class="opportunity-toolbar" aria-label="Opportunity filters"><div class="opportunity-filter-row">
+      ${[["nearby","Nearby"],["today","Today"],["highest","Highest paying"],["urgent","Urgent"],["verified","Verified"]].map(([value,label]) => `<button type="button" class="${state.opportunityFilter === value ? "is-active" : ""}" data-opportunity-filter="${value}">${label}</button>`).join("")}
+      <label>Category<select data-opportunity-category><option value="all">All categories</option>${categories.map((category) => `<option value="${category}" ${state.opportunityCategory === category ? "selected" : ""}>${category}</option>`).join("")}</select></label>
+      <label>Distance<select data-opportunity-distance><option value="all">Any distance</option>${[1,2,5].map((distance) => `<option value="${distance}" ${state.opportunityDistance === String(distance) ? "selected" : ""}>Within ${distance} km</option>`).join("")}</select></label>
+    </div></div>
+    <div class="opportunity-feed-heading"><div><h2>What can you earn today?</h2><p>Fresh, verified requests from people around Vilnius.</p></div><span>${items.length} matches</span></div>
+    <div class="opportunity-feed">${items.map(renderOpportunityCard).join("") || renderEmptyState("No opportunities match these filters yet.")}</div>
+    <section class="opportunity-post-cta"><p class="eyebrow">Need help instead?</p><h2>Post your own request</h2><p>Tell nearby verified people what you need and choose the right response.</p><button type="button" data-view="needHelp">Create a request</button></section>
+  </section>`;
 }
 
 const QUICK_HELP_CATEGORIES = professionalCategories.filter((category) =>
@@ -8325,6 +8383,19 @@ function bindEvents() {
       if (button.dataset.sheet === "tyt") trackEvent("tyt_opened", {});
       render();
     });
+  });
+
+  document.querySelectorAll("[data-opportunity-filter]").forEach((button) => button.addEventListener("click", () => {
+    state.opportunityFilter = button.dataset.opportunityFilter;
+    render();
+  }));
+  document.querySelector("[data-opportunity-category]")?.addEventListener("change", (event) => {
+    state.opportunityCategory = event.target.value;
+    render();
+  });
+  document.querySelector("[data-opportunity-distance]")?.addEventListener("change", (event) => {
+    state.opportunityDistance = event.target.value;
+    render();
   });
 
   document.querySelectorAll('[data-action="toggle-save"]').forEach((button) => {
