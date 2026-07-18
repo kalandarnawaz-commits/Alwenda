@@ -3596,11 +3596,14 @@ function realPlaceSpecialty(item) {
   return [...new Set(labels)].join(" · ");
 }
 
-/* Photo-on-top, white-body card — same tile language as
-   .market-mini-card (Trending Marketplace): the name/category/status
-   live in their own padded box below the photo instead of overlaid on
-   a dark scrim, so text is never competing with the image underneath. */
-function renderRealPlaceCompactCard(item) {
+/** The compact (rail) member of the shared PlaceCard family — see
+ * renderPlaceCard() below for the full/grid member and the design note
+ * on why the two share a photo/badge structure but not an action row.
+ * Same border-radius/shadow tokens and photo aspect-ratio as the grid
+ * card (.place-card base class), so a place reads as the same kind of
+ * object whether it's in Explore's grid or a Home rail — just smaller,
+ * and with one action (save) instead of the full set. */
+function renderPlaceCardCompact(item) {
   const distance = formatDistance(distanceFromCenter(item));
   const open = isOpenNow(item.openingHours);
   const statusOrAddress =
@@ -3611,15 +3614,18 @@ function renderRealPlaceCompactCard(item) {
         : item.address || item.neighbourhood || "Vilnius";
   const specialty = realPlaceSpecialty(item);
   return `
-    <article class="real-place-card" data-sheet="place" data-place-id="${item.id}">
-      <div class="real-place-photo">
+    <article class="place-card place-card--compact" data-sheet="place" data-place-id="${item.id}">
+      <div class="place-card-photo">
         ${renderPlacePhoto(item)}
-        <span class="real-place-category-badge" aria-hidden="true">${categoryIconFor(item)}</span>
+        <span class="place-card-category-badge" aria-hidden="true">${categoryIconFor(item)}</span>
+        <button type="button" class="place-card-save ${isPlaceSaved(item) ? "is-active" : ""}" data-action="toggle-save" data-place-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
-      <span>${item.subcategory || businessCategoryLabel(item.category)}</span>
-      <h3>${item.name}</h3>
-      ${specialty ? `<p class="real-place-specialty">${specialty}</p>` : ""}
-      <p>${distance ? `${distance} · ` : ""}${statusOrAddress}</p>
+      <div class="place-card-body">
+        <span class="place-card-eyebrow">${item.subcategory || businessCategoryLabel(item.category)}</span>
+        <h3 class="place-card-title">${item.name}</h3>
+        ${specialty ? `<p class="place-card-specialty">${specialty}</p>` : ""}
+        <p class="place-card-meta">${distance ? `${distance} · ` : ""}${statusOrAddress}</p>
+      </div>
     </article>
   `;
 }
@@ -3640,7 +3646,7 @@ function renderPlaceCoverflowTrack(items, trackKey) {
     <div id="${carouselId(trackKey)}" class="coverflow-viewport" data-coverflow="true">
       <div class="coverflow-track">
         ${items.map((item, index) => `
-          <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderRealPlaceCompactCard(item)}</div>
+          <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderPlaceCardCompact(item)}</div>
         `).join("")}
       </div>
     </div>
@@ -3803,7 +3809,7 @@ function renderNeighbourhoodFeed() {
     "community",
     renderCarousel(
       "neighbourhood",
-      "community-preview neighbourhood-rail",
+      "community-preview",
       feedPosts.map(renderPulse).join("")
     )
   );
@@ -4714,7 +4720,7 @@ function renderSavedPlaces() {
         <p>${t("profile.quickActions.savedPlacesHint")}</p>
       </div>
       ${saved.length
-        ? `<div class="imported-list">${saved.map(renderImportedBusiness).join("")}</div>`
+        ? `<div class="imported-list">${saved.map(renderPlaceCard).join("")}</div>`
         : `
           <div class="auth-card">
             <p class="auth-hint">${t("profile.quickActions.savedPlacesEmpty")}</p>
@@ -4960,7 +4966,7 @@ function renderExploreCategoryPage() {
       </label>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", shown.length).replace("{total}", imported.length)}</p>
       <div class="imported-list">
-        ${shown.map(renderImportedBusiness).join("") || renderEmptyState(t("explore.exploreEmptyState"))}
+        ${shown.map(renderPlaceCard).join("") || renderEmptyState(t("explore.exploreEmptyState"))}
       </div>
     </section>
   `;
@@ -5012,6 +5018,41 @@ function renderMarketplaceCollections(items) {
   `;
 }
 
+/** Real counts only — how many listings actually sit in this category
+ * ("all" counts every listing), and how many of those read as currently
+ * active (same open/available/hiring/this-week signal already used by
+ * renderMarketplaceCollections' "Open now" rail, not a separate guess). */
+function marketplaceCategoryMetadata(categoryId) {
+  const items = categoryId === "all" ? listings : listings.filter((item) => item.type === categoryId);
+  const activeCount = items.filter((item) => /open|available|hiring|this week/i.test(item.status)).length;
+  return { total: items.length, activeCount };
+}
+
+/** Same destination-card language as renderExploreHubCard (icon, name,
+ * real metadata, arrow hint) — the Marketplace picker used to be a plain
+ * icon+label box grid with no metadata while Explore's Stage 1 hub got
+ * the premium treatment; this brings them into the same visual family
+ * per the shared card system's "same skeleton, different content" rule.
+ * Reuses .explore-hub-card/.explore-hub-grid directly rather than a
+ * parallel .marketplace-hub-card class, since the pattern is generic. */
+function renderMarketplaceHubCard(categoryId, index) {
+  const isAll = categoryId === "all";
+  const { total, activeCount } = marketplaceCategoryMetadata(categoryId);
+  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
+  const label = isAll ? t("common.allCategories") : t(categories.find((category) => category.id === categoryId).labelKey);
+  return `
+    <button type="button" class="explore-hub-card tone-${tone}" data-category="${categoryId}" data-target-view="marketplace">
+      <span class="explore-hub-card-icon">${isAll ? "🧭" : MARKETPLACE_CATEGORY_EMOJI[categoryId] || "🏷️"}</span>
+      <span class="explore-hub-card-name">${label}</span>
+      <span class="explore-hub-card-meta">
+        ${total > 0 ? t("marketplace.hub.listingsCount", { count: total }) : t("marketplace.hub.noListingsYet")}
+        ${activeCount > 0 ? `<span class="explore-hub-card-open">${t("marketplace.hub.activeNowCount", { count: activeCount })}</span>` : ""}
+      </span>
+      <span class="explore-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
+    </button>
+  `;
+}
+
 /** Marketplace's own landing screen is the category picker, not the
  * listings page — every arrival here (bottom-nav tab, any other "go to
  * Marketplace" link) resets state.marketplaceCategoryChosen to false
@@ -5021,15 +5062,18 @@ function renderMarketplaceCollections(items) {
  * the full page underneath. */
 function renderMarketplacePicker() {
   return `
-    <section class="section-shell marketplace-picker-shell">
+    <section class="section-shell explore-shell marketplace-picker-shell">
       <section class="city-hero page-hero marketplace-picker-hero marketplace-hero-photo" aria-labelledby="marketplace-picker-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
           <h1 id="marketplace-picker-title">${t("marketplace.marketplaceHeroTitle")}</h1>
           <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
         </div>
+        ${renderAiSearch("marketplace")}
       </section>
-      ${renderCategoryTabs("marketplace")}
+      <div class="explore-hub-grid">
+        ${["all", ...categories.map((category) => category.id)].map((categoryId, index) => renderMarketplaceHubCard(categoryId, index)).join("")}
+      </div>
     </section>
   `;
 }
@@ -5551,11 +5595,17 @@ function renderAlwenListingCreator() {
   `;
 }
 
+/** One fixed size within any grid or rail — MarketplaceCard used to vary
+ * card height per item.cardSize ("tall"/"wide"/"compact", a Pinterest-
+ * style masonry effect via CSS column-count), which is exactly the
+ * "random heights in the same carousel" the shared card system rules
+ * out. item.cardSize itself is left on the mock data (harmless, unused)
+ * rather than stripped from every record for no functional gain. */
 function renderMarketplaceListing(item) {
   const isSaved = state.savedListingIds.includes(String(item.id));
   const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
-    <article class="market-card visual-market-card is-${item.cardSize || "compact"}" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
+    <article class="market-card visual-market-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
       <div class="market-photo" style="background-image: url('${item.image}')">
         <button type="button" class="favourite-float ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
@@ -5787,7 +5837,7 @@ function renderLiveOpportunities() {
     <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>LIVE OPPORTUNITIES</h1><p>Earn money by helping people nearby.</p>
       <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>active opportunities nearby</span></article><article><strong>€${earnings}</strong><span>estimated earnings available today</span></article></div>
     </header>
-    <div class="opportunity-toolbar" aria-label="Opportunity filters"><div class="opportunity-filter-row">
+    <div class="opportunity-toolbar" aria-label="Opportunity filters"><div class="chip-row explore-category-row opportunity-filter-row">
       ${[["nearby","Nearby"],["today","Today"],["highest","Highest paying"],["urgent","Urgent"],["verified","Verified"]].map(([value,label]) => `<button type="button" class="${state.opportunityFilter === value ? "is-active" : ""}" data-opportunity-filter="${value}">${label}</button>`).join("")}
       <label>Category<select data-opportunity-category><option value="all">All categories</option>${categories.map((category) => `<option value="${category}" ${state.opportunityCategory === category ? "selected" : ""}>${category}</option>`).join("")}</select></label>
       <label>Distance<select data-opportunity-distance><option value="all">Any distance</option>${[1,2,5].map((distance) => `<option value="${distance}" ${state.opportunityDistance === String(distance) ? "selected" : ""}>Within ${distance} km</option>`).join("")}</select></label>
@@ -8040,7 +8090,7 @@ function renderCityImport() {
       </div>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", Math.min(24, importedBusinesses.length)).replace("{total}", importedBusinesses.length)}</p>
       <div class="imported-list">
-        ${importedBusinesses.slice(0, 24).map(renderImportedBusiness).join("")}
+        ${importedBusinesses.slice(0, 24).map(renderPlaceCard).join("")}
       </div>
       ${renderClaimFlow()}
     </section>
@@ -8355,12 +8405,21 @@ function renderOpenStatusBadge(item) {
   return "";
 }
 
-function renderImportedBusiness(item) {
+/** The full/grid member of the shared PlaceCard family (Explore's
+ * browsable list, Saved Places, the admin import review screen). Shares
+ * a photo aspect-ratio, border-radius and shadow token with the compact
+ * rail member above (both use the .place-card base class) — the
+ * difference between them is deliberate, not accidental: this one has
+ * the full action set (directions/call/website/save/share/claim)
+ * because it's the primary place to act on a place, where the compact
+ * rail card is a lighter preview whose one job is to invite a tap
+ * through to the same detail sheet either card opens. */
+function renderPlaceCard(item) {
   const distance = formatDistance(distanceFromCenter(item));
   const photoCount = (item.photos && item.photos.length) || (item.photoUrl ? 1 : 0);
   return `
-    <article class="imported-card">
-      <div class="imported-card-photo" data-sheet="place" data-place-id="${item.id}">
+    <article class="place-card">
+      <div class="place-card-photo" data-sheet="place" data-place-id="${item.id}">
         ${renderPlacePhoto(item)}
         <div class="place-photo-overlay place-photo-overlay-top">
           <span class="badge category-chip">${categoryIconFor(item)} ${businessCategoryLabel(item.category)}</span>
@@ -8375,10 +8434,10 @@ function renderImportedBusiness(item) {
           ${photoCount > 1 ? `<span class="badge photo-count-badge">${icon("camera")}${photoCount}</span>` : ""}
         </div>
       </div>
-      <div data-sheet="place" data-place-id="${item.id}">
-        <h3>${item.name}</h3>
-        <p class="imported-address">${pinIcon()}${item.address || item.neighbourhood || "Vilnius"}</p>
-        ${honestPlaceDescription(item) ? `<p class="imported-description">${honestPlaceDescription(item)}</p>` : ""}
+      <div class="place-card-body" data-sheet="place" data-place-id="${item.id}">
+        <h3 class="place-card-title">${item.name}</h3>
+        <p class="place-card-meta">${pinIcon()}${item.address || item.neighbourhood || "Vilnius"}</p>
+        ${honestPlaceDescription(item) ? `<p class="place-card-description">${honestPlaceDescription(item)}</p>` : ""}
       </div>
       ${renderPlaceActionButtons(item)}
       ${renderPlaceFooterActions(item)}

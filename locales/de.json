@@ -1299,6 +1299,11 @@
     "marketplaceTitle": "Alles, was deine Stadt für dich tun kann.",
     "marketplaceHeroTitle": "Marktplatz",
     "marketplaceHeroSubtitle": "Kaufen. Verkaufen. Entdecken. Beauftragen. Reservieren.",
+    "hub": {
+      "listingsCount": "{count} Angebote",
+      "noListingsYet": "Neu hier",
+      "activeNowCount": "{count} jetzt aktiv"
+    },
     "capabilities": {
       "capabilityAiSearch": "KI-Suche",
       "capabilityChat": "Chat",
