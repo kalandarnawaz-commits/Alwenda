@@ -1,5 +1,11 @@
 -- Alwenda production foundation
 -- Forward-only migration for Supabase Postgres. Review before applying to a live project.
+--
+-- Rollback approach:
+-- 1. Export any production data that must be retained.
+-- 2. Drop policies/triggers/functions created by this migration.
+-- 3. Drop dependent tables in reverse dependency order only after data export.
+-- 4. Recreate from backup if this has already been applied to a shared environment.
 
 create extension if not exists pgcrypto;
 

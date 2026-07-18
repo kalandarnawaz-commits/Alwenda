@@ -86,13 +86,26 @@ import {
   ensureUserProfiles,
   completeUserProfile,
   createListing,
+  getMyOfferorStatus,
+  confirmOfferorStatus,
+  getMyTraderVerification,
+  saveTraderVerificationDraft,
+  submitTraderVerification,
+  uploadTraderVerificationDocument,
+  fetchTraderVerificationQueue,
+  reviewTraderVerification,
+  recordTraderRegisterCheck,
+  fetchTraderPublicProfile,
   fetchMyListings,
   uploadListingPhoto,
   fetchListingsByOwner,
   createHelpRequest,
   fetchMyHelpRequests,
+  recordLegalAcceptance,
+  createModerationReport,
+  createPrivacyRequest,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=identity-redesign-2";
+} from "./services/auth/supabaseClient.js?v=legal-compliance-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
@@ -135,6 +148,9 @@ const state = {
   exploreVerifiedOnly: false,
   exploreHasPhotoOnly: false,
   activeSheet: null,
+  cookieSettingsOpen: false,
+  reportTarget: null,
+  reportNotice: null,
   opportunityFilter: "nearby",
   opportunityCategory: "all",
   opportunityDistance: "all",
@@ -214,11 +230,18 @@ const state = {
     condition: "",
     pickupAvailable: false,
     deliveryAvailable: false,
+    offerorStatus: "",
     tags: "",
     photoFiles: []
   },
   listingSubmitStatus: "idle",
   listingSubmitError: null,
+  offerorStatus: null,
+  traderVerification: null,
+  traderVerificationStatus: "idle",
+  traderVerificationNotice: null,
+  traderReviewQueue: [],
+  traderPublicProfiles: {},
   myListings: [],
   myHelpRequests: [],
   bookingDraft: { dateIndex: null, time: null },
@@ -271,6 +294,10 @@ const ONBOARDED_KEY = "alwenda:onboarded";
 const SETTINGS_KEY = "alwenda:settings";
 const LANGUAGE_KEY = "alwenda:language";
 const ANALYTICS_KEY = "alwenda:analytics";
+const COOKIE_CONSENT_KEY = "alwenda:cookie-consent";
+const PENDING_LEGAL_ACCEPTANCE_KEY = "alwenda:pending-legal-acceptance";
+const MODERATION_RECORDS_KEY = "alwenda:moderation-records";
+const LEGAL_POLICY_VERSION = "ALWENDA_LEGAL_POLICIES_EN-2026-07-18";
 const ANALYTICS_MAX_EVENTS = 300;
 const BUSINESS_OVERRIDES_KEY = "alwenda:businessOverrides";
 
@@ -432,6 +459,7 @@ function initials(name) {
  * not fabricated. Only reflects activity that happened in this browser
  * since there is no backend to aggregate views across other visitors. */
 function businessStats(businessId) {
+  if (readLocalStorage(COOKIE_CONSENT_KEY)?.analytics !== true) return { views: 0, directions: 0, calls: 0, website: 0, saves: 0, shares: 0 };
   const events = readLocalStorage(ANALYTICS_KEY) || [];
   const matches = (event, name) => event.name === name && (event.props?.businessId === businessId || event.props?.placeId === businessId);
   const count = (name) => events.filter((event) => matches(event, name)).length;
@@ -494,6 +522,8 @@ function toggleBusinessBoost(businessId) {
  * phone numbers, or free-text the user typed.
  */
 function trackEvent(name, props = {}) {
+  const cookieConsent = readLocalStorage(COOKIE_CONSENT_KEY);
+  if (cookieConsent?.analytics !== true) return;
   try {
     const existing = readLocalStorage(ANALYTICS_KEY) || [];
     existing.push({ name, props, ts: new Date().toISOString() });
@@ -611,6 +641,11 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   // block sign-in on this; each refresh renders once it resolves.
   refreshMyListings();
   refreshMyHelpRequests();
+  refreshTraderAccountState();
+  const pendingAcceptance = readLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY);
+  if (pendingAcceptance && (!pendingAcceptance.email || pendingAcceptance.email === String(session.user.email || "").toLowerCase())) {
+    recordLegalAcceptance(pendingAcceptance).then(() => writeLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY, null)).catch((error) => console.warn("[legal] Acceptance record failed", error));
+  }
 
   try {
     const profiles = await ensureUserProfiles();
@@ -712,7 +747,11 @@ const DEEP_LINK_VIEWS = new Set([
   "savedPlaces",
   "publicProfile",
   "legalTerms",
-  "legalPrivacy"
+  "legalPrivacy",
+  "legalCookies",
+  "legalSafety",
+  "traderVerification",
+  "traderReview"
 ]);
 
 /* Views whose deep link needs a companion ?id= to mean anything — read
@@ -751,7 +790,8 @@ function syncStateFromUrl() {
     state.activeView = "auth";
     return;
   }
-  const view = searchParams.get("view");
+  const legalPathViews = { "/terms": "legalTerms", "/terms/": "legalTerms", "/privacy": "legalPrivacy", "/privacy/": "legalPrivacy", "/cookies": "legalCookies", "/cookies/": "legalCookies", "/safety": "legalSafety", "/safety/": "legalSafety" };
+  const view = legalPathViews[window.location.pathname] || searchParams.get("view");
   if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
   state.activeView = view;
   const id = searchParams.get("id");
@@ -778,6 +818,11 @@ function syncUrlToState() {
   const key = `${state.activeView}:${id || ""}`;
   if (key === lastPushedUrlKey) return;
   lastPushedUrlKey = key;
+  const legalViewPaths = { legalTerms: "/terms", legalPrivacy: "/privacy", legalCookies: "/cookies", legalSafety: "/safety" };
+  if (legalViewPaths[state.activeView]) {
+    history.pushState({ view: state.activeView }, "", legalViewPaths[state.activeView]);
+    return;
+  }
   const params = new URLSearchParams();
   params.set("view", state.activeView);
   if (id) params.set("id", id);
@@ -799,7 +844,7 @@ function registerServiceWorker() {
      by this point — registering immediately instead of waiting on a
      "load" listener that would never fire again. */
   navigator.serviceWorker
-    .register("./sw.js")
+    .register("/sw.js")
     .then((registration) => {
       /* The browser's own update check is throttled (roughly once per
          navigation, at most every 24h otherwise) — forcing one here means
@@ -843,7 +888,7 @@ function resetAuthDrafts() {
   state.auth.authNotice = null;
   state.auth.loginMode = "email";
   state.auth.loginDraft = { email: "", phone: "" };
-  state.auth.registerDraft = { name: "", email: "", phone: "", agreeTerms: false };
+  state.auth.registerDraft = { name: "", email: "", phone: "", agreeTerms: false, marketingConsent: false };
   state.auth.forgotDraft = { email: "" };
   state.auth.verifyDraft = { code: "" };
   state.auth.resetDraft = { password: "", confirmPassword: "" };
@@ -868,8 +913,14 @@ function applyRateLimitError(result) {
 
 async function submitRegister() {
   const draft = state.auth.registerDraft;
-  if (!isValidEmail(draft.email)) return void (state.auth.authError = t("auth.authErrorEmail"));
-  if (!draft.agreeTerms) return void (state.auth.authError = t("auth.authErrorTerms"));
+  if (!isValidEmail(draft.email)) { state.auth.authError = t("auth.authErrorEmail"); render(); return; }
+  if (!draft.agreeTerms) { state.auth.authError = t("auth.authErrorTerms"); render(); return; }
+  writeLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY, {
+    policyVersion: LEGAL_POLICY_VERSION,
+    acceptedAt: new Date().toISOString(),
+    email: draft.email.trim().toLowerCase(),
+    marketingConsent: Boolean(draft.marketingConsent)
+  });
 
   const rateLimit = enforceRateLimit("register", draft.email, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
   if (!rateLimit.allowed) return void applyRateLimitError(rateLimit);
@@ -1487,12 +1538,12 @@ const iconMap = {
    dark/black-ink asset, "dark" surface needs the white asset. */
 const BRAND_ASSETS = {
   wordmark: {
-    light: "./src/assets/brand/alwenda-wordmark-black.svg",
-    dark: "./src/assets/brand/alwenda-wordmark-white.svg"
+    light: "/src/assets/brand/alwenda-wordmark-black.svg",
+    dark: "/src/assets/brand/alwenda-wordmark-white.svg"
   },
   icon: {
-    light: "./src/assets/brand/alwenda-icon-dark.svg",
-    dark: "./src/assets/brand/alwenda-icon-white.svg"
+    light: "/src/assets/brand/alwenda-icon-dark.svg",
+    dark: "/src/assets/brand/alwenda-icon-white.svg"
   }
 };
 
@@ -2320,11 +2371,39 @@ function renderNavButton([view, label, iconName]) {
     </button>`;
 }
 
+const TRANSACTION_SAFETY_NOTICE = `<aside class="transaction-safety-notice" role="note"><strong>Trade safely</strong><p>This offer is made by the user shown in the listing, not by Alwenda. Alwenda does not collect transaction payments and does not guarantee users, goods, services, payments, delivery or refunds. Verify the other party, keep agreements in writing and be cautious with advance payments. Report suspicious or illegal activity using the Report function.</p></aside>`;
+
+function renderPersistentFooter() {
+  return `<footer class="legal-footer"><nav aria-label="Legal and support">
+    <a href="/terms" data-view="legalTerms">Terms and Conditions</a><a href="/privacy" data-view="legalPrivacy">Privacy Policy</a><a href="/cookies" data-view="legalCookies">Cookie Policy</a><a href="/safety" data-view="legalSafety">Safety</a>
+    <button type="button" data-contact-purpose="support">Contact</button><button type="button" data-report-target="illegal-content" data-report-id="website">Report illegal content</button><button type="button" data-cookie-settings>Cookie settings</button>
+  </nav></footer>`;
+}
+
+function renderCookieConsent() {
+  const consent = readLocalStorage(COOKIE_CONSENT_KEY);
+  if (consent && !state.cookieSettingsOpen) return "";
+  return `<section class="cookie-consent" role="dialog" aria-modal="true" aria-labelledby="cookie-consent-title">
+    <h2 id="cookie-consent-title">Your privacy choices</h2><p>We use necessary cookies to operate and secure Alwenda. With your permission, we also use optional analytics cookies to understand and improve the Platform. You can change your choice at any time.</p>
+    ${state.cookieSettingsOpen ? `<fieldset><legend>Manage optional cookies</legend><label><input id="cookie-analytics-choice" type="checkbox" ${consent?.analytics ? "checked" : ""}> Analytics cookies — understand and improve Platform use</label><p>Provider: Alwenda · Storage: local browser · Duration: up to 12 months</p></fieldset>` : ""}
+    <div class="cookie-actions"><button type="button" data-cookie-choice="reject">Reject optional cookies</button><button type="button" data-cookie-choice="manage">Manage choices</button><button type="button" data-cookie-choice="accept">Accept optional cookies</button></div>
+  </section>`;
+}
+
+function renderReportDialog() {
+  if (!state.reportTarget) return state.reportNotice ? `<div class="report-toast" role="status">${escapeHtml(state.reportNotice)}</div>` : "";
+  const targetUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  return `<div class="report-dialog-backdrop"><section class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-title"><button type="button" class="report-close" data-report-close aria-label="Close">×</button><h2 id="report-title">Report ${escapeHtml(state.reportTarget.type.replaceAll("-", " "))}</h2>
+    <form data-report-form><label>Reason for the report<select name="reason" required><option value="">Select a reason</option><option>Illegal content</option><option>Fraud or scam</option><option>Unsafe goods or services</option><option>Harassment or abuse</option><option>Intellectual-property infringement</option><option>Other</option></select></label><label>Explanation<textarea name="explanation" required minlength="10" rows="4"></textarea></label><label>Relevant listing/content URL<input name="contentUrl" type="url" required value="${escapeHtml(targetUrl)}"></label><label>Reporter’s name<input name="reporterName" required value="${escapeHtml(state.auth.user?.name || "")}"></label><label>Reporter’s email<input name="reporterEmail" type="email" required value="${escapeHtml(state.auth.user?.email || "")}"></label><label class="report-confirm"><input name="goodFaith" type="checkbox" required> I confirm in good faith that the information in this report is accurate and complete.</label><button type="submit" class="auth-primary-button">Submit report</button></form>
+  </section></div>`;
+}
+
 function renderShell() {
   if (state.activeView === "auth") {
     return `
       <div class="app-shell auth-focus-shell">
         <main class="main">${renderView()}</main>
+        ${renderPersistentFooter()}${renderCookieConsent()}${renderReportDialog()}
       </div>
     `;
   }
@@ -2370,6 +2449,9 @@ function renderShell() {
          screen keeps it unchanged. */
         state.activeView !== "translate" && state.activeView !== "community" ? renderQuickTranslateDock() : ""}
       ${renderSheet()}
+      ${renderPersistentFooter()}
+      ${renderCookieConsent()}
+      ${renderReportDialog()}
     </div>
   `;
 }
@@ -2472,7 +2554,11 @@ function renderRegister() {
       ${authField({ id: "register-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
       <label class="auth-checkbox-row">
         <input id="register-terms" type="checkbox" ${draft.agreeTerms ? "checked" : ""} />
-        <span>${t("common.agreeTermsLabel")}</span>
+        <span>I have read and agree to the Alwenda <button type="button" class="legal-inline-link" data-view="legalTerms">Terms and Conditions</button>. I understand that Alwenda is a listing and matching platform, does not process transaction payments and is not a party to agreements between users.</span>
+      </label>
+      <label class="auth-checkbox-row">
+        <input id="register-marketing" type="checkbox" ${draft.marketingConsent ? "checked" : ""} />
+        <span>I agree to receive Alwenda news and offers by email. I can withdraw my consent at any time.</span>
       </label>
       <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
       <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
@@ -2558,6 +2644,76 @@ function renderAuthLoading() {
   return renderAuthShell(t("common.appName"), t("auth.authCheckingSession"), t("auth.authCheckingSessionHint"), "");
 }
 
+async function refreshTraderAccountState() {
+  if (state.auth.status !== "signedIn") return;
+  try {
+    const [classification, verification] = await Promise.all([getMyOfferorStatus(), getMyTraderVerification()]);
+    state.offerorStatus = classification;
+    state.traderVerification = verification;
+    if (classification?.offeror_status) state.listingDraft.offerorStatus = classification.offeror_status;
+    if (state.activeView === "traderVerification" || state.activeView === "createListing") render();
+  } catch (error) {
+    console.warn("[trader-verification] Account state could not be loaded.", error);
+  }
+}
+
+async function loadTraderDisclosure(userId) {
+  if (!userId || state.traderPublicProfiles[userId] !== undefined) return;
+  try { state.traderPublicProfiles[userId] = await fetchTraderPublicProfile(userId); } catch { state.traderPublicProfiles[userId] = null; }
+  if (state.activeView === "listingDetail") render();
+}
+
+const TRADER_CONFIRMATION_VERSION = `${LEGAL_POLICY_VERSION}:trader-traceability-v1`;
+const traderField = (name, label, value = "", type = "text") => `<div class="auth-field"><label for="trader-${name}">${label}</label><input id="trader-${name}" name="${name}" type="${type}" value="${escapeHtml(value || "")}" required /></div>`;
+
+function renderTraderVerification() {
+  const verification = state.traderVerification || {};
+  const status = verification.status || "not_started";
+  const editable = ["not_started", "draft", "more_information_required"].includes(status);
+  return `<section class="section-shell settings-shell legal-page-shell">
+    <button type="button" class="back-button" data-view="settings">${icon("arrow")}Back to settings</button>
+    <div class="screen-heading"><p class="eyebrow">Trader traceability</p><h1>Trader verification</h1><p>Provide accurate business details for manual review before publishing as a trader.</p></div>
+    <div class="settings-section"><h3>Status: ${escapeHtml(status.replaceAll("_", " "))}</h3>
+      ${verification.user_visible_reason ? `<p class="auth-error">${escapeHtml(verification.user_visible_reason)}</p>` : ""}
+      <p class="settings-section-hint">Alwenda performs a manual documentary review. Verification is not an endorsement or transaction guarantee.</p>
+    </div>
+    ${state.traderVerificationNotice ? `<p class="auth-notice">${escapeHtml(state.traderVerificationNotice)}</p>` : ""}
+    ${editable ? `<form data-role="trader-verification-form" class="settings-section">
+      <h2>Business information</h2>
+      ${traderField("legal_name", "Legal name", verification.legal_name)}
+      ${traderField("trading_name", "Trading name (if different)", verification.trading_name)}
+      ${traderField("legal_form", "Legal form", verification.legal_form)}
+      ${traderField("registered_address", "Registered address", verification.registered_address)}
+      ${traderField("operating_address", "Operating address", verification.operating_address)}
+      ${traderField("public_business_address", "Business address shown to users", verification.public_business_address)}
+      ${traderField("business_email", "Public business email", verification.business_email, "email")}
+      ${traderField("business_phone", "Public business phone", verification.business_phone, "tel")}
+      ${traderField("country_of_establishment", "Country of establishment", verification.country_of_establishment || "Lithuania")}
+      ${traderField("trade_register_name", "Trade register", verification.trade_register_name || "Register of Legal Entities")}
+      ${traderField("registration_number", "Registration number", verification.registration_number)}
+      <div class="auth-field"><label for="trader-vat_number">VAT number (if registered)</label><input id="trader-vat_number" name="vat_number" value="${escapeHtml(verification.vat_number || "")}" /></div>
+      ${traderField("representative_name", "Authorised representative name", verification.representative_name)}
+      ${traderField("representative_role", "Representative role", verification.representative_role)}
+      <label class="settings-toggle-row"><span>I confirm the goods and services I offer are lawful and compliant.</span><input name="lawful_goods_confirmed" type="checkbox" ${verification.lawful_goods_confirmed ? "checked" : ""} required /></label>
+      <label class="settings-toggle-row"><span>I confirm this information is accurate and may be checked against authoritative sources.</span><input name="accuracy_check_confirmed" type="checkbox" ${verification.accuracy_check_confirmed ? "checked" : ""} required /></label>
+      <div class="auth-field"><label for="trader-document">Supporting document (JPEG, PNG, or PDF; max 10 MB)</label><select name="document_type"><option value="registration_evidence">Registration evidence</option><option value="address_evidence">Address evidence</option><option value="representative_authority">Representative authority</option><option value="identity">Identity document</option></select><input id="trader-document" name="document" type="file" accept="image/jpeg,image/png,application/pdf" /></div>
+      <p class="settings-section-hint">Documents remain private. They are never placed in public profiles. Uploads stay pending until the production malware-scanning service marks them clean.</p>
+      ${state.traderVerificationStatus === "error" ? `<p class="auth-error">${escapeHtml(state.traderVerificationNotice || "Could not save verification.")}</p>` : ""}
+      <div class="chip-row"><button type="submit" name="intent" value="save" class="settings-row-button">Save draft</button><button type="submit" name="intent" value="submit" class="auth-primary-button">Submit for review</button></div>
+    </form>` : `<div class="settings-section"><p>Your submitted details are read-only while review is in progress.</p><button type="button" class="settings-row-button" data-report-open="appeal" data-report-label="Trader verification decision">Appeal or contact support</button></div>`}
+  </section>`;
+}
+
+function renderTraderReview() {
+  const allowed = state.auth.user?.traderPermissions?.includes("verification_view") || ["admin", "service"].includes(state.auth.user?.appRole);
+  if (!allowed) return `<section class="section-shell"><h1>Access denied</h1><p>This queue requires an explicit trader-verification permission.</p></section>`;
+  return `<section class="section-shell settings-shell"><div class="screen-heading"><p class="eyebrow">Restricted operations</p><h1>Trader review queue</h1><p>Manual review only. A register outage is not evidence of failure.</p></div>
+    <button type="button" class="settings-row-button" data-role="load-trader-review">Refresh queue</button>
+    ${state.traderReviewQueue.map((item) => `<div class="settings-section"><h3>${escapeHtml(item.trading_name || item.legal_name || "Unnamed trader")}</h3><p>${escapeHtml(item.status)} · ${escapeHtml(item.country_of_establishment || "")}</p><p>${escapeHtml(item.trade_register_name || "")} ${escapeHtml(item.registration_number || "")}</p><form data-role="trader-register-check" data-id="${item.id}"><label class="auth-field">Authoritative source<input name="source_name" placeholder="Registry name and URL" required /></label><label class="auth-field">Result<select name="result"><option value="confirmed">Confirmed</option><option value="unverifiable">Unverifiable</option><option value="inconsistent">Inconsistent</option><option value="source_unavailable">Source unavailable</option><option value="retry">Retry later</option></select></label><label class="auth-field">Reference<input name="reference" /></label><label class="auth-field">Check notes<textarea name="notes" required></textarea></label><button type="submit" class="settings-row-button">Record register check</button></form><form data-role="trader-review-form" data-id="${item.id}"><label class="auth-field">Decision<select name="status"><option value="under_review">Start review</option><option value="more_information_required">Request information</option><option value="verified">Verify</option><option value="rejected">Reject</option><option value="suspended">Suspend</option></select></label><label class="auth-field">Reason shown to user<textarea name="user_reason" required></textarea></label><label class="auth-field">Internal notes<textarea name="internal_notes" required></textarea></label><label class="auth-field">Verification expiry (required when verifying)<input name="expires_at" type="datetime-local" /></label><button class="auth-primary-button" type="submit">Record decision</button></form></div>`).join("") || `<div class="settings-section"><p>Load the review queue to begin.</p></div>`}
+    <div class="settings-section"><p>Document opening is intentionally unavailable in this client. Reviewers may only receive short-lived access from an audited server endpoint after malware status is clean; that endpoint is not configured.</p></div>
+  </section>`;
+}
+
 function renderSettings() {
   const user = state.auth.user;
   return `
@@ -2587,6 +2743,8 @@ function renderSettings() {
             </div>
           </div>
           <button type="button" class="settings-row-button" data-settings-edit-profile="true">${t("common.completeProfileTitle")}</button>
+          <button type="button" class="settings-row-button" data-view="traderVerification">Trader status and verification</button>
+          ${user.traderPermissions?.includes("verification_view") || ["admin", "service"].includes(user.appRole) ? `<button type="button" class="settings-row-button" data-view="traderReview">Trader review queue</button>` : ""}
         </div>
       ` : ""}
 
@@ -2657,6 +2815,17 @@ function renderSettings() {
           <p>${t("settings.legal.privacyShortSummary")}</p>
           <button type="button" class="settings-row-button" data-view="legalPrivacy">${t("settings.legal.privacyReadFullPolicy")}</button>
         </details>
+        <button type="button" class="settings-row-button" data-view="legalCookies">Cookie Policy</button>
+        <button type="button" class="settings-row-button" data-view="legalSafety">Public Safety Notice</button>
+        <button type="button" class="settings-row-button" data-cookie-settings>Cookie settings</button>
+      </div>
+
+      <div class="settings-section">
+        <h3>Privacy and account rights</h3>
+        <button type="button" class="settings-row-button" data-account-action="download">Download or request personal data</button>
+        <button type="button" class="settings-row-button" data-contact-purpose="privacy">Contact privacy support</button>
+        <button type="button" class="settings-row-button" data-contact-purpose="appeal">Appeal a content or account restriction</button>
+        ${user ? `<button type="button" class="settings-signout-button" data-account-action="delete">Delete account</button>` : ""}
       </div>
 
       ${user ? `
@@ -2686,62 +2855,70 @@ function renderSettings() {
  * (see legalTerms.englishOnlyNote) rather than machine-translated —
  * mistranslated legal text is worse than none, and this is pilot-stage
  * copy the team will replace with reviewed documents before launch. */
-function renderLegalTerms() {
-  const sections = t("legalTerms.sections");
-  return `
-    <section class="section-shell settings-shell">
-      <button type="button" class="back-button" data-view="settings">${icon("arrow")}${t("common.back")}</button>
-      <div class="screen-heading">
-        <p class="eyebrow">${t("legalTerms.eyebrow")}</p>
-        <h1>${t("legalTerms.title")}</h1>
-        <p>${t("legalTerms.pilotNote")}</p>
-        <p class="settings-section-hint">${t("legalTerms.englishOnlyNote")}</p>
-      </div>
-      ${(Array.isArray(sections) ? sections : []).map((section) => `
-        <div class="settings-section">
-          <h3>${escapeHtml(section.title)}</h3>
-          <p>${escapeHtml(section.body)}</p>
-        </div>
-      `).join("")}
-      <div class="settings-section">
-        <h3>15. ${t("legalTerms.contactTitle")}</h3>
-        <p>${t("legalTerms.contactLegalLabel")}: legal@alwenda.com</p>
-        <p>${t("legalTerms.contactSupportLabel")}: support@alwenda.com</p>
-        <button type="button" class="settings-row-button" data-view="legalPrivacy">${t("legalTerms.privacyLinkLabel")}</button>
-      </div>
-    </section>
-  `;
+let approvedLegalPolicyMarkdown = "";
+
+function legalInlineMarkup(value) {
+  return escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`(.+?)`/g, "<code>$1</code>");
 }
+
+function policySectionMarkdown(number) {
+  const startPattern = new RegExp(`^# ${number}\\. `, "m");
+  const start = approvedLegalPolicyMarkdown.search(startPattern);
+  if (start < 0) return "";
+  const tail = approvedLegalPolicyMarkdown.slice(start);
+  const next = tail.slice(1).search(/^# \d+\. /m);
+  return next < 0 ? tail : tail.slice(0, next + 1);
+}
+
+function markdownPolicyToHtml(markdown) {
+  const lines = markdown.split("\n");
+  let html = "";
+  let listOpen = false;
+  let quoteOpen = false;
+  const closeBlocks = () => {
+    if (listOpen) { html += "</ul>"; listOpen = false; }
+    if (quoteOpen) { html += "</blockquote>"; quoteOpen = false; }
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line === "---") { closeBlocks(); continue; }
+    if (line.startsWith("- ")) {
+      if (quoteOpen) { html += "</blockquote>"; quoteOpen = false; }
+      if (!listOpen) { html += "<ul>"; listOpen = true; }
+      html += `<li>${legalInlineMarkup(line.slice(2))}</li>`;
+    } else if (line.startsWith(">")) {
+      if (listOpen) { html += "</ul>"; listOpen = false; }
+      if (!quoteOpen) { html += "<blockquote>"; quoteOpen = true; }
+      html += `<p>${legalInlineMarkup(line.replace(/^> ?/, ""))}</p>`;
+    } else {
+      closeBlocks();
+      const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+      html += heading ? `<h${Math.min(heading[1].length + 1, 4)}>${legalInlineMarkup(heading[2])}</h${Math.min(heading[1].length + 1, 4)}>` : `<p>${legalInlineMarkup(line)}</p>`;
+    }
+  }
+  closeBlocks();
+  return html;
+}
+
+function renderApprovedPolicy(sectionNumber, title) {
+  return `<section class="section-shell legal-policy-shell">
+    <button type="button" class="back-button" data-view="settings">${icon("arrow")}${t("common.back")}</button>
+    <header class="legal-policy-header"><p class="eyebrow">Approved Alwenda policy</p><h1>${title}</h1><p><strong>Last updated:</strong> <span class="legal-placeholder">[DATE — CONFIGURATION REQUIRED]</span></p><p>This approved policy is currently available in English. A lawyer-reviewed Lithuanian version is required before launch to Lithuanian consumers.</p></header>
+    <aside class="legal-operator-card" aria-label="Platform operator configuration"><strong>Platform operator details</strong><span>[LEGAL NAME]</span><span>[REGISTRATION NUMBER]</span><span>[REGISTERED ADDRESS]</span><span>[EMAIL ADDRESS]</span><span>[TELEPHONE NUMBER]</span></aside>
+    <article class="legal-policy-copy">${markdownPolicyToHtml(policySectionMarkdown(sectionNumber))}</article>
+  </section>`;
+}
+
+function renderLegalTerms() { return renderApprovedPolicy(1, "Terms and Conditions"); }
 
 /** Same English-only-body rule as renderLegalTerms() above, and the same
  * reason: this describes what the app actually does with user data today,
  * so getting it right matters more than having it in every language. */
-function renderLegalPrivacy() {
-  const sections = t("legalPrivacy.sections");
-  return `
-    <section class="section-shell settings-shell">
-      <button type="button" class="back-button" data-view="settings">${icon("arrow")}${t("common.back")}</button>
-      <div class="screen-heading">
-        <p class="eyebrow">${t("legalPrivacy.eyebrow")}</p>
-        <h1>${t("legalPrivacy.title")}</h1>
-        <p>${t("legalPrivacy.pilotNote")}</p>
-        <p class="settings-section-hint">${t("legalPrivacy.englishOnlyNote")}</p>
-      </div>
-      ${(Array.isArray(sections) ? sections : []).map((section) => `
-        <div class="settings-section">
-          <h3>${escapeHtml(section.title)}</h3>
-          <p>${escapeHtml(section.body)}</p>
-        </div>
-      `).join("")}
-      <div class="settings-section">
-        <h3>14. ${t("legalPrivacy.contactTitle")}</h3>
-        <p>${t("legalPrivacy.contactPrivacyLabel")}: privacy@alwenda.com</p>
-        <p>${t("legalPrivacy.contactSupportLabel")}: support@alwenda.com</p>
-        <button type="button" class="settings-row-button" data-view="legalTerms">${t("legalPrivacy.termsLinkLabel")}</button>
-      </div>
-    </section>
-  `;
-}
+function renderLegalPrivacy() { return renderApprovedPolicy(2, "Privacy Policy"); }
+function renderLegalCookies() { return renderApprovedPolicy(3, "Cookie Policy"); }
+function renderLegalSafety() { return renderApprovedPolicy(4, "Public Safety Notice"); }
 
 function renderWelcomeSequence() {
   const step = Math.min(state.welcomeSequenceStep, WELCOME_SEQUENCE_STEPS.length - 1);
@@ -2847,7 +3024,7 @@ function renderView() {
      (language, theme, install-app all work for guests) per an explicit,
      confirmed product decision. Only genuinely personal data screens are
      gated here. */
-  const protectedViews = new Set(["messages", "notifications", "conversation", "savedPlaces", "businessDashboard"]);
+  const protectedViews = new Set(["messages", "notifications", "conversation", "savedPlaces", "businessDashboard", "traderVerification", "traderReview"]);
   if (state.auth.status === "checking") return renderAuthLoading();
   if (protectedViews.has(state.activeView) && state.auth.status !== "signedIn") {
     state.auth.authView = "login";
@@ -2883,6 +3060,10 @@ function renderView() {
     settings: renderSettings,
     legalTerms: renderLegalTerms,
     legalPrivacy: renderLegalPrivacy,
+    legalCookies: renderLegalCookies,
+    legalSafety: renderLegalSafety,
+    traderVerification: renderTraderVerification,
+    traderReview: renderTraderReview,
     onboarding: renderOnboarding,
     businessDashboard: renderBusinessDashboard,
     savedPlaces: renderSavedPlaces,
@@ -3596,11 +3777,14 @@ function realPlaceSpecialty(item) {
   return [...new Set(labels)].join(" · ");
 }
 
-/* Photo-on-top, white-body card — same tile language as
-   .market-mini-card (Trending Marketplace): the name/category/status
-   live in their own padded box below the photo instead of overlaid on
-   a dark scrim, so text is never competing with the image underneath. */
-function renderRealPlaceCompactCard(item) {
+/** The compact (rail) member of the shared PlaceCard family — see
+ * renderPlaceCard() below for the full/grid member and the design note
+ * on why the two share a photo/badge structure but not an action row.
+ * Same border-radius/shadow tokens and photo aspect-ratio as the grid
+ * card (.place-card base class), so a place reads as the same kind of
+ * object whether it's in Explore's grid or a Home rail — just smaller,
+ * and with one action (save) instead of the full set. */
+function renderPlaceCardCompact(item) {
   const distance = formatDistance(distanceFromCenter(item));
   const open = isOpenNow(item.openingHours);
   const statusOrAddress =
@@ -3611,15 +3795,18 @@ function renderRealPlaceCompactCard(item) {
         : item.address || item.neighbourhood || "Vilnius";
   const specialty = realPlaceSpecialty(item);
   return `
-    <article class="real-place-card" data-sheet="place" data-place-id="${item.id}">
-      <div class="real-place-photo">
+    <article class="place-card place-card--compact" data-sheet="place" data-place-id="${item.id}">
+      <div class="place-card-photo">
         ${renderPlacePhoto(item)}
-        <span class="real-place-category-badge" aria-hidden="true">${categoryIconFor(item)}</span>
+        <span class="place-card-category-badge" aria-hidden="true">${categoryIconFor(item)}</span>
+        <button type="button" class="place-card-save ${isPlaceSaved(item) ? "is-active" : ""}" data-action="toggle-save" data-place-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
-      <span>${item.subcategory || businessCategoryLabel(item.category)}</span>
-      <h3>${item.name}</h3>
-      ${specialty ? `<p class="real-place-specialty">${specialty}</p>` : ""}
-      <p>${distance ? `${distance} · ` : ""}${statusOrAddress}</p>
+      <div class="place-card-body">
+        <span class="place-card-eyebrow">${item.subcategory || businessCategoryLabel(item.category)}</span>
+        <h3 class="place-card-title">${item.name}</h3>
+        ${specialty ? `<p class="place-card-specialty">${specialty}</p>` : ""}
+        <p class="place-card-meta">${distance ? `${distance} · ` : ""}${statusOrAddress}</p>
+      </div>
     </article>
   `;
 }
@@ -3640,7 +3827,7 @@ function renderPlaceCoverflowTrack(items, trackKey) {
     <div id="${carouselId(trackKey)}" class="coverflow-viewport" data-coverflow="true">
       <div class="coverflow-track">
         ${items.map((item, index) => `
-          <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderRealPlaceCompactCard(item)}</div>
+          <div class="coverflow-slide ${index === 0 ? "is-active" : ""}">${renderPlaceCardCompact(item)}</div>
         `).join("")}
       </div>
     </div>
@@ -3803,7 +3990,7 @@ function renderNeighbourhoodFeed() {
     "community",
     renderCarousel(
       "neighbourhood",
-      "community-preview neighbourhood-rail",
+      "community-preview",
       feedPosts.map(renderPulse).join("")
     )
   );
@@ -4714,7 +4901,7 @@ function renderSavedPlaces() {
         <p>${t("profile.quickActions.savedPlacesHint")}</p>
       </div>
       ${saved.length
-        ? `<div class="imported-list">${saved.map(renderImportedBusiness).join("")}</div>`
+        ? `<div class="imported-list">${saved.map(renderPlaceCard).join("")}</div>`
         : `
           <div class="auth-card">
             <p class="auth-hint">${t("profile.quickActions.savedPlacesEmpty")}</p>
@@ -4960,7 +5147,7 @@ function renderExploreCategoryPage() {
       </label>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", shown.length).replace("{total}", imported.length)}</p>
       <div class="imported-list">
-        ${shown.map(renderImportedBusiness).join("") || renderEmptyState(t("explore.exploreEmptyState"))}
+        ${shown.map(renderPlaceCard).join("") || renderEmptyState(t("explore.exploreEmptyState"))}
       </div>
     </section>
   `;
@@ -5414,6 +5601,18 @@ function renderCreateListingForm() {
         <p>${t("createListing.createListingHint")}</p>
       </div>
       <form class="claim-form create-listing-form" data-role="create-listing-form">
+        ${TRANSACTION_SAFETY_NOTICE}
+        <div class="auth-field">
+          <label for="listing-offeror-status">Your marketplace status</label>
+          <select id="listing-offeror-status" data-role="listing-offeror-status" required>
+            <option value="">Select the correct status</option>
+            <option value="private" ${(state.offerorStatus?.offeror_status || draft.offerorStatus) === "private" ? "selected" : ""}>Private seller/provider</option>
+            <option value="trader" ${(state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" ? "selected" : ""}>Trader/business</option>
+          </select>
+          <p class="auth-hint">This account-level classification is recorded with the current Terms version. Private sellers must not present commercial activity as private activity.</p>
+        </div>
+        <label class="settings-toggle-row"><span>I confirm this classification is accurate for my marketplace activity.</span><input id="listing-offeror-confirmation" type="checkbox" required /></label>
+        ${(state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified" ? `<div class="auth-error">Trader listings require current verification. <button type="button" class="auth-link" data-view="traderVerification">Open trader verification</button></div>` : ""}
         <div class="auth-field">
           <label for="listing-title">${t("field.title")}</label>
           <input id="listing-title" name="title" value="${escapeHtml(draft.title)}" placeholder="${t("createListing.titlePlaceholder")}" maxlength="120" />
@@ -5498,7 +5697,7 @@ function renderCreateListingForm() {
 
         ${state.listingSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.listingSubmitError)}</p>` : ""}
 
-        <button type="submit" class="auth-primary-button" ${isLoading ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : t("createListing.publishButton")}</button>
+        <button type="submit" class="auth-primary-button" ${isLoading || ((state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified") ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : t("createListing.publishButton")}</button>
       </form>
     </section>
   `;
@@ -5551,11 +5750,17 @@ function renderAlwenListingCreator() {
   `;
 }
 
+/** One fixed size within any grid or rail — MarketplaceCard used to vary
+ * card height per item.cardSize ("tall"/"wide"/"compact", a Pinterest-
+ * style masonry effect via CSS column-count), which is exactly the
+ * "random heights in the same carousel" the shared card system rules
+ * out. item.cardSize itself is left on the mock data (harmless, unused)
+ * rather than stripped from every record for no functional gain. */
 function renderMarketplaceListing(item) {
   const isSaved = state.savedListingIds.includes(String(item.id));
   const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
-    <article class="market-card visual-market-card is-${item.cardSize || "compact"}" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
+    <article class="market-card visual-market-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
       <div class="market-photo" style="background-image: url('${item.image}')">
         <button type="button" class="favourite-float ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
@@ -5564,6 +5769,7 @@ function renderMarketplaceListing(item) {
           <img src="${item.sellerAvatar}" alt="" />
           <div><strong>${item.seller}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong><span>${joinNonEmpty([item.distance, item.area, item.commute, item.verifiedSeller ? t("common.verifiedSeller") : null])}</span></div>
         </div>
+        <span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>
         <span class="badge">${categoryLabel(item.type)}</span>
         ${item.workMode ? `<span class="badge badge-workmode">${item.workMode}</span>` : ""}
         <h3>${listingTitle(item)}</h3>
@@ -5597,9 +5803,10 @@ function renderListingDetail() {
 
   const gallery = item.gallery && item.gallery.length ? item.gallery : [item.image];
   const isSaved = state.savedListingIds.includes(String(item.id));
-  const isReported = state.reportedListings.includes(String(item.id));
   const sellerAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   const hasFulfilment = item.pickupAvailable || item.deliveryAvailable;
+  const traderDisclosure = item.offerorStatus === "trader" ? state.traderPublicProfiles[item.sellerId] : null;
+  if (item.offerorStatus === "trader" && state.traderPublicProfiles[item.sellerId] === undefined) queueMicrotask(() => loadTraderDisclosure(item.sellerId));
 
   return `
     <section class="section-shell listing-detail-shell">
@@ -5616,6 +5823,7 @@ function renderListingDetail() {
 
       <div class="screen-heading">
         <span class="badge category-chip">${categoryLabel(item.type)}</span>
+        <span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>
         <h1>${listingTitle(item)}</h1>
         <p class="price-row"><strong>${item.price}</strong></p>
       </div>
@@ -5627,6 +5835,7 @@ function renderListingDetail() {
 
       <div class="section-title"><h2>${t("marketplace.listingDetail.aboutListing")}</h2></div>
       <p>${item.description || (item.descriptionKey ? t(item.descriptionKey) : listingMeta(item))}</p>
+      ${item.offerorStatus === "trader" ? traderDisclosure ? `<div class="settings-section"><h2>Verified trader disclosure</h2><p><strong>${escapeHtml(traderDisclosure.legal_or_trading_name)}</strong> · ${escapeHtml(traderDisclosure.country)}</p><p>${escapeHtml(traderDisclosure.business_location)} · ${escapeHtml(traderDisclosure.public_email)} · ${escapeHtml(traderDisclosure.public_phone)}</p><p>${escapeHtml(traderDisclosure.trade_register_name || "Trade register not applicable")} ${escapeHtml(traderDisclosure.registration_number || "")}</p><p>${escapeHtml(traderDisclosure.vat_display || "VAT status not provided")}</p></div>` : `<p class="settings-section-hint">Loading verified trader disclosure…</p>` : `<p class="settings-section-hint">This offer is from a private individual. EU consumer rights that apply to trader-to-consumer contracts may not apply.</p>`}
 
       ${
         hasFulfilment
@@ -5639,6 +5848,7 @@ function renderListingDetail() {
       }
 
       <div class="section-title"><h2>${t("common.contactSeller")}</h2></div>
+      ${TRANSACTION_SAFETY_NOTICE}
       <div class="seller-row" role="button" tabindex="0" ${sellerAttrs}>
         <img src="${item.sellerAvatar}" alt="" />
         <div>
@@ -5660,7 +5870,7 @@ function renderListingDetail() {
         }
         <button type="button" class="${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}">${t("common.favourite")}</button>
         <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
-        <button type="button" data-action="report-listing" data-listing-id="${item.id}" ${isReported ? "disabled" : ""}>${isReported ? t("marketplace.listingDetail.reportedConfirmation") : t("common.reportPersonCta")}</button>
+        <button type="button" data-report-target="listing" data-report-id="${item.id}">Report listing</button>
       </div>
     </section>
   `;
@@ -5692,6 +5902,7 @@ function renderHire() {
   const pros = filteredProfessionals();
   return `
     <section class="section-shell hire-shell">
+      ${TRANSACTION_SAFETY_NOTICE}
       <section class="city-hero page-hero hire-hero-photo" aria-labelledby="hire-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("hire.hireEyebrow")} · ${currentAreaLabel()}</p>
@@ -5719,6 +5930,7 @@ function renderNeedHelp() {
 
   return `
     <section class="section-shell help-shell">
+      ${TRANSACTION_SAFETY_NOTICE}
       <div class="screen-heading">
         <p class="eyebrow">${t("common.activeMarketplace")}</p>
         <h1>${t("needHelp.needHelpTitle")}</h1>
@@ -5784,6 +5996,7 @@ function renderLiveOpportunities() {
   const categories = [...new Set(LIVE_OPPORTUNITIES.map((item) => item.category))];
   const earnings = LIVE_OPPORTUNITIES.filter((item) => item.today).reduce((sum, item) => sum + item.price, 0);
   return `<section class="section-shell opportunities-shell">
+    ${TRANSACTION_SAFETY_NOTICE}
     <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>LIVE OPPORTUNITIES</h1><p>Earn money by helping people nearby.</p>
       <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>active opportunities nearby</span></article><article><strong>€${earnings}</strong><span>estimated earnings available today</span></article></div>
     </header>
@@ -6044,6 +6257,7 @@ function shapeListingForDisplay(created) {
     sellerReputation: user?.publicProfile?.reputation_score ?? 0,
     pickupAvailable: Boolean(metadata.pickupAvailable),
     deliveryAvailable: Boolean(metadata.deliveryAvailable),
+    offerorStatus: created.offeror_status || metadata.offerorStatus || "private",
     verifiedSeller: Boolean(user?.emailVerified),
     distance: "",
     popularity: "",
@@ -6089,12 +6303,25 @@ async function submitListingForm() {
     render();
     return;
   }
+  if (!draft.offerorStatus) {
+    state.listingSubmitStatus = "error";
+    state.listingSubmitError = "Select whether you are a private seller/provider or a trader/business.";
+    render();
+    return;
+  }
+  if (draft.offerorStatus === "trader" && state.traderVerification?.status !== "verified") {
+    state.listingSubmitStatus = "error";
+    state.listingSubmitError = "Complete trader verification before publishing trader listings.";
+    render();
+    return;
+  }
 
   state.listingSubmitStatus = "loading";
   state.listingSubmitError = null;
   render();
 
   try {
+    state.offerorStatus = await confirmOfferorStatus({ status: draft.offerorStatus, termsVersion: LEGAL_POLICY_VERSION, reason: "Confirmed before listing publication" });
     const created = await createListing({
       title,
       description: draft.description.trim(),
@@ -6137,6 +6364,7 @@ async function submitListingForm() {
       condition: "",
       pickupAvailable: false,
       deliveryAvailable: false,
+      offerorStatus: "",
       tags: "",
       photoFiles: []
     };
@@ -6662,6 +6890,8 @@ function renderConversationDetail() {
           <p>${t(thread.context.metaKey)}</p>
         </div>
       ` : ""}
+      ${TRANSACTION_SAFETY_NOTICE}
+      <button type="button" class="settings-row-button" data-report-target="user" data-report-id="${thread.id}">Report user</button>
       <div class="conversation-history">
         ${thread.messages.map((message) => `
           <div class="conversation-message ${message.from === "me" ? "is-me" : "is-them"}">
@@ -6681,6 +6911,7 @@ function renderConversationDetail() {
 function renderOffers() {
   return `
     <section class="section-shell">
+      ${TRANSACTION_SAFETY_NOTICE}
       <div class="screen-heading">
         <p class="eyebrow">${currentAreaLabel()}</p>
         <h1>${t("common.localOffers")}</h1>
@@ -7518,7 +7749,6 @@ function deriveRealActivity() {
 function renderPublicProfile() {
   const person = state.publicProfile;
   if (!person) return renderProfileSignedOut();
-  const isReported = state.reportedPeople.includes(person.name);
   const isBlocked = state.blockedPeople.includes(person.name);
   const metaLine = [person.category, person.area, city.name].filter(Boolean).join(" · ");
   const contextKey = PUBLIC_PROFILE_CONTEXT_HINT[person.context];
@@ -7589,7 +7819,8 @@ function renderPublicProfile() {
       ` : ""}
 
       <div class="public-profile-secondary-actions">
-        <button type="button" data-person-action="report" ${isReported ? "disabled" : ""}>${isReported ? t("common.reportedConfirmation") : t("common.reportPersonCta")}</button>
+        <span class="badge offeror-status-badge">${person.context === "hire" ? "Trader/business" : "Private seller/provider"}</span>
+        <button type="button" data-report-target="user" data-report-id="${escapeHtml(person.id)}">Report user</button>
         <button type="button" data-person-action="block" ${isBlocked ? "disabled" : ""}>${isBlocked ? t("common.blockedConfirmation") : t("common.blockPersonCta")}</button>
       </div>
     </section>
@@ -7619,6 +7850,7 @@ function renderProfile() {
   const achievements = deriveRealAchievements(user);
   const activity = deriveRealActivity();
   const savedCount = state.savedPlaceIds.length + state.savedListingIds.length;
+  const ownOfferorStatus = state.myListings.some((item) => item.metadata?.offerorStatus === "trader") ? "Trader/business" : state.myListings.length ? "Private seller/provider" : null;
 
   return `
     <section class="section-shell profile-panel identity-profile">
@@ -7629,6 +7861,7 @@ function renderProfile() {
         </span>
         <h1>${escapeHtml(user.name)}</h1>
         <p class="identity-role">${profilePrimaryRoleLabel(user)}</p>
+        ${ownOfferorStatus ? `<span class="badge offeror-status-badge">${ownOfferorStatus}</span>` : ""}
         <p class="identity-meta">${joinNonEmpty([escapeHtml(user.publicProfile?.city || city.name), memberSince ? t("profile.identity.memberSince", { date: memberSince }) : null])}</p>
         ${badges.length ? `<div class="quote-list identity-badges">${badges.map((badge) => `<span class="verified-chip">${icon(badge.icon)}${t(badge.labelKey)}</span>`).join("")}</div>` : ""}
       </div>
@@ -8040,7 +8273,7 @@ function renderCityImport() {
       </div>
       <p class="import-attribution">${t("common.showingPreviewOf").replace("{shown}", Math.min(24, importedBusinesses.length)).replace("{total}", importedBusinesses.length)}</p>
       <div class="imported-list">
-        ${importedBusinesses.slice(0, 24).map(renderImportedBusiness).join("")}
+        ${importedBusinesses.slice(0, 24).map(renderPlaceCard).join("")}
       </div>
       ${renderClaimFlow()}
     </section>
@@ -8355,12 +8588,21 @@ function renderOpenStatusBadge(item) {
   return "";
 }
 
-function renderImportedBusiness(item) {
+/** The full/grid member of the shared PlaceCard family (Explore's
+ * browsable list, Saved Places, the admin import review screen). Shares
+ * a photo aspect-ratio, border-radius and shadow token with the compact
+ * rail member above (both use the .place-card base class) — the
+ * difference between them is deliberate, not accidental: this one has
+ * the full action set (directions/call/website/save/share/claim)
+ * because it's the primary place to act on a place, where the compact
+ * rail card is a lighter preview whose one job is to invite a tap
+ * through to the same detail sheet either card opens. */
+function renderPlaceCard(item) {
   const distance = formatDistance(distanceFromCenter(item));
   const photoCount = (item.photos && item.photos.length) || (item.photoUrl ? 1 : 0);
   return `
-    <article class="imported-card">
-      <div class="imported-card-photo" data-sheet="place" data-place-id="${item.id}">
+    <article class="place-card">
+      <div class="place-card-photo" data-sheet="place" data-place-id="${item.id}">
         ${renderPlacePhoto(item)}
         <div class="place-photo-overlay place-photo-overlay-top">
           <span class="badge category-chip">${categoryIconFor(item)} ${businessCategoryLabel(item.category)}</span>
@@ -8375,10 +8617,10 @@ function renderImportedBusiness(item) {
           ${photoCount > 1 ? `<span class="badge photo-count-badge">${icon("camera")}${photoCount}</span>` : ""}
         </div>
       </div>
-      <div data-sheet="place" data-place-id="${item.id}">
-        <h3>${item.name}</h3>
-        <p class="imported-address">${pinIcon()}${item.address || item.neighbourhood || "Vilnius"}</p>
-        ${honestPlaceDescription(item) ? `<p class="imported-description">${honestPlaceDescription(item)}</p>` : ""}
+      <div class="place-card-body" data-sheet="place" data-place-id="${item.id}">
+        <h3 class="place-card-title">${item.name}</h3>
+        <p class="place-card-meta">${pinIcon()}${item.address || item.neighbourhood || "Vilnius"}</p>
+        ${honestPlaceDescription(item) ? `<p class="place-card-description">${honestPlaceDescription(item)}</p>` : ""}
       </div>
       ${renderPlaceActionButtons(item)}
       ${renderPlaceFooterActions(item)}
@@ -8652,7 +8894,8 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      if (button.tagName === "A") event.preventDefault();
       if (button.closest(".carousel-control")) return;
       if (button.closest(".ai-search, .tyt-ai-search") && state.query.trim()) {
         trackEvent("search_performed", { queryLength: state.query.trim().length, destination: button.dataset.view });
@@ -8695,7 +8938,11 @@ function bindEvents() {
         state.exploreStars = "All";
       }
       if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
-      if (button.dataset.listingId) state.selectedListingId = button.dataset.listingId;
+      if (button.dataset.listingId) {
+        state.selectedListingId = button.dataset.listingId;
+        const selected = listings.find((listing) => String(listing.id) === String(button.dataset.listingId));
+        if (selected?.offerorStatus === "trader") loadTraderDisclosure(selected.sellerId);
+      }
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
       if (button.dataset.conversationId) state.activeConversationId = Number(button.dataset.conversationId);
       render();
@@ -8854,6 +9101,66 @@ function bindEvents() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-cookie-settings]").forEach((button) => button.addEventListener("click", () => {
+    state.cookieSettingsOpen = true;
+    render();
+  }));
+  document.querySelectorAll("[data-cookie-choice]").forEach((button) => button.addEventListener("click", () => {
+    if (button.dataset.cookieChoice === "manage" && !state.cookieSettingsOpen) {
+      state.cookieSettingsOpen = true;
+      render();
+      return;
+    }
+    const analytics = button.dataset.cookieChoice === "accept" || (button.dataset.cookieChoice === "manage" && Boolean(document.getElementById("cookie-analytics-choice")?.checked));
+    writeLocalStorage(COOKIE_CONSENT_KEY, { necessary: true, analytics, advertising: false, functional: false, decidedAt: new Date().toISOString() });
+    if (!analytics) writeLocalStorage(ANALYTICS_KEY, null);
+    state.cookieSettingsOpen = false;
+    render();
+  }));
+
+  document.querySelectorAll("[data-report-target]").forEach((button) => button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    state.reportTarget = { type: button.dataset.reportTarget, id: button.dataset.reportId || "website" };
+    state.reportNotice = null;
+    render();
+  }));
+  document.querySelector("[data-report-close]")?.addEventListener("click", () => { state.reportTarget = null; render(); });
+  document.querySelector("[data-report-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const record = { target_type: state.reportTarget.type, target_id: state.reportTarget.id, reason: data.get("reason"), explanation: data.get("explanation"), content_url: data.get("contentUrl"), reporter_name: data.get("reporterName"), reporter_email: data.get("reporterEmail"), good_faith_confirmed: data.get("goodFaith") === "on" };
+    try {
+      if (!record.good_faith_confirmed) return;
+      await createModerationReport(record);
+      state.reportNotice = "Report submitted for human review.";
+    } catch (error) {
+      const localRecords = readLocalStorage(MODERATION_RECORDS_KEY) || [];
+      localRecords.push({ ...record, id: crypto.randomUUID(), status: "open", created_at: new Date().toISOString(), storage: "local-pending-sync" });
+      writeLocalStorage(MODERATION_RECORDS_KEY, localRecords);
+      state.reportNotice = "Report saved on this device pending secure submission.";
+      console.warn("[legal] Report backend unavailable", error);
+    }
+    state.reportTarget = null;
+    render();
+  });
+
+  document.querySelectorAll("[data-account-action]").forEach((button) => button.addEventListener("click", async () => {
+    if (state.auth.status !== "signedIn") return goToAuthView("login");
+    const requestType = button.dataset.accountAction === "delete" ? "deletion" : "portability";
+    try { await createPrivacyRequest(requestType); state.reportNotice = requestType === "deletion" ? "Account deletion request submitted." : "Personal data request submitted."; }
+    catch { state.reportNotice = "This request could not be submitted. Privacy contact details are awaiting configuration."; }
+    render();
+  }));
+  document.querySelectorAll("[data-contact-purpose]").forEach((button) => button.addEventListener("click", async () => {
+    const purpose = button.dataset.contactPurpose;
+    if ((purpose === "privacy" || purpose === "appeal") && state.auth.status === "signedIn") {
+      try { await createPrivacyRequest(purpose === "appeal" ? "appeal" : "privacy_support"); state.reportNotice = "Your request has been submitted."; }
+      catch { state.reportNotice = "Support contact details are awaiting configuration."; }
+    } else state.reportNotice = "Support contact details are awaiting configuration.";
+    render();
+  }));
 
   document.querySelectorAll("[data-opportunity-filter]").forEach((button) => button.addEventListener("click", () => {
     state.opportunityFilter = button.dataset.opportunityFilter;
@@ -9237,6 +9544,9 @@ function bindEvents() {
   document.querySelector('[data-role="listing-condition"]')?.addEventListener("change", (event) => {
     state.listingDraft.condition = event.target.value;
   });
+  document.querySelector('[data-role="listing-offeror-status"]')?.addEventListener("change", (event) => {
+    state.listingDraft.offerorStatus = event.target.value;
+  });
   document.getElementById("listing-pickup")?.addEventListener("change", (event) => {
     state.listingDraft.pickupAvailable = event.target.checked;
   });
@@ -9258,6 +9568,65 @@ function bindEvents() {
     event.preventDefault();
     submitListingForm();
   });
+
+  document.querySelector('[data-role="trader-verification-form"]')?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const intent = event.submitter?.value || "save";
+    const fields = Object.fromEntries([
+      "legal_name", "trading_name", "legal_form", "registered_address", "operating_address", "public_business_address",
+      "business_email", "business_phone", "country_of_establishment", "trade_register_name", "registration_number", "vat_number",
+      "representative_name", "representative_role"
+    ].map((key) => [key, String(formData.get(key) || "").trim()]));
+    fields.lawful_goods_confirmed = formData.get("lawful_goods_confirmed") === "on";
+    fields.accuracy_check_confirmed = formData.get("accuracy_check_confirmed") === "on";
+    state.traderVerificationStatus = "loading";
+    state.traderVerificationNotice = null;
+    render();
+    try {
+      let saved = await saveTraderVerificationDraft(fields, state.traderVerification?.id || null);
+      const file = formData.get("document");
+      if (file instanceof File && file.size) {
+        await uploadTraderVerificationDocument({ verificationId: saved.id, documentType: formData.get("document_type"), file });
+      }
+      if (intent === "submit") saved = await submitTraderVerification({ id: saved.id, confirmationVersion: TRADER_CONFIRMATION_VERSION });
+      state.traderVerification = saved;
+      state.traderVerificationStatus = "success";
+      state.traderVerificationNotice = intent === "submit" ? "Submitted for manual review." : "Draft saved.";
+    } catch (error) {
+      state.traderVerificationStatus = "error";
+      state.traderVerificationNotice = error?.message || "Trader verification could not be saved.";
+    }
+    render();
+  });
+  document.querySelector('[data-role="load-trader-review"]')?.addEventListener("click", async () => {
+    try { state.traderReviewQueue = await fetchTraderVerificationQueue(); } catch (error) { console.warn("[trader-review] Queue load failed.", error); }
+    render();
+  });
+  document.querySelectorAll('[data-role="trader-review-form"]').forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    try {
+      await reviewTraderVerification({
+        id: form.dataset.id,
+        newStatus: formData.get("status"),
+        userReason: String(formData.get("user_reason") || "").trim(),
+        internalNotes: String(formData.get("internal_notes") || "").trim(),
+        expiresAt: formData.get("expires_at") ? new Date(formData.get("expires_at")).toISOString() : null
+      });
+      state.traderReviewQueue = await fetchTraderVerificationQueue();
+    } catch (error) { console.warn("[trader-review] Decision failed.", error); }
+    render();
+  }));
+  document.querySelectorAll('[data-role="trader-register-check"]').forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    try {
+      await recordTraderRegisterCheck({ verificationId: form.dataset.id, sourceName: String(formData.get("source_name") || "").trim(), result: formData.get("result"), reference: String(formData.get("reference") || "").trim() || null, notes: String(formData.get("notes") || "").trim() });
+      form.reset();
+    } catch (error) { console.warn("[trader-review] Register check failed.", error); }
+  }));
 
   document.querySelector('[data-role="explore-sort"]')?.addEventListener("change", (event) => {
     state.exploreSort = event.target.value;
@@ -9484,7 +9853,14 @@ function bindAuthEvents() {
   });
 
   document.querySelectorAll("[data-auth-provider]").forEach((button) => {
-    button.addEventListener("click", () => signInWithProvider(button.dataset.authProvider));
+    button.addEventListener("click", () => {
+      if (state.auth.authView === "register") {
+        const draft = state.auth.registerDraft;
+        if (!draft.agreeTerms) { state.auth.authError = t("auth.authErrorTerms"); render(); return; }
+        writeLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY, { policyVersion: LEGAL_POLICY_VERSION, acceptedAt: new Date().toISOString(), email: "", marketingConsent: Boolean(draft.marketingConsent) });
+      }
+      signInWithProvider(button.dataset.authProvider);
+    });
   });
 
   document.querySelector('[data-role="profile-avatar-input"]')?.addEventListener("change", (event) => {
@@ -9502,6 +9878,7 @@ function bindAuthEvents() {
   bindLiveField("login-phone", (value) => (state.auth.loginDraft.phone = value));
   bindLiveField("register-email", (value) => (state.auth.registerDraft.email = value));
   bindLiveField("register-terms", (value) => (state.auth.registerDraft.agreeTerms = value));
+  bindLiveField("register-marketing", (value) => (state.auth.registerDraft.marketingConsent = value));
   bindLiveField("forgot-email", (value) => (state.auth.forgotDraft.email = value));
   bindLiveField("verify-code", (value) => (state.auth.verifyDraft.code = value.replace(/\D/g, "").slice(0, 6)));
   bindLiveField("reset-password", (value) => (state.auth.resetDraft.password = value));
@@ -9732,7 +10109,8 @@ function bindAiSearchPlaceholderRotation() {
 let lastRenderedView = null;
 
 function render() {
-  const content = !state.hasOnboarded ? renderOnboarding() : state.activeView === "welcomeSequence" ? renderWelcomeSequence() : renderShell();
+  const isPublicLegalView = ["legalTerms", "legalPrivacy", "legalCookies", "legalSafety"].includes(state.activeView);
+  const content = !state.hasOnboarded && !isPublicLegalView ? renderOnboarding() : state.activeView === "welcomeSequence" ? renderWelcomeSequence() : renderShell();
   document.getElementById("app").innerHTML = content;
   bindEvents();
   bindCarousels();
@@ -9930,6 +10308,13 @@ function bindPhotoZoom() {
   }, { capture: true });
 }
 
+approvedLegalPolicyMarkdown = await fetch("/src/legal/ALWENDA_LEGAL_POLICIES_EN.md").then((response) => {
+  if (!response.ok) throw new Error(`Legal policy source unavailable (${response.status})`);
+  return response.text();
+}).catch((error) => {
+  console.error("[legal] Approved policy source could not be loaded", error);
+  return "# Policy unavailable\n\nThe approved policy source could not be loaded. Do not rely on a placeholder policy.";
+});
 await Promise.all(SUPPORTED_LANGUAGES.map((lang) => loadLocale(lang.code)));
 const storedLanguage = readLocalStorage(LANGUAGE_KEY);
 if (storedLanguage && SUPPORTED_LANGUAGES.some((lang) => lang.code === storedLanguage)) state.language = storedLanguage;

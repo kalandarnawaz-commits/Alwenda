@@ -1,6 +1,11 @@
 -- Real photo storage for marketplace listings, backing the previously-unused
 -- listing_images table from the production foundation migration. Forward-only
 -- migration for Supabase Postgres. Review before applying to a live project.
+--
+-- Rollback approach:
+-- 1. Export listing image metadata and storage objects that must be retained.
+-- 2. Drop listing-photos storage policies.
+-- 3. Delete listing-photos objects and bucket only after retention review.
 
 insert into storage.buckets (id, name, public)
 values ('listing-photos', 'listing-photos', true)

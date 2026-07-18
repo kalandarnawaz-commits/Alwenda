@@ -251,6 +251,136 @@ export async function createListing({
   return data;
 }
 
+export async function getMyOfferorStatus() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new Error("No authenticated user.");
+  const { data, error } = await supabase.from("user_offeror_status").select("*").eq("user_id", user.id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function confirmOfferorStatus({ status, termsVersion, reason = null }) {
+  if (!["private", "trader"].includes(status)) throw new Error("Choose private or trader status.");
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("set_offeror_status", {
+    p_status: status,
+    p_terms_version: termsVersion,
+    p_confirmed: true,
+    p_reason: reason
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function getMyTraderVerification() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new Error("No authenticated user.");
+  const { data, error } = await supabase.from("trader_verifications").select("*").eq("user_id", user.id).order("version", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveTraderVerificationDraft(fields, existingId = null) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new Error("No authenticated user.");
+  const payload = { ...fields, user_id: user.id, status: "draft", updated_at: new Date().toISOString() };
+  const query = existingId
+    ? supabase.from("trader_verifications").update(payload).eq("id", existingId).eq("user_id", user.id)
+    : supabase.from("trader_verifications").insert(payload);
+  const { data, error } = await query.select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function submitTraderVerification({ id, confirmationVersion }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("submit_trader_verification", { p_id: id, p_confirmation_version: confirmationVersion });
+  if (error) throw error;
+  return data;
+}
+
+const TRADER_DOCUMENT_TYPES = new Set(["identity", "representative_authority", "registration_evidence", "address_evidence"]);
+const TRADER_DOCUMENT_MIME_TYPES = new Set(["image/jpeg", "image/png", "application/pdf"]);
+const TRADER_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+export async function uploadTraderVerificationDocument({ verificationId, documentType, file }) {
+  if (!TRADER_DOCUMENT_TYPES.has(documentType)) throw new Error("Unsupported document type.");
+  if (!TRADER_DOCUMENT_MIME_TYPES.has(file?.type) || !file.size || file.size > TRADER_DOCUMENT_MAX_BYTES) {
+    throw new Error("Use a JPEG, PNG, or PDF no larger than 10 MB.");
+  }
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new Error("No authenticated user.");
+  const extension = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : "jpg";
+  const storagePath = `${verificationId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+  const { error: uploadError } = await supabase.storage.from("trader-verification-documents").upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw uploadError;
+  const { data, error } = await supabase.from("trader_verification_documents").insert({
+    verification_id: verificationId,
+    owner_user_id: user.id,
+    document_type: documentType,
+    storage_path: storagePath,
+    original_filename: file.name,
+    mime_type: file.type,
+    byte_size: file.size
+  }).select("id,document_type,original_filename,mime_type,byte_size,malware_scan_status,created_at").single();
+  if (error) {
+    await supabase.storage.from("trader-verification-documents").remove([storagePath]);
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchTraderVerificationQueue() {
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("trader_verifications")
+    .select("id,user_id,status,legal_name,trading_name,country_of_establishment,trade_register_name,registration_number,submitted_at,user_visible_reason,created_at")
+    .in("status", ["submitted", "under_review", "more_information_required", "suspended"])
+    .order("submitted_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function reviewTraderVerification({ id, newStatus, userReason, internalNotes, expiresAt = null }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("review_trader_verification", {
+    p_id: id,
+    p_new_status: newStatus,
+    p_user_reason: userReason,
+    p_internal_notes: internalNotes,
+    p_expires_at: expiresAt
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function recordTraderRegisterCheck({ verificationId, sourceName, result, reference = null, notes = null }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new Error("No authenticated user.");
+  const { data, error } = await supabase.from("trader_register_checks").insert({
+    verification_id: verificationId,
+    provider_key: "manual",
+    source_name: sourceName,
+    result,
+    checked_by: user.id,
+    reference,
+    notes
+  }).select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchTraderPublicProfile(userId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("trader_public_profiles").select("*").eq("user_id", userId).eq("verification_status", "verified").maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 /** Uploads a photo the user attached in the create-listing form into the
  * (public, owner-write-only) listing-photos storage bucket and links it via
  * a listing_images row — both already covered by RLS scoped to the listing
@@ -342,6 +472,31 @@ export async function fetchMyHelpRequests() {
   return data || [];
 }
 
+export async function recordLegalAcceptance({ policyVersion, acceptedAt, marketingConsent }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { error } = await supabase.from("legal_acceptances").upsert({ user_id: user.id, policy_version: policyVersion, accepted_at: acceptedAt, marketing_consent: Boolean(marketingConsent) }, { onConflict: "user_id,policy_version" });
+  if (error) throw error;
+}
+
+export async function createModerationReport(report) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  const { data, error } = await supabase.from("legal_reports").insert({ ...report, reporter_user_id: user?.id || null }).select("id,status,created_at").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createPrivacyRequest(requestType) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase.from("privacy_requests").insert({ user_id: user.id, request_type: requestType }).select("id,status,created_at").single();
+  if (error) throw error;
+  return data;
+}
+
 /** For a public profile's "Active listings" section — anyone's published
  * listings are readable by RLS regardless of who's asking, so no auth
  * check is needed here (unlike fetchMyListings, which is about the
@@ -420,6 +575,8 @@ export function mapSupabaseUserToAccount(supabaseUser, profiles = {}) {
     phone: supabaseUser.phone || null,
     avatar: publicProfile?.avatar_url || meta.avatar_url || meta.picture || null,
     role: publicProfile?.profession || meta.role || "",
+    appRole: supabaseUser.app_metadata?.role || "user",
+    traderPermissions: Array.isArray(supabaseUser.app_metadata?.trader_permissions) ? supabaseUser.app_metadata.trader_permissions : [],
     provider: supabaseUser.app_metadata?.provider || "email",
     emailVerified: Boolean(supabaseUser.email_confirmed_at),
     phoneVerified: Boolean(supabaseUser.phone_confirmed_at),
