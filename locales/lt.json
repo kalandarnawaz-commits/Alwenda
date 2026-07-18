@@ -1491,7 +1491,15 @@
       "Elektrikas šiandien",
       "Užsakyti valytoją",
       "Kur galiu pasistatyti automobilį?"
-    ]
+    ],
+    "backToHub": "Visos kategorijos",
+    "hub": {
+      "title": "Ko ieškai?",
+      "subtitle": "Viskas, ką Alwenda žino apie tavo miestą, vienoje vietoje.",
+      "placesCount": "{count} vietų",
+      "noPlacesYet": "Nauja čia",
+      "openNowCount": "{count} dabar atidaryta"
+    }
   },
   "import": {
     "cityImport": "Miesto duomenų importas",

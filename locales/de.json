@@ -1491,7 +1491,15 @@
       "Elektriker heute verfügbar",
       "Reinigungskraft buchen",
       "Wo kann ich parken?"
-    ]
+    ],
+    "backToHub": "Alle Kategorien",
+    "hub": {
+      "title": "Wonach suchst du?",
+      "subtitle": "Alles, was Alwenda über deine Stadt weiß, an einem Ort.",
+      "placesCount": "{count} Orte",
+      "noPlacesYet": "Neu hier",
+      "openNowCount": "{count} jetzt geöffnet"
+    }
   },
   "import": {
     "cityImport": "Stadtdaten importieren",

@@ -129,6 +129,8 @@ const state = {
   query: "",
   discoverOpen: false,
   marketplaceCategoryChosen: false,
+  exploreCategoryChosen: false,
+  exploreCategoryVisitCounts: {},
   exploreOpenNowOnly: false,
   exploreVerifiedOnly: false,
   exploreHasPhotoOnly: false,
@@ -4772,7 +4774,148 @@ function renderExploreFilterRow() {
   `;
 }
 
+/** Real time-of-day context — genuinely the current hour/day, not a
+ * simulated or fabricated "AI mood". Used only to re-order the Hub's
+ * category cards; it never hides a category or invents data. */
+function currentExploreTimeContext() {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay();
+  let bucket;
+  if (hour >= 5 && hour < 10) bucket = "morning";
+  else if (hour >= 10 && hour < 14) bucket = "midday";
+  else if (hour >= 14 && hour < 17) bucket = "afternoon";
+  else if (hour >= 17 && hour < 22) bucket = "evening";
+  else bucket = "night";
+  return { bucket, isWeekendEvening: (day === 5 || day === 6) && hour >= 17 };
+}
+
+const EXPLORE_TIME_BOOST = {
+  morning: ["Food & Drink", "Groceries", "Pharmacy", "Transport"],
+  midday: ["Food & Drink", "Shops"],
+  afternoon: ["Shops", "Beauty & Wellness", "Public Services"],
+  evening: ["Food & Drink", "Nightlife", "Attractions"],
+  night: ["Nightlife", "Pharmacy"]
+};
+
+const EXPLORE_WEEKEND_EVENING_BOOST = ["Nightlife", "Food & Drink", "Attractions"];
+
+/** Keyword → category map used only to attribute a real, just-submitted
+ * search to a category for the visit-count signal below — never to
+ * silently rewrite or filter the query itself. */
+const EXPLORE_SEARCH_CATEGORY_HINTS = {
+  "Food & Drink": ["restaurant", "cafe", "coffee", "lunch", "dinner", "pizza", "sushi", "bakery"],
+  Groceries: ["grocery", "groceries", "supermarket", "convenience"],
+  Pharmacy: ["pharmacy", "medicine", "prescription"],
+  Healthcare: ["doctor", "clinic", "hospital", "dentist"],
+  Hotels: ["hotel", "hostel", "guesthouse"],
+  Shops: ["shop", "mall", "clothing", "electronics", "store"],
+  "Beauty & Wellness": ["salon", "spa", "barber", "haircut", "massage", "gym"],
+  Transport: ["taxi", "bus", "metro", "parking", "train"],
+  "Public Services": ["municipality", "embassy", "police"],
+  Attractions: ["museum", "landmark", "attraction"],
+  Parks: ["park", "playground"],
+  Finance: ["bank", "atm"],
+  Education: ["school", "university", "tutor"],
+  Nightlife: ["bar", "club", "nightlife", "pub"],
+  Automobile: ["mechanic", "garage", "fuel", "petrol", "tyres"],
+  "Pet Services": ["vet", "veterinary", "pet", "grooming"],
+  "Home Services": ["plumber", "electrician", "carpenter", "painter", "locksmith", "gardener", "handyman"]
+};
+
+function matchExploreSearchCategory(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  for (const [category, keywords] of Object.entries(EXPLORE_SEARCH_CATEGORY_HINTS)) {
+    if (keywords.some((word) => new RegExp(`\\b${word}\\b`).test(q))) return category;
+  }
+  return null;
+}
+
+/** Real session behaviour — incremented when the user actually selects a
+ * category or a search of theirs is attributed to one (see bindEvents).
+ * Not persisted beyond the session, same scope as state.query itself. */
+function bumpExploreCategorySignal(category) {
+  if (!category) return;
+  state.exploreCategoryVisitCounts[category] = (state.exploreCategoryVisitCounts[category] || 0) + 1;
+}
+
+/** Combines the two real signals above into a stable sort — ties keep
+ * CITY_ENTITY_CATEGORIES' original order (Array#sort is stable), so the
+ * grid never jitters for categories with equal, usually zero, score. */
+function sortedExploreHubCategories() {
+  const { bucket, isWeekendEvening } = currentExploreTimeContext();
+  const timeBoost = EXPLORE_TIME_BOOST[bucket] || [];
+  const visits = state.exploreCategoryVisitCounts;
+  const scoreOf = (category) => {
+    let score = 0;
+    if (timeBoost.includes(category)) score += 3;
+    if (isWeekendEvening && EXPLORE_WEEKEND_EVENING_BOOST.includes(category)) score += 3;
+    score += Math.min(visits[category] || 0, 5);
+    return score;
+  };
+  return [...CITY_ENTITY_CATEGORIES].sort((a, b) => scoreOf(b) - scoreOf(a));
+}
+
+/** Real counts only — how many imported places actually sit in this
+ * category, and how many of those are genuinely open right now
+ * (isOpenNow, not a guess). Omits the "open now" line entirely rather
+ * than showing 0, since a category can have real places with unknown
+ * hours. */
+function exploreCategoryHubMetadata(category) {
+  const items = importedBusinesses.filter((item) => item.category === category);
+  const openNowCount = items.filter((item) => isOpenNow(item.openingHours) === true).length;
+  return { total: items.length, openNowCount };
+}
+
+function renderExploreHubCard(category, index) {
+  const { total, openNowCount } = exploreCategoryHubMetadata(category);
+  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
+  return `
+    <button type="button" class="explore-hub-card tone-${tone}" data-explore-category="${category}">
+      <span class="explore-hub-card-icon">${EXPLORE_CATEGORY_EMOJI[category] || "📍"}</span>
+      <span class="explore-hub-card-name">${businessCategoryLabel(category)}</span>
+      <span class="explore-hub-card-meta">
+        ${total > 0 ? t("explore.hub.placesCount", { count: total }) : t("explore.hub.noPlacesYet")}
+        ${openNowCount > 0 ? `<span class="explore-hub-card-open">${t("explore.hub.openNowCount", { count: openNowCount })}</span>` : ""}
+      </span>
+      <span class="explore-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
+    </button>
+  `;
+}
+
+/** Stage 1 — orientation, not a filtered list. One search bar (jumps
+ * straight into Stage 2 unfiltered on submit, same "Tell Alwen" pattern
+ * as everywhere else) and a grid of destination cards, real-count
+ * metadata, ordered by real time-of-day + real session behaviour. */
+function renderExploreHub() {
+  const categories = sortedExploreHubCategories();
+  return `
+    <section class="section-shell explore-shell">
+      <section class="city-hero page-hero" aria-labelledby="explore-hub-title">
+        <div class="city-hero-copy">
+          <p class="eyebrow">${t("explore.exploreEyebrow")} · ${currentAreaLabel()}</p>
+          <h1 id="explore-hub-title">${t("explore.hub.title")}</h1>
+          <p>${t("explore.hub.subtitle")}</p>
+        </div>
+        ${renderAiSearch("explore")}
+      </section>
+      <div class="explore-hub-grid">
+        ${categories.map((category, index) => renderExploreHubCard(category, index)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+/** Stage 1 (orientation: "what do you need?") vs Stage 2 (the actual
+ * discover-and-filter experience for one category, or everything when
+ * exploreCategory === "All"). See renderExploreHub() for Stage 1. */
 function renderExplore() {
+  if (!state.exploreCategoryChosen) return renderExploreHub();
+  return renderExploreCategoryPage();
+}
+
+function renderExploreCategoryPage() {
   const imported = filteredImportedBusinesses();
   const EXPLORE_PREVIEW_LIMIT = 30;
   const shown = imported.slice(0, EXPLORE_PREVIEW_LIMIT);
@@ -4780,6 +4923,7 @@ function renderExplore() {
   const isBrowsingAll = category === "All" && !state.query.trim();
   return `
     <section class="section-shell explore-shell">
+      <button type="button" class="back-button explore-back-to-hub" data-action="explore-back-to-hub">${icon("arrow")}${t("explore.backToHub")}</button>
       <section class="city-hero page-hero" aria-labelledby="explore-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("explore.exploreEyebrow")} · ${currentAreaLabel()}</p>
@@ -8523,7 +8667,10 @@ function bindEvents() {
          tab, any other "go to Marketplace" link) should land there fresh,
          not stay wherever a previous category selection left it. */
       if (button.dataset.view === "marketplace") state.marketplaceCategoryChosen = false;
-      if (button.dataset.view === "explore") state.exploreCategory = "All";
+      if (button.dataset.view === "explore") {
+        state.exploreCategory = "All";
+        state.exploreCategoryChosen = false;
+      }
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.alwenOpen = false;
@@ -8890,6 +9037,15 @@ function bindEvents() {
     button.addEventListener("click", () => {
       document.getElementById("global-search")?.blur();
       if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
+      if (state.activeView === "explore") {
+        const matched = matchExploreSearchCategory(state.query);
+        if (matched) bumpExploreCategorySignal(matched);
+        if (!state.exploreCategoryChosen) {
+          state.exploreCategory = "All";
+          state.exploreCategoryChosen = true;
+          render();
+        }
+      }
       document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
@@ -8999,6 +9155,16 @@ function bindEvents() {
       state.exploreCategory = button.dataset.exploreCategory;
       state.exploreCuisine = "All";
       state.exploreStars = "All";
+      if (!state.exploreCategoryChosen) bumpExploreCategorySignal(state.exploreCategory);
+      state.exploreCategoryChosen = true;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="explore-back-to-hub"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      state.exploreCategoryChosen = false;
+      state.exploreCategory = "All";
       render();
     });
   });

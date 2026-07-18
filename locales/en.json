@@ -1491,7 +1491,15 @@
       "Electrician available today",
       "Book a cleaner",
       "Where can I park?"
-    ]
+    ],
+    "backToHub": "All categories",
+    "hub": {
+      "title": "What are you looking for?",
+      "subtitle": "Everything Alwenda knows about your city, in one place.",
+      "placesCount": "{count} places",
+      "noPlacesYet": "New here",
+      "openNowCount": "{count} open now"
+    }
   },
   "import": {
     "cityImport": "Import City Data",

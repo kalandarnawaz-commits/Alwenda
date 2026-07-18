@@ -12361,3 +12361,96 @@ strong:has(> .verified-check) {
     transform: none;
   }
 }
+
+/* Explore Hub (Stage 1) — premium destination cards, real per-category
+   counts (exploreCategoryHubMetadata in main.js), ordered by real
+   time-of-day + real session behaviour (sortedExploreHubCategories).
+   Reuses the same mint/gold/sky/rose tone cycle as .category-tile so it
+   reads as one visual system with the rest of the app rather than a
+   new component language. */
+.explore-back-to-hub {
+  margin-bottom: 4px;
+}
+
+.explore-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.explore-hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  position: relative;
+  min-height: 128px;
+  padding: 20px;
+  border-radius: 24px;
+  text-align: left;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.explore-hub-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(15, 31, 27, 0.12);
+}
+
+.explore-hub-card.tone-mint {
+  background: linear-gradient(160deg, var(--mint), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-gold {
+  background: linear-gradient(160deg, var(--gold), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-sky {
+  background: linear-gradient(160deg, var(--sky), var(--surface) 70%);
+}
+
+.explore-hub-card.tone-rose {
+  background: linear-gradient(160deg, var(--rose), var(--surface) 70%);
+}
+
+.explore-hub-card-icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.explore-hub-card-name {
+  font-size: 1.02rem;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.explore-hub-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.explore-hub-card-open {
+  color: var(--emerald-text);
+}
+
+.explore-hub-card-arrow {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-hub-card {
+    transition: none;
+  }
+  .explore-hub-card:hover {
+    transform: none;
+  }
+}
