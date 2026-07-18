@@ -1228,6 +1228,15 @@ function shareListing(item) {
   navigator.clipboard?.writeText(url).catch(() => {});
 }
 
+function shareUserProfile(user) {
+  const text = `${user.name} on Alwenda — ${profilePrimaryRoleLabel(user)}.`;
+  if (navigator.share) {
+    navigator.share({ title: user.name, text }).catch(() => {});
+    return;
+  }
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
 async function fetchCategoryEntities(source, category, radius) {
   const cached = readCache(source, category, radius);
   if (cached) return { ok: true, fromCache: true, attribution: cached.payload.attribution, entities: cached.payload.entities };
@@ -3478,12 +3487,12 @@ function renderEarnToday() {
   return renderLivingSection(
     "home.rail.earnToday",
     "home.rail.earnTodayHint",
-    "contribute",
+    "liveOpportunities",
     renderCarousel(
       "earnToday",
       "living-rail earn-rail",
       earnToday.map((item) => `
-        <article class="earn-card" data-view="contribute">
+        <article class="earn-card" data-view="liveOpportunities" data-opportunity-filter-target="today">
           <div class="earn-image" style="background-image: url('${item.image}')"></div>
           <div class="earn-body">
             <span>${item.time}</span>
@@ -3493,7 +3502,9 @@ function renderEarnToday() {
           </div>
         </article>
       `).join("")
-    )
+    ),
+    null,
+    "today"
   );
 }
 
@@ -4961,25 +4972,232 @@ const CONTRIBUTION_ACTION_ICON = {
   review: "star"
 };
 
-function renderContribute() {
-  const streakTile = { label: t("profile.reputation.contributionStreak"), value: reputationProfile.contributionStreakCount, icon: "calendar" };
+/** Real signals only — every count here traces to something the user
+ * actually did (myListings/myHelpRequests carry a real created_at from
+ * Supabase, ownedBusinesses() reflects a real claim, feedPosts is
+ * filtered to posts this signed-in user actually composed, saved counts
+ * are real toggle state) rather than a fabricated 0-100 "trust score" or
+ * percentile claim. No leaderboard exists, so there is no "Top 4%" —
+ * that would require knowing every other user's score. */
+function contributeRealActivityBreakdown(user) {
+  const myPosts = feedPosts.filter((post) => post.author === user.name);
+  const savedCount = state.savedListingIds.length + state.savedPlaceIds.length;
+  return [
+    { key: "marketplace", icon: "tag", count: state.myListings.length, labelKey: "contribute.activity.marketplaceLabel", emptyKey: "contribute.activity.marketplaceEmpty", emptyCtaKey: "contribute.activity.marketplaceEmptyCta", emptyView: "createListing", activeCtaKey: "contribute.activity.marketplaceActiveCta", activeView: "profile" },
+    { key: "help", icon: "help", count: state.myHelpRequests.length, labelKey: "contribute.activity.helpLabel", emptyKey: "contribute.activity.helpEmpty", emptyCtaKey: "contribute.activity.helpEmptyCta", emptyView: "needHelp", activeCtaKey: "contribute.activity.helpActiveCta", activeView: "profile" },
+    { key: "community", icon: "chat", count: myPosts.length, labelKey: "contribute.activity.communityLabel", emptyKey: "contribute.activity.communityEmpty", emptyCtaKey: "contribute.activity.communityEmptyCta", emptyView: "community", activeCtaKey: "contribute.activity.communityActiveCta", activeView: "community" },
+    { key: "business", icon: "shop", count: ownedBusinesses().length, labelKey: "contribute.activity.businessLabel", emptyKey: "contribute.activity.businessEmpty", emptyCtaKey: "contribute.activity.businessEmptyCta", emptyView: "businessClaim", activeCtaKey: "contribute.activity.businessActiveCta", activeView: "businessDashboard" },
+    { key: "saved", icon: "heart", count: savedCount, labelKey: "contribute.activity.savedLabel", emptyKey: "contribute.activity.savedEmpty", emptyCtaKey: "contribute.activity.savedEmptyCta", emptyView: "explore", activeCtaKey: "contribute.activity.savedActiveCta", activeView: "savedPlaces" }
+  ];
+}
+
+/** Real proportions, not a fabricated score — a conic-gradient ring
+ * whose arcs are sized exactly by each category's real count out of the
+ * real total. Renders an honest empty state instead of a ring with
+ * nothing in it when the user hasn't done anything yet. */
+const ECONOMY_RING_COLOR = {
+  marketplace: "#0ea5e9",
+  help: "#f5a524",
+  community: "#34d399",
+  business: "#a855f7",
+  saved: "#f43f5e"
+};
+
+function renderContributeActivityRing(breakdown) {
+  const total = breakdown.reduce((sum, item) => sum + item.count, 0);
+  if (total === 0) {
+    return `
+      <div class="economy-ring-empty">
+        <span class="economy-ring-empty-icon">${icon("spark")}</span>
+        <p>${t("contribute.ring.emptyTitle")}</p>
+        <p class="economy-ring-empty-hint">${t("contribute.ring.emptyHint")}</p>
+      </div>
+    `;
+  }
+  let cumulative = 0;
+  const active = breakdown.filter((item) => item.count > 0);
+  const stops = active
+    .map((item) => {
+      const start = (cumulative / total) * 360;
+      cumulative += item.count;
+      const end = (cumulative / total) * 360;
+      return `${ECONOMY_RING_COLOR[item.key]} ${start}deg ${end}deg`;
+    })
+    .join(", ");
   return `
-    <section class="section-shell contribute-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${t("alwen.alwendaEconomy")}</p>
-        <h1>${t("common.contributeTitle")}</h1>
+    <div class="economy-ring-wrap">
+      <div class="economy-ring" style="background: conic-gradient(${stops})">
+        <div class="economy-ring-center"><strong>${total}</strong><span>${t("contribute.ring.totalLabel")}</span></div>
       </div>
-      ${renderAiSearch("contribute")}
+      <div class="economy-ring-legend">
+        ${active.map((item) => `<span><i style="background:${ECONOMY_RING_COLOR[item.key]}"></i>${t(item.labelKey)} · ${item.count}</span>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderContributeActivityCard(item) {
+  const hasActivity = item.count > 0;
+  return `
+    <article class="economy-activity-card">
+      <span class="tile-icon">${icon(item.icon)}</span>
+      <div>
+        <h3>${t(item.labelKey)}</h3>
+        <p>${hasActivity ? t("contribute.activity.activeDetail", { count: item.count }) : t(item.emptyKey)}</p>
+      </div>
+      <button type="button" data-view="${hasActivity ? item.activeView : item.emptyView}">${t(hasActivity ? item.activeCtaKey : item.emptyCtaKey)}</button>
+    </article>
+  `;
+}
+
+/** Expands profileCompletenessPercent's own checks (Profile's honest
+ * completeness bar) into an itemized list with a direct action per item,
+ * instead of duplicating that bar here. Same four real conditions, same
+ * source of truth, different presentation. */
+function contributeGrowthChecklist(user) {
+  return [
+    { done: Boolean(user.avatar), labelKey: "contribute.checklist.addPhoto", view: "settings" },
+    { done: Boolean(user.role && user.role.trim()), labelKey: "contribute.checklist.addRole", view: "settings" },
+    { done: Boolean(user.emailVerified), labelKey: "contribute.checklist.verifyEmail", view: "settings" },
+    { done: state.myListings.length > 0 || ownedBusinesses().length > 0, labelKey: "contribute.checklist.firstActivity", view: "createListing" }
+  ];
+}
+
+function renderContributeChecklist(user) {
+  const checks = contributeGrowthChecklist(user);
+  if (checks.every((item) => item.done)) return "";
+  return `
+    <div class="economy-section economy-checklist">
+      <div class="economy-section-title"><h2>${t("contribute.checklist.title")}</h2><p>${t("contribute.checklist.hint")}</p></div>
+      <div class="economy-checklist-list">
+        ${checks
+          .map(
+            (item) => `
+          <div class="economy-checklist-row ${item.done ? "is-done" : ""}">
+            <span class="economy-checklist-icon">${item.done ? icon("check") : ""}</span>
+            <span>${t(item.labelKey)}</span>
+            ${!item.done ? `<button type="button" data-view="${item.view}">${t("contribute.checklist.completeCta")}</button>` : ""}
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/** An honest entry point to the real opportunities feed (renderLiveOpportunities,
+ * already live and reachable elsewhere) — no fabricated per-user match
+ * percentage or "because" reasoning, since no real skill/schedule/trust
+ * matching engine exists to generate one. */
+function renderContributeOpportunities() {
+  return `
+    <div class="economy-section economy-opportunity-card">
+      <div>
+        <p class="eyebrow">${t("contribute.opportunities.eyebrow")}</p>
+        <h2>${t("contribute.opportunities.title")}</h2>
+        <p>${t("contribute.opportunities.hint")}</p>
+      </div>
+      <button type="button" data-view="liveOpportunities">${t("contribute.opportunities.cta")}</button>
+    </div>
+  `;
+}
+
+/** Reuses deriveRealAchievements() as-is (Profile's exact same real,
+ * verifiable-condition-derived list) rather than a second implementation —
+ * shown here too because on this page it reads as "what your reputation
+ * is built on" rather than "your account record". */
+function renderContributeAchievements(user) {
+  const achievements = deriveRealAchievements(user);
+  if (!achievements.length) return "";
+  return `
+    <div class="economy-section">
+      <div class="economy-section-title"><h2>${t("profile.achievements.achievements")}</h2></div>
+      <div class="achievement-grid">
+        ${achievements
+          .map(
+            (item) => `
+          <article>
+            <span>${icon(item.icon)}</span>
+            <h3>${t(item.titleKey)}</h3>
+            <p>${t(item.detailKey)}</p>
+            ${item.date ? `<span class="achievement-date">${item.date}</span>` : ""}
+          </article>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderContributeIdentityCard(user) {
+  const isVerified = profileVerificationBadges(user).length > 0;
+  const memberSince = profileMemberSince(user);
+  return `
+    <div class="economy-identity-card">
+      <span class="avatar-frame economy-identity-avatar">
+        ${user.avatar ? `<img class="profile-portrait" src="${escapeHtml(user.avatar)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
+      </span>
+      <div class="economy-identity-copy">
+        <h2>${escapeHtml(user.name)}${isVerified ? verifiedCheck(t("status.verified")) : ""}</h2>
+        <p>${joinNonEmpty([profilePrimaryRoleLabel(user), memberSince ? t("profile.identity.memberSince", { date: memberSince }) : null])}</p>
+      </div>
+      <div class="economy-identity-actions">
+        <button type="button" data-view="profile">${t("contribute.identity.viewProfileCta")}</button>
+        <button type="button" data-action="share-profile">${t("contribute.identity.shareProfileCta")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderContribute() {
+  if (state.auth.status !== "signedIn") {
+    return `
+      <section class="section-shell contribute-shell economy-shell">
+        <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
+          <div class="city-hero-copy">
+            <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
+            <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
+            <p>${t("contribute.economyHeroSubtitle")}</p>
+          </div>
+        </div>
+        <div class="economy-signed-out">
+          <p>${t("contribute.signedOutHint")}</p>
+          <button type="button" class="auth-primary-button" data-auth-view="login">${t("profile.signedOut.profileSignInCta")}</button>
+        </div>
+      </section>
+    `;
+  }
+
+  const user = state.auth.user;
+  const breakdown = contributeRealActivityBreakdown(user);
+
+  return `
+    <section class="section-shell contribute-shell economy-shell">
+      <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
+        <div class="city-hero-copy">
+          <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
+          <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
+          <p>${t("contribute.economyHeroSubtitle")}</p>
+        </div>
+        ${renderAiSearch("contribute")}
+      </div>
       ${renderAiSearchResults(6, "contribute")}
-      <div class="score-grid">
-        ${contributionScores.map((score) => reputationTile(CONTRIBUTION_SCORE_ICON[score.id] || "spark", t(score.labelKey), score.value, undefined, CONTRIBUTION_SCORE_TONE[score.id])).join("")}
-        ${reputationTile(streakTile.icon, streakTile.label, streakTile.value)}
+
+      ${renderContributeIdentityCard(user)}
+
+      <div class="economy-section economy-ring-section">
+        <div class="economy-section-title"><h2>${t("contribute.ring.title")}</h2><p>${t("contribute.ring.hint")}</p></div>
+        ${renderContributeActivityRing(breakdown)}
+        <div class="economy-activity-grid">
+          ${breakdown.map(renderContributeActivityCard).join("")}
+        </div>
       </div>
-      ${renderEarningOpportunities()}
-      <div class="contribution-grid">
-        ${contributionActions.map(renderContributionAction).join("")}
-      </div>
-      ${renderGraphConnections()}
+
+      ${renderContributeChecklist(user)}
+      ${renderContributeOpportunities()}
+      ${renderContributeAchievements(user)}
     </section>
   `;
 }
@@ -8681,6 +8899,14 @@ function bindEvents() {
       state.discoverOpen = !state.discoverOpen;
       render();
       if (state.discoverOpen) document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  });
+
+  document.querySelectorAll('[data-action="share-profile"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (state.auth.user) shareUserProfile(state.auth.user);
+      trackEvent("profile_shared", {});
     });
   });
 

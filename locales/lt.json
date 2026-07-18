@@ -1183,6 +1183,59 @@
       "communityScore": "Bendruomenės balas",
       "translationScore": "Vertimo balas",
       "businessScore": "Verslo balas"
+    },
+    "economyEyebrow": "Tavo miesto ekonomika",
+    "economyTitle": "Tavo reputacija atveria galimybes.",
+    "economyHeroSubtitle": "Kuo daugiau prisidedi, tuo labiau miestas tavimi pasitiki.",
+    "signedOutHint": "Prisijunk, kad matytum savo miesto tapatybę, veiklą ir galimybes.",
+    "identity": {
+      "viewProfileCta": "Peržiūrėti profilį",
+      "shareProfileCta": "Dalintis profiliu"
+    },
+    "ring": {
+      "title": "Tavo veikla mieste",
+      "hint": "Tikras vaizdas, ką jau padarei — ne išgalvotas įvertinimas.",
+      "emptyTitle": "Tavo miesto veikla prasideda čia.",
+      "emptyHint": "Įkelk skelbimą, paskelbk prašymą arba pretenduok į verslą — ir tai atsiras žemiau.",
+      "totalLabel": "veiksmai"
+    },
+    "activity": {
+      "marketplaceLabel": "Skelbimai",
+      "marketplaceEmpty": "Dar nėra skelbimų",
+      "marketplaceEmptyCta": "Įkelti skelbimą",
+      "marketplaceActiveCta": "Peržiūrėti skelbimus",
+      "helpLabel": "Pagalbos prašymai",
+      "helpEmpty": "Dar nėra prašymų",
+      "helpEmptyCta": "Paskelbti prašymą",
+      "helpActiveCta": "Peržiūrėti prašymus",
+      "communityLabel": "Bendruomenė",
+      "communityEmpty": "Dar nėra įrašų",
+      "communityEmptyCta": "Pasidalink kažkuo",
+      "communityActiveCta": "Peržiūrėti bendruomenę",
+      "businessLabel": "Verslas",
+      "businessEmpty": "Dar nėra verslo",
+      "businessEmptyCta": "Pretenduoti į verslą",
+      "businessActiveCta": "Valdyti verslą",
+      "savedLabel": "Išsaugota",
+      "savedEmpty": "Dar nieko neišsaugota",
+      "savedEmptyCta": "Atrasti vietas",
+      "savedActiveCta": "Peržiūrėti išsaugotus",
+      "activeDetail": "{count} aktyvūs"
+    },
+    "checklist": {
+      "title": "Kurk savo buvimą mieste",
+      "hint": "Liko keletas realių žingsnių.",
+      "addPhoto": "Pridėk profilio nuotrauką",
+      "addRole": "Nurodyk savo profesiją",
+      "verifyEmail": "Patvirtink el. paštą",
+      "firstActivity": "Paskelbk pirmą skelbimą ar prašymą",
+      "completeCta": "Atlikti"
+    },
+    "opportunities": {
+      "eyebrow": "Uždirbk mieste",
+      "title": "Galimybės netoliese",
+      "hint": "Tikri prašymai iš žmonių netoliese, kuriems dabar reikia pagalbos.",
+      "cta": "Naršyti galimybes"
     }
   },
   "translate": {

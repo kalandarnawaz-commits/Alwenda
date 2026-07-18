@@ -1183,6 +1183,59 @@
       "communityScore": "Community score",
       "translationScore": "Translation score",
       "businessScore": "Business score"
+    },
+    "economyEyebrow": "Your city economy",
+    "economyTitle": "Your reputation unlocks opportunities.",
+    "economyHeroSubtitle": "The more you contribute, the more the city trusts you.",
+    "signedOutHint": "Sign in to see your city identity, activity and opportunities.",
+    "identity": {
+      "viewProfileCta": "View profile",
+      "shareProfileCta": "Share profile"
+    },
+    "ring": {
+      "title": "Your city activity",
+      "hint": "A real picture of what you've done, not a fabricated score.",
+      "emptyTitle": "Your city activity starts here.",
+      "emptyHint": "List an item, post a request, or claim a business to see it appear below.",
+      "totalLabel": "actions"
+    },
+    "activity": {
+      "marketplaceLabel": "Marketplace",
+      "marketplaceEmpty": "No listings yet",
+      "marketplaceEmptyCta": "List an item",
+      "marketplaceActiveCta": "View listings",
+      "helpLabel": "Help requests",
+      "helpEmpty": "No requests yet",
+      "helpEmptyCta": "Post a request",
+      "helpActiveCta": "View requests",
+      "communityLabel": "Community",
+      "communityEmpty": "No posts yet",
+      "communityEmptyCta": "Share something",
+      "communityActiveCta": "View community",
+      "businessLabel": "Business",
+      "businessEmpty": "No business yet",
+      "businessEmptyCta": "Claim a business",
+      "businessActiveCta": "Manage business",
+      "savedLabel": "Saved",
+      "savedEmpty": "Nothing saved yet",
+      "savedEmptyCta": "Discover places",
+      "savedActiveCta": "View saved",
+      "activeDetail": "{count} active"
+    },
+    "checklist": {
+      "title": "Build your presence",
+      "hint": "A few real things left to complete.",
+      "addPhoto": "Add a profile photo",
+      "addRole": "Add your profession",
+      "verifyEmail": "Verify your email",
+      "firstActivity": "Post your first listing or request",
+      "completeCta": "Complete"
+    },
+    "opportunities": {
+      "eyebrow": "Earn in the city",
+      "title": "Opportunities near you",
+      "hint": "Real requests from people nearby who need help right now.",
+      "cta": "Browse opportunities"
     }
   },
   "translate": {

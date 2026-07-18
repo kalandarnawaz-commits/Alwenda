@@ -1183,6 +1183,59 @@
       "communityScore": "Community-Wertung",
       "translationScore": "Übersetzungswertung",
       "businessScore": "Unternehmenswertung"
+    },
+    "economyEyebrow": "Deine Stadtwirtschaft",
+    "economyTitle": "Dein Ruf eröffnet Möglichkeiten.",
+    "economyHeroSubtitle": "Je mehr du beiträgst, desto mehr vertraut dir die Stadt.",
+    "signedOutHint": "Melde dich an, um deine Stadtidentität, Aktivität und Möglichkeiten zu sehen.",
+    "identity": {
+      "viewProfileCta": "Profil ansehen",
+      "shareProfileCta": "Profil teilen"
+    },
+    "ring": {
+      "title": "Deine Stadtaktivität",
+      "hint": "Ein echtes Bild dessen, was du getan hast — keine erfundene Bewertung.",
+      "emptyTitle": "Deine Stadtaktivität beginnt hier.",
+      "emptyHint": "Erstelle ein Inserat, eine Anfrage oder beanspruche ein Unternehmen — dann erscheint es unten.",
+      "totalLabel": "Aktionen"
+    },
+    "activity": {
+      "marketplaceLabel": "Marktplatz",
+      "marketplaceEmpty": "Noch keine Inserate",
+      "marketplaceEmptyCta": "Artikel einstellen",
+      "marketplaceActiveCta": "Inserate ansehen",
+      "helpLabel": "Hilfeanfragen",
+      "helpEmpty": "Noch keine Anfragen",
+      "helpEmptyCta": "Anfrage stellen",
+      "helpActiveCta": "Anfragen ansehen",
+      "communityLabel": "Community",
+      "communityEmpty": "Noch keine Beiträge",
+      "communityEmptyCta": "Etwas teilen",
+      "communityActiveCta": "Community ansehen",
+      "businessLabel": "Unternehmen",
+      "businessEmpty": "Noch kein Unternehmen",
+      "businessEmptyCta": "Unternehmen beanspruchen",
+      "businessActiveCta": "Unternehmen verwalten",
+      "savedLabel": "Gespeichert",
+      "savedEmpty": "Noch nichts gespeichert",
+      "savedEmptyCta": "Orte entdecken",
+      "savedActiveCta": "Gespeicherte ansehen",
+      "activeDetail": "{count} aktiv"
+    },
+    "checklist": {
+      "title": "Baue deine Präsenz auf",
+      "hint": "Ein paar echte Schritte fehlen noch.",
+      "addPhoto": "Profilfoto hinzufügen",
+      "addRole": "Deinen Beruf angeben",
+      "verifyEmail": "E-Mail bestätigen",
+      "firstActivity": "Erstes Inserat oder erste Anfrage veröffentlichen",
+      "completeCta": "Erledigen"
+    },
+    "opportunities": {
+      "eyebrow": "In der Stadt verdienen",
+      "title": "Möglichkeiten in deiner Nähe",
+      "hint": "Echte Anfragen von Menschen in der Nähe, die gerade jetzt Hilfe brauchen.",
+      "cta": "Möglichkeiten durchsuchen"
     }
   },
   "translate": {
