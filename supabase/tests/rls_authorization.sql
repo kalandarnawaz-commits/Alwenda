@@ -179,12 +179,12 @@ begin;
     'claimant cannot approve own business claim'
   );
 
-  select pg_temp.assert_error(
-    $statement$
+  select pg_temp.assert_true(
+    pg_temp.exec_row_count($statement$
       update public.businesses
       set lifecycle_state = 'verified', verification_status = 'verified', claim_status = 'claimed'
       where id = '10000000-0000-4000-8000-000000000002'
-    $statement$,
+    $statement$) = 0,
     'client cannot directly create verified business state'
   );
 
