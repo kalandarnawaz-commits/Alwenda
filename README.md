@@ -83,3 +83,7 @@ The function requires a Supabase access token (`Authorization: Bearer <token>`) 
 supabase functions deploy alwen-chat
 supabase secrets set OPENAI_API_KEY=sk-...
 ```
+
+## Translation speech
+
+The translated-result Speak action uses `supabase/functions/elevenlabs-tts/index.ts`, which calls ElevenLabs from the Edge Function only. Required secrets are `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`; do not expose them in frontend config. Endpoint setup, generated-slug fallback, deployment, and manual test steps are documented in `docs/elevenlabs-tts.md`.

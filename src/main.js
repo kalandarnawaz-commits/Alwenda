@@ -88,6 +88,11 @@ import {
   AUTH_CALLBACK_PATH
 } from "./services/auth/supabaseClient.js?v=legal-compliance-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
+import {
+  MAX_TRANSLATION_SPEECH_CHARACTERS,
+  speakTranslatedText,
+  stopTranslationSpeech
+} from "./services/voiceService.js?v=elevenlabs-tts-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
@@ -114,6 +119,8 @@ const state = {
   translateOutputText: "",
   translateStatus: "idle", // idle | loading | success | error
   translateVoiceNotice: null, // { panel: "from" | "to", message } when no TTS voice is installed for the chosen language
+  translateSpeechStatus: "idle", // idle | loading | playing | error
+  translateSpeechPanel: null,
   translateInputMode: "text", // text | voice | camera — which mode card is active
   translateRecording: false,
   translateVoiceError: null,
@@ -4232,6 +4239,16 @@ async function submitAlwenChat(message = state.alwenChat.input || state.alwenCha
  * translateInputText/translateOutputText with renderTranslation() — same
  * translate engine, just a compact entry point into it. */
 function renderAlwenQuickTranslate() {
+  const translatedText = state.translateOutputText.trim();
+  const translationSpeechTooLong = translatedText.length > MAX_TRANSLATION_SPEECH_CHARACTERS;
+  const translationSpeechBusy = state.translateSpeechPanel === "to" && ["loading", "playing"].includes(state.translateSpeechStatus);
+  const translationSpeechDisabled = state.translateStatus !== "success" || !translatedText || translationSpeechTooLong || state.translateSpeechStatus === "loading";
+  const translationSpeechLabel =
+    state.translateSpeechStatus === "loading" && state.translateSpeechPanel === "to"
+      ? t("translate.generatingSpeech")
+      : state.translateSpeechStatus === "playing" && state.translateSpeechPanel === "to"
+        ? t("translate.stopSpeech")
+        : t("translate.listenTranslation");
   return `
     <div class="alwen-quick-translate">
       <div class="alwen-quick-translate-badge">${icon("translate")}<span>${t("translate.quickTranslate")}</span></div>
@@ -4248,6 +4265,7 @@ function renderAlwenQuickTranslate() {
 
       ${state.translateVoiceError ? `<p class="translation-voice-notice is-error">${escapeHtml(state.translateVoiceError)}</p>` : ""}
       ${state.translateVoiceNotice?.panel === "to" ? `<p class="translation-voice-notice">${escapeHtml(state.translateVoiceNotice.message)}</p>` : ""}
+      ${translationSpeechTooLong ? `<p class="translation-voice-notice is-error">${t("translate.speechTooLong", { max: MAX_TRANSLATION_SPEECH_CHARACTERS })}</p>` : ""}
       ${state.translateCameraStatus === "error" ? `<p class="translation-voice-notice is-error">${escapeHtml(state.translateCameraErrorMessage)}</p>` : ""}
 
       <div class="alwen-quick-mic-row">
@@ -4264,7 +4282,7 @@ function renderAlwenQuickTranslate() {
       ${state.translateStatus === "success" ? `
         <div class="alwen-quick-translate-result">
           <p class="alwen-quick-translate-target">${escapeHtml(state.translateOutputText)}</p>
-          <button type="button" class="translation-speak-button" data-translate-speak="to" aria-label="${t("translate.listenTranslation")}">${icon("speaker")}</button>
+          <button type="button" class="translation-speak-button ${translationSpeechBusy ? "is-speaking" : ""} ${state.translateSpeechStatus === "loading" && state.translateSpeechPanel === "to" ? "is-loading" : ""}" data-translate-speak="to" aria-label="${translationSpeechLabel}" title="${translationSpeechLabel}" ${translationSpeechDisabled ? "disabled" : ""}>${icon(state.translateSpeechStatus === "playing" && state.translateSpeechPanel === "to" ? "stop" : "speaker")}</button>
         </div>
       ` : ""}
       ${state.translateStatus === "error" ? `<p class="translation-voice-notice is-error">${t("translate.translateErrorMessage")}</p>` : ""}
@@ -7319,7 +7337,36 @@ async function pickBestVoice(bcp47) {
  * device actually has installed for that language. Clicking again while
  * speaking stops it, mirroring a play/stop toggle. */
 async function speakText(text, bcp47, button, panel) {
-  if (!text || !("speechSynthesis" in window)) return;
+  if (!text) return;
+  if (panel === "to") {
+    if (state.translateSpeechStatus === "playing") {
+      stopTranslationSpeech();
+      state.translateSpeechStatus = "idle";
+      state.translateSpeechPanel = null;
+      render();
+      return;
+    }
+    if (state.translateSpeechStatus === "loading") return;
+    try {
+      state.translateVoiceNotice = null;
+      state.translateVoiceError = null;
+      await speakTranslatedText({
+        text,
+        onStateChange(status) {
+          state.translateSpeechStatus = status === "stopped" ? "idle" : status;
+          state.translateSpeechPanel = status === "stopped" ? null : panel;
+          render();
+        }
+      });
+    } catch (error) {
+      state.translateSpeechStatus = "error";
+      state.translateSpeechPanel = panel;
+      state.translateVoiceNotice = { panel, message: error?.message || t("translate.speechError") };
+      render();
+    }
+    return;
+  }
+  if (!("speechSynthesis" in window)) return;
   const synth = window.speechSynthesis;
   if (synth.speaking) {
     synth.cancel();
@@ -7426,6 +7473,16 @@ function renderTranslation() {
     "common.speakTaxiDriver"
   ];
   const intelligenceKeys = ["translate.formal", "translate.casual", "translate.simple", "translate.explain", "translate.pronounce"];
+  const translatedText = state.translateOutputText.trim();
+  const translationSpeechTooLong = translatedText.length > MAX_TRANSLATION_SPEECH_CHARACTERS;
+  const translationSpeechBusy = state.translateSpeechPanel === "to" && ["loading", "playing"].includes(state.translateSpeechStatus);
+  const translationSpeechDisabled = state.translateStatus !== "success" || !translatedText || translationSpeechTooLong || state.translateSpeechStatus === "loading";
+  const translationSpeechLabel =
+    state.translateSpeechStatus === "loading" && state.translateSpeechPanel === "to"
+      ? t("translate.generatingSpeech")
+      : state.translateSpeechStatus === "playing" && state.translateSpeechPanel === "to"
+        ? t("translate.stopSpeech")
+        : t("translate.listenTranslation");
 
   return `
     <section class="section-shell translator translator-premium">
@@ -7478,9 +7535,10 @@ function renderTranslation() {
               <select class="translation-select" aria-label="${t("common.outputLanguage")}" data-translate-to="true">
                 ${TRANSLATE_LANGUAGE_KEYS.map((languageKey) => `<option value="${languageKey}" ${languageKey === state.translateToLanguage ? "selected" : ""}>${TRANSLATE_LANGUAGE_FLAGS[languageKey]} ${t(languageKey)}</option>`).join("")}
               </select>
-              <button type="button" class="translation-speak-button" data-translate-speak="to" aria-label="${t("translate.listenTranslation")}" ${state.translateStatus === "success" && state.translateOutputText.trim() ? "" : "disabled"}>${icon("speaker")}</button>
+              <button type="button" class="translation-speak-button ${translationSpeechBusy ? "is-speaking" : ""} ${state.translateSpeechStatus === "loading" && state.translateSpeechPanel === "to" ? "is-loading" : ""}" data-translate-speak="to" aria-label="${translationSpeechLabel}" title="${translationSpeechLabel}" ${translationSpeechDisabled ? "disabled" : ""}>${icon(state.translateSpeechStatus === "playing" && state.translateSpeechPanel === "to" ? "stop" : "speaker")}</button>
             </div>
             ${state.translateVoiceNotice?.panel === "to" ? `<p class="translation-voice-notice">${escapeHtml(state.translateVoiceNotice.message)}</p>` : ""}
+            ${translationSpeechTooLong ? `<p class="translation-voice-notice is-error">${t("translate.speechTooLong", { max: MAX_TRANSLATION_SPEECH_CHARACTERS })}</p>` : ""}
             <div class="translation-output premium-output ${state.translateStatus === "error" ? "is-error" : ""}">
               ${state.translateStatus === "loading" ? `
                 <strong class="translation-loading-label">${t("translate.translating")}<span class="translation-loading-dots"><span></span><span></span><span></span></span></strong>
@@ -9698,22 +9756,32 @@ function bindEvents() {
   });
 
   bindLiveField("translation-input", (value) => {
+    stopTranslationSpeech();
     state.translateInputText = value;
     state.translateStatus = "idle";
     state.translateVoiceError = null;
+    state.translateSpeechStatus = "idle";
+    state.translateSpeechPanel = null;
   });
 
   document.querySelector("[data-translate-action]")?.addEventListener("click", () => {
+    stopTranslationSpeech();
+    state.translateSpeechStatus = "idle";
+    state.translateSpeechPanel = null;
     runTranslation();
   });
 
   document.querySelector("[data-translate-clear]")?.addEventListener("click", () => {
     window.speechSynthesis?.cancel();
+    stopTranslationSpeech();
     activeSpeechRecognition?.stop();
     state.translateInputText = "";
     state.translateOutputText = "";
     state.translateStatus = "idle";
     state.translateVoiceError = null;
+    state.translateVoiceNotice = null;
+    state.translateSpeechStatus = "idle";
+    state.translateSpeechPanel = null;
     render();
   });
 
