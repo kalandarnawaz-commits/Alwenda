@@ -114,7 +114,7 @@
     "peopleLookingForHelp": "Personen suchen Hilfe",
     "newNeighbourPosts": "neue Nachbarschaftsbeiträge",
     "localAlerts": "lokale Warnungen",
-    "nearby": "in der Nähe",
+    "nearby": "In der Nähe",
     "you": "Du",
     "viewProfile": "Profil ansehen",
     "bookNow": "Jetzt buchen",
@@ -279,7 +279,39 @@
     "responseTime": "Antwortzeit",
     "distanceAway": "{distance} entfernt",
     "discoverNearby": "In der Nähe entdecken",
-    "discoverResultsTitle": "Auswahl in der Nähe"
+    "discoverResultsTitle": "Auswahl in der Nähe",
+    "postedBy": "Gepostet von",
+    "trust": "Vertrauen",
+    "response": "Antwort",
+    "fastMatch": "Schnelle Übereinstimmung",
+    "openRequest": "Offene Anfrage",
+    "whatTheyNeed": "Was gebraucht wird",
+    "opportunityEyebrow": "Live in deiner Nähe · {area}",
+    "opportunityDistanceMeta": "{distance} km entfernt · {time}",
+    "trustScore": "{score} Vertrauenswert",
+    "activeOpportunitiesNearby": "aktive Möglichkeiten in der Nähe",
+    "estimatedEarningsToday": "geschätzte Einnahmen heute verfügbar",
+    "liveOpportunitiesTitle": "Live-Möglichkeiten",
+    "liveOpportunitiesSubtitle": "Verdiene Geld, indem du Menschen in der Nähe hilfst.",
+    "highestPaying": "Am besten bezahlt",
+    "verified": "Verifiziert",
+    "category": "Kategorie",
+    "allCategoriesLabel": "Alle Kategorien",
+    "anyDistance": "Beliebige Entfernung",
+    "withinDistance": "Innerhalb von {distance} km",
+    "whatCanYouEarnToday": "Was kannst du heute verdienen?",
+    "freshVerifiedRequests": "Neue, verifizierte Anfragen von Menschen in Vilnius.",
+    "matches": "{count} Treffer",
+    "noOpportunitiesMatch": "Noch keine passenden Möglichkeiten für diese Filter.",
+    "needHelpInstead": "Brauchst du Hilfe?",
+    "postYourOwnRequest": "Eigene Anfrage posten",
+    "postYourOwnRequestHint": "Sag verifizierten Menschen in der Nähe, was du brauchst, und wähle die passende Antwort.",
+    "createRequest": "Anfrage erstellen",
+    "accept": "Annehmen",
+    "viewDetails": "Details ansehen",
+    "transactionSafetyTitle": "Sicher handeln",
+    "transactionSafetyBody": "Dieses Angebot stammt von dem im Inserat gezeigten Nutzer, nicht von Alwenda. Alwenda zieht keine Transaktionszahlungen ein und garantiert keine Nutzer, Waren, Dienstleistungen, Zahlungen, Lieferungen oder Rückerstattungen. Prüfe die andere Partei, halte Vereinbarungen schriftlich fest und sei vorsichtig mit Vorauszahlungen. Melde verdächtige oder illegale Aktivitäten über die Meldefunktion.",
+    "urgentLabel": "Dringend"
   },
   "nav": {
     "home": "Start",
@@ -2058,6 +2090,130 @@
       "sig8Detail": "Platzhalter für Belohnungen der Beitragswirtschaft",
       "sig1Value": "Vollständig",
       "sig2Value": "5 Fähigkeiten"
+    }
+  },
+  "opportunities": {
+    "items": {
+      "airport-pickup": {
+        "title": "Abholung vom Flughafen",
+        "category": "Transport",
+        "time": "Startet in 30 Min.",
+        "requester": "Verifizierter Reisender",
+        "description": "Eine reisende Person am Flughafen Vilnius abholen und in die Altstadt fahren.",
+        "tag1": "Auto erforderlich",
+        "tag2": "1 Fahrgast",
+        "action": "Annehmen"
+      },
+      "babysitter": {
+        "title": "Babysitter gesucht",
+        "category": "Kinderbetreuung",
+        "time": "Heute Abend · 19:00",
+        "requester": "Verifizierte Familie",
+        "description": "Drei Stunden auf zwei Kinder aufpassen, während die Eltern bei einer Veranstaltung sind.",
+        "tag1": "Erfahrung erforderlich",
+        "tag2": "3 Stunden",
+        "action": "Bewerben"
+      },
+      "deliver-package": {
+        "title": "Paket liefern",
+        "category": "Lieferung",
+        "time": "45 Min.",
+        "requester": "Verifizierter Nachbar",
+        "description": "Ein vorausbezahltes Paket nahe der Altstadt abholen und auf deiner Route liefern.",
+        "tag1": "Auf deiner Route",
+        "tag2": "Leichtes Paket",
+        "action": "Annehmen"
+      },
+      "help-move-sofa": {
+        "title": "Beim Sofa-Transport helfen",
+        "category": "Umzug",
+        "time": "Heute · 17:30",
+        "requester": "Verifizierter Bewohner",
+        "description": "Zwei Personen werden gebraucht, um ein Sofa aus einer Wohnung in einen Van in Žvėrynas zu tragen.",
+        "tag1": "2 Personen gebraucht",
+        "tag2": "Schweres Tragen",
+        "action": "Annehmen"
+      },
+      "translate-document": {
+        "title": "Dokument übersetzen",
+        "category": "Übersetzung",
+        "time": "30 Min.",
+        "requester": "Verifizierter Bewohner",
+        "description": "Ein kurzes Englisch-Litauisch-Dokument übersetzen und die wichtigsten Punkte einfach erklären.",
+        "tag1": "Remote",
+        "tag2": "Sprachen passen",
+        "action": "Bewerben"
+      },
+      "teach-english": {
+        "title": "Englisch unterrichten",
+        "category": "Nachhilfe",
+        "time": "Morgen",
+        "requester": "Verifizierter Lernender",
+        "description": "Eine einstündige Englisch-Konversationsstunde für Anfänger nahe Užupis.",
+        "tag1": "Profil passt",
+        "tag2": "Anfänger",
+        "action": "Bewerben"
+      },
+      "furniture": {
+        "title": "Möbel montieren",
+        "category": "Haushaltsdienste",
+        "time": "Heute Abend",
+        "requester": "Verifizierter Eigentümer",
+        "description": "Einen flach verpackten Stuhl und ein kleines Regal in Šnipiškės montieren. Werkzeug bevorzugt.",
+        "tag1": "Werkzeug erforderlich",
+        "tag2": "Innenbereich",
+        "action": "Details ansehen"
+      },
+      "dog-walk": {
+        "title": "Abendlicher Hundespaziergang",
+        "category": "Tierbetreuung",
+        "time": "Heute · 18:30",
+        "requester": "Verifizierter Nachbar",
+        "description": "Mit einem freundlichen Golden Retriever 45 Minuten im Bernardinų-Garten spazieren gehen.",
+        "tag1": "Tierfreundlich",
+        "tag2": "45 Min.",
+        "action": "Annehmen"
+      },
+      "photo-event": {
+        "title": "Eventfotograf",
+        "category": "Kreativ",
+        "time": "Samstag · 16:00",
+        "requester": "Verifizierter Organisator",
+        "description": "Eine kleine Community-Veranstaltung fotografieren und eine kuratierte digitale Galerie liefern.",
+        "tag1": "Portfolio",
+        "tag2": "2 Stunden",
+        "action": "Bewerben"
+      },
+      "grocery-delivery": {
+        "title": "Lebensmittel liefern",
+        "category": "Lieferung",
+        "time": "Innerhalb von 1 Stunde",
+        "requester": "Verifizierter Bewohner",
+        "description": "Eine vorausbezahlte Lebensmittelbestellung abholen und in eine nahe Wohnung liefern.",
+        "tag1": "Schnelle Aufgabe",
+        "tag2": "Keine Treppen",
+        "action": "Annehmen"
+      },
+      "language-help": {
+        "title": "Litauische Konversationsübung",
+        "category": "Nachhilfe",
+        "time": "Morgen · 17:00",
+        "requester": "Verifizierter Lernender",
+        "description": "Freundliche Konversationsübung für eine englischsprachige Person, die Litauisch lernt.",
+        "tag1": "Litauisch",
+        "tag2": "Anfänger",
+        "action": "Details ansehen"
+      },
+      "moving-boxes": {
+        "title": "Beim Kistentragen helfen",
+        "category": "Umzug",
+        "time": "Heute · 15:00",
+        "requester": "Verifizierter Eigentümer",
+        "description": "Gepackte Kisten aus einer Wohnung im zweiten Stock in einen wartenden Van tragen.",
+        "tag1": "Körperliche Aufgabe",
+        "tag2": "2 Stunden",
+        "action": "Annehmen"
+      }
     }
   }
 }

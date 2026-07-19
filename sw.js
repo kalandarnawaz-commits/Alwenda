@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "production-foundation-20260718-legal-compliance";
+const RELEASE_VERSION = "marketplace-trending-detail-20260719-1";
 const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
 const AUTH_CALLBACK_PATH = "/auth/callback";

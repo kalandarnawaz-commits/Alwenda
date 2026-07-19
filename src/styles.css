@@ -3571,7 +3571,8 @@ button:active {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+[role="button"]:focus-visible {
   outline: 3px solid rgba(10, 132, 255, 0.26);
   outline-offset: 2px;
 }
@@ -6823,12 +6824,34 @@ body {
 }
 
 .live-card,
-.market-mini-card {
+.market-mini-card,
+.earn-card {
   display: grid;
-  grid-template-rows: auto auto auto auto auto;
   gap: 8px;
   min-height: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.live-card,
+.market-mini-card {
+  grid-template-rows: auto auto auto auto auto;
   padding: 12px;
+}
+
+.live-card[data-opportunity-id],
+.earn-card[data-opportunity-id] {
+  cursor: pointer;
+}
+
+.card-favourite-dot {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: var(--shadow-soft);
 }
 
 .live-card .card-photo,
@@ -8175,6 +8198,15 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
 }
 
+/* The category chip has no click behaviour of its own — unlike the other
+   badges in this row, re-disable the pointer-events: auto above so a tap
+   on it doesn't ride through to the photo underneath and open the card,
+   keeping it a purely visual label rather than a second navigation
+   trigger for the same destination. */
+.place-photo-overlay .category-chip {
+  pointer-events: none;
+}
+
 .place-photo-overlay .open-now-badge {
   background: rgba(52, 211, 153, 0.94);
   color: #06341f;
@@ -8524,6 +8556,9 @@ body {
   font-size: 1.1rem;
   line-height: 1;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  /* Purely a visual label (already aria-hidden) — don't let it ride
+     through to the card's own navigation as a second trigger. */
+  pointer-events: none;
 }
 
 /* The save button lives over the photo like the category badge, but on
@@ -8618,16 +8653,25 @@ body {
   align-items: center;
   gap: 20px;
   padding: 8px 24px 20px;
-  transform-style: preserve-3d;
+  /* transform-style stays "flat" here deliberately — see .coverflow-slide
+     below for why "preserve-3d" on this pair of elements broke clicks. */
 }
 
 .coverflow-slide {
   flex: 0 0 auto;
   width: 300px;
   scroll-snap-align: center;
-  transform-style: preserve-3d;
-  will-change: transform;
   cursor: pointer;
+  /* "preserve-3d" here (and on .coverflow-track above) used to put pointer
+     hit-testing and paint order out of sync inside an overflow:auto 3D
+     scene: elementFromPoint() at a card's visible position resolved to the
+     flat .coverflow-track underneath it instead of the rotated card, so
+     clicks/taps on the card silently did nothing. Each slide's own
+     rotateY/translateZ/scale transform (set inline by bindCoverflow()) is
+     unaffected by this — transform-style only governs how a *child's* own
+     3D transforms compose, and neither the slide nor the compact card
+     inside it has one, so removing "preserve-3d" here doesn't change how
+     the rail looks, only whether it's clickable. */
 }
 
 .coverflow-slide .place-card--compact {
@@ -12171,6 +12215,7 @@ strong:has(> .verified-check) {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-soft);
+  cursor: pointer;
   transition: box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease);
 }
 
@@ -12279,6 +12324,7 @@ strong:has(> .verified-check) {
 }
 
 .opportunity-actions button,
+.opportunity-actions a,
 .opportunity-post-cta button {
   flex: 1 1 120px;
   min-height: 44px;
@@ -12288,6 +12334,10 @@ strong:has(> .verified-check) {
   background: var(--surface);
   color: var(--ink);
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .opportunity-actions .opportunity-primary,
@@ -12295,6 +12345,182 @@ strong:has(> .verified-check) {
   color: #fff;
   border-color: #087255;
   background: #087255;
+}
+
+.opportunity-detail-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.opportunity-detail-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.opportunity-detail-hero {
+  min-height: clamp(260px, 42vw, 440px);
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  background-position: center;
+  background-size: cover;
+}
+
+.opportunity-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.opportunity-detail-badges span,
+.opportunity-detail-badges strong {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(7, 23, 19, .72);
+  backdrop-filter: blur(14px);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.opportunity-detail-badges strong {
+  background: #d75332;
+}
+
+.opportunity-detail-body {
+  padding: clamp(20px, 4vw, 34px);
+  display: grid;
+  gap: 22px;
+}
+
+.opportunity-detail-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.opportunity-detail-title h1 {
+  margin: 4px 0 6px;
+  font-size: clamp(2rem, 6vw, 4.5rem);
+  line-height: .96;
+  letter-spacing: 0;
+}
+
+.opportunity-detail-title p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.opportunity-detail-title > strong {
+  flex: 0 0 auto;
+  color: #087255;
+  font-size: clamp(1.7rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.opportunity-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opportunity-detail-grid article,
+.opportunity-detail-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.opportunity-detail-grid article {
+  padding: 14px;
+}
+
+.opportunity-detail-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 800;
+}
+
+.opportunity-detail-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+}
+
+.opportunity-detail-section {
+  padding: 18px;
+}
+
+.opportunity-detail-section h2 {
+  margin: 0 0 8px;
+}
+
+.opportunity-detail-section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.opportunity-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.opportunity-detail-actions button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 16px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.opportunity-detail-actions .opportunity-primary {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+
+.opportunity-related {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .opportunity-detail-hero {
+    min-height: 240px;
+    padding: 14px;
+  }
+
+  .opportunity-detail-title {
+    display: grid;
+    gap: 10px;
+  }
+
+  .opportunity-detail-title h1 {
+    font-size: clamp(1.8rem, 10vw, 2.8rem);
+    line-height: 1;
+  }
+
+  .opportunity-detail-title > strong {
+    font-size: 2rem;
+  }
+
+  .opportunity-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunity-detail-actions button {
+    width: 100%;
+  }
 }
 
 .opportunity-post-cta {
