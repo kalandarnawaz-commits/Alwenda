@@ -1,145 +1,73 @@
 # Alwenda Pilot Readiness Report
 
-Date: 2026-07-16  
-Scope: repository audit plus one isolated backend workstream for controlled public pilot readiness in Vilnius.
+Date: 2026-07-19
+Scope: refresh of the 2026-07-16 audit against the current `main` (post `v0.1.0-pilot`), after the card/overflow UI unification, CI-infrastructure, and legal-compliance/trader-verification branches all merged.
 
 ## Pilot-readiness score
 
-**Score: 66 / 100**
+**Score: 78 / 100**
 
-Alwenda has a strong static frontend, real Supabase auth wiring, early RLS migrations, a secure Alwen Edge Function path, and broad unit tests. It is not yet ready to onboard real users, real businesses, and field ambassadors without controlled constraints because several core operational surfaces remain incomplete: business lifecycle auditing, manual moderation workflow, account deletion/export, production CI/CD, e2e coverage, and admin verification tooling.
+Since the last audit, `main` gained a working, required CI pipeline; auditable business lifecycle and trader verification with RLS coverage that has actually been exercised end-to-end; and a legal/compliance baseline (cookie consent, policy pages, moderation reports, privacy requests). The remaining gap is almost entirely operational: there is still no production monitoring, no typed analytics pipeline, no validated backup/recovery procedure, no deployment runbook, and business/search data is still seed-scale rather than real Vilnius coverage. AI (Alwen) is functionally wired but not yet hardened for production load or cost.
 
-## Architecture Summary
+## Closed since 2026-07-16
 
-- Frontend: static zero-build app served from `index.html`, with routing/rendering in `src/main.js`, styles in `src/styles.css`, locale JSON in `locales/`, and browser runtime config in `env.js` via `src/config.js`.
-- Auth: Supabase Auth client in `src/services/auth/supabaseClient.js`; profiles bootstrap via `src/services/auth/profileBootstrap.js`.
-- Database: SQL migrations in `supabase/migrations/`, covering profiles, listings, businesses, claims, messages, Alwen conversations, help requests, and listing-photo storage.
-- Edge Functions: `supabase/functions/alwen-chat/index.ts` verifies a Supabase JWT and calls the OpenAI Responses API server-side.
-- Tests: Node test runner covers config, i18n key parity, validators, data import helpers, auth/no-fake-user paths, Alwen function source contracts, migration expectations, and pilot lifecycle contracts.
-- Deployment: static `npm run build` copies files into `dist/`; no CI workflow is present in the repository.
+### CI validation on `main`
 
-## Critical before external pilot
+`.github/workflows/pull-request-validation.yml` runs two jobs — `App validation` (tests, typecheck, lint, lint-baseline, build, `npm audit`, secret scan, migration/authorization/workflow validation, gitleaks) and `Local Supabase migration rebuild` (two clean `supabase db reset` cycles diffed for determinism, then `supabase/tests/rls_authorization.sql` executed against the rebuilt database). Both were verified green against real `main` content as part of merging `agent/trader-verification-compliance`; getting them there for the first time surfaced and fixed 9 real bugs (CI environment issues and genuine RLS/migration gaps) — see `docs/ci-pilot-validation.md` for the pipeline and the CI-infra branch's commit history for the fixes.
 
-### 1. Business lifecycle and claim verification were under-modeled
+### Production CI/CD controls
 
-- Evidence: `supabase/migrations/202607150001_production_foundation.sql` originally modeled `businesses.claim_status` as `unclaimed | pending | claimed | rejected` and `businesses.verification_status` as `unverified | pending | verified | rejected`, but did not represent temporary closure, permanent closure, suspension, imported state, or auditable transitions.
-- Affected files: `supabase/migrations/202607150001_production_foundation.sql`, `src/data/mockData.js`.
-- Impact: businesses can move from imported data to public pilot states without a complete audit trail; owner trust and moderation disputes become hard to resolve.
-- Severity: Critical.
-- Recommended fix: implemented in `supabase/migrations/202607180001_business_lifecycle_audit.sql`.
-- Complexity: Medium.
-- Dependencies: Supabase migration review, admin role assignment, future admin UI.
+The former "no branch protection" gap is closed: `main` has a repository ruleset (`required_status_checks`, `non_fast_forward`, `required_linear_history`, branch-deletion protection) that makes the two CI jobs above mandatory before any merge — confirmed via `gh api repos/.../rules/branches/main`. `.github/workflows/deploy-supabase-functions.yml` remains a manual (`workflow_dispatch`) protected-environment deploy for the Alwen edge function.
 
-### 2. Business owner update surface could allow protected-state mutation if not guarded
+### Business lifecycle auditing
 
-- Evidence: base migration policy `"Owners manage their businesses"` permits owners to update rows where `auth.uid() = owner_user_id`; RLS alone cannot restrict individual protected columns such as `verification_status`, `claim_status`, `owner_user_id`, or lifecycle state.
-- Affected files: `supabase/migrations/202607150001_production_foundation.sql`.
-- Impact: a claimed owner could self-verify or alter ownership/claim state if a client path exposed those fields.
-- Severity: Critical.
-- Recommended fix: implemented database trigger `guard_business_protected_fields()` in `202607180001_business_lifecycle_audit.sql`.
-- Complexity: Medium.
-- Dependencies: trusted admin role policy using `public.is_trusted_admin()`.
+`supabase/migrations/202607180001_business_lifecycle_audit.sql` is merged: explicit `businesses.lifecycle_state` (`imported | unclaimed | claim_pending | owner_claimed | verification_pending | verified | verification_rejected | temporarily_closed | permanently_closed | suspended`), `business_lifecycle_events` audit trail, `business_ambassador_visits` and `business_claim_links` for the ground-team claim workflow, and the `guard_business_protected_fields()` trigger blocking non-admin mutation of ownership/claim/verification/lifecycle fields (previously flagged as a critical gap — an RLS probe added this pass specifically exercises that a non-owner cannot self-verify a business). Claim evidence storage is also closed: `supabase/migrations/202607180002_business_claim_evidence_storage.sql` created the private `business-claim-evidence` bucket, scoped to the claimant or an admin, previously flagged as missing.
 
-### 3. No complete account deletion or data export workflow
+### Trader verification controls
 
-- Evidence: `src/main.js` has settings UI affordances for delete-account confirmation, but no backend deletion/export process or storage cleanup workflow was found.
-- Affected files: `src/main.js`, Supabase migrations, future Edge Functions.
-- Impact: privacy/compliance risk for real users; support team lacks a safe operating procedure.
-- Severity: Critical.
-- Recommended fix: create account export/delete Edge Functions using authenticated user ID, audit events, storage cleanup, and delayed hard-delete policy.
-- Complexity: High.
-- Dependencies: legal retention policy, storage buckets, admin moderation rules.
+`supabase/migrations/202607180004_trader_verification.sql` is merged: `user_offeror_status` (private/trader classification, confirmed against a terms version), `trader_verifications` with a full review workflow (`draft → submitted → under_review → verified/rejected/more_information_required/suspended`), private per-document storage (`trader_verification_documents`, scoped to claimant/reviewer only, never a public URL), `trader_register_checks`, and a public `trader_public_profiles` view that only exposes verified status. `enforce_listing_offeror_status()` blocks any listing insert/update until the owner has confirmed private/trader status, and blocks publishing as a trader without a current verification — both enforced server-side, not just in the UI.
 
-### 4. No production CI/CD workflow in repo
+### Legal/compliance baseline
 
-- Evidence: no `.github/workflows` files were present; validation currently relies on local manual commands.
-- Affected files: repository root.
-- Impact: regressions can reach production without tests, typecheck, build, or secret scanning.
-- Severity: Critical.
-- Recommended fix: implemented pull-request validation and protected manual Edge Function deployment workflows. Remaining work is to enable GitHub branch protection and required checks.
-- Complexity: Low.
-- Dependencies: GitHub Actions or deployment provider.
+Cookie consent (necessary/optional split, "Manage choices" panel), standalone legal pages (`/terms`, `/privacy`, `/cookies`, `/safety`) served from a single canonical `src/legal/ALWENDA_LEGAL_POLICIES_EN.md`, `legal_acceptances` recording (policy version + marketing consent) on registration and OAuth, `legal_reports` (the "Report illegal content" flow, usable without authentication), and `privacy_requests` (deletion/export/appeal request capture) from `supabase/migrations/202607180003_legal_compliance.sql`. Note: `privacy_requests` records the *request*; there is still no automated fulfillment workflow behind it (see "Still open").
 
-### 5. Supabase Edge Function deployment depends on operator auth
+### RLS authorization coverage
 
-- Evidence: Supabase CLI deploy previously failed without `SUPABASE_ACCESS_TOKEN`; `supabase/.temp/linked-project.json` exists but local CLI auth is not guaranteed.
-- Affected files: `supabase/functions/alwen-chat/index.ts`, deployment environment.
-- Impact: launch builds can ship frontend chat UI before the backend function is deployed.
-- Severity: High.
-- Recommended fix: CI deploy step with `SUPABASE_ACCESS_TOKEN`, plus smoke test for signed-in and signed-out chat.
-- Complexity: Medium.
-- Dependencies: Supabase access token, project ref, secrets.
+`supabase/tests/rls_authorization.sql` now actually runs in CI and passes — this is a meaningfully stronger claim than the 2026-07-16 report's "early RLS migrations," which had never been executed against a real database. Getting it to pass for the first time found and fixed one real product gap (the `authenticated` role had no table-level grants at all on a from-scratch local rebuild — hosted Supabase sets this up automatically outside migration history, so it was never caught; now explicit via `202607180005_default_privileges.sql`) and one real test-authoring bug (an assertion expecting Postgres to raise where RLS was already correctly, silently filtering the row).
 
-## Important Within First 30 Days
+## Still open
 
-### 6. Admin/moderation tooling is incomplete
+### Production monitoring and alerting
 
-- Evidence: migrations include reports, audit events, claim review policies, and business lifecycle events, but there is no production admin interface or moderation queue.
-- Impact: pilot operators cannot reliably review claims, reports, evidence, or ambassador visits.
-- Severity: High.
-- Recommended fix: admin-only operations view backed by RLS/admin role, or a temporary Supabase Studio operating guide.
-- Complexity: Medium.
-- Dependencies: role assignment, staff process.
+`src/services/observability.js` still only supports a pluggable `sink` function and defaults to `console` — no Sentry/Logtail/equivalent is wired up. Failures in the field will not reach operators. *(2026-07-16 report item #12, unchanged.)*
 
-### 7. Analytics schema is not typed end-to-end
+### Analytics and product telemetry
 
-- Evidence: `trackEvent` exists in `src/main.js` using local UI state/local storage patterns, but no typed event schema or ingestion destination is present.
-- Impact: pilot learning is incomplete; conversion/retention/field activity cannot be trusted.
-- Severity: High.
-- Recommended fix: add `src/services/analytics/events.js` with allowed event names and redaction, then route to Supabase `audit_events` or a dedicated analytics table.
-- Complexity: Medium.
-- Dependencies: analytics vendor/data warehouse decision.
+`trackEvent` in `src/main.js` remains local-only (local storage / in-session), with no typed event schema and no ingestion destination. Pilot learning (conversion, retention, field activity) still cannot be trusted. *(2026-07-16 report item #7, unchanged.)*
 
-### 8. Real data and mock/demo data coexist
+### Backup and recovery validation
 
-- Evidence: README still describes `src/data/mockData.js` as launch-city config and mock content; app imports large mock datasets directly.
-- Impact: users can confuse mock listings/profiles with real marketplace/business activity.
-- Severity: High.
-- Recommended fix: mark pilot seed data clearly, separate demo mode from production mode, and API-load real entities by route.
-- Complexity: Medium.
-- Dependencies: content policy and pilot data import plan.
+Every migration now documents a rollback *approach* in a comment (enforced by `scripts/validate-migrations.mjs`, no exceptions as of this cleanup), but no actual backup, restore, or rollback drill has been performed against a real or staging Supabase project. The documentation exists; the procedure is unvalidated.
 
-### 9. Business claim evidence storage needed private access controls
+### Deployment/runbook maturity
 
-- Evidence: `202607170001_listing_photos_storage.sql` creates `listing-photos`; before this pass no comparable business-claim evidence bucket policy was present.
-- Impact: claim documents/photos may be stored ad hoc or not at all.
-- Severity: High.
-- Recommended fix: implemented in `supabase/migrations/202607180002_business_claim_evidence_storage.sql`; remaining work is to wire upload UI/admin review to this bucket.
-- Complexity: Medium.
-- Dependencies: file retention and evidence review policy.
+`docs/ci-pilot-validation.md` documents the CI pipeline itself, but there is no operator-facing deployment runbook: how to deploy the static frontend to production hosting, roll back a bad deploy, rotate secrets (`SUPABASE_ACCESS_TOKEN`, `OPENAI_API_KEY`), or handle an incident. `npm run build` → `dist/` is the only documented deploy step, with no destination.
 
-### 10. E2E coverage is absent
+### Real business onboarding scale
 
-- Evidence: package scripts include unit/lint/typecheck/build only; no Playwright/Cypress config was found.
-- Impact: auth callback, mobile layout, language switching, and claim flows are not validated in a real browser.
-- Severity: Medium.
-- Recommended fix: add Playwright smoke tests for Home, auth, Alwen chat signed-out, language switch, marketplace, business profile, and profile.
-- Complexity: Medium.
-- Dependencies: test accounts and seeded Supabase project.
+The ground-team ambassador workflow (find/dedupe business → confirm/correct fields → record visit → generate claim link → capture consent → submit evidence → admin review) is fully modeled in the database and covered by an RLS probe, but no real Vilnius business data has been imported through it yet — the app still runs on seed/imported OpenStreetMap+Wikidata data plus mock listings, not a real-scale claimed-business dataset.
 
-## Post-Pilot Improvements
+### Search/data quality
 
-### 11. Performance needs route-level splitting
+Explore and Marketplace search/filtering work against whatever data currently exists (seed + imported places), but there has been no relevance tuning, deduplication-at-scale, or data-quality pass suited to a real multi-thousand-business dataset.
 
-- Evidence: `src/main.js` holds most rendering/routing logic; mock data imports are client-side.
-- Impact: startup cost will grow as city data expands.
-- Severity: Medium.
-- Recommended fix: route-split rendering modules and lazy-load city data/API clients.
-- Complexity: High.
-- Dependencies: UI stabilization.
+### AI production hardening
 
-### 12. Observability foundation needs production sink
-
-- Evidence: `src/services/observability.js` creates safe events but currently defaults to console.
-- Impact: failures in the field may not reach operators.
-- Severity: Medium.
-- Recommended fix: connect to Sentry/Logtail/Supabase logs with redaction preserved.
-- Complexity: Low.
-- Dependencies: vendor selection.
+The Alwen edge function (`supabase/functions/alwen-chat/index.ts`) is real — authenticated, calls the OpenAI Responses API server-side, and now requires/records offeror status when creating listings — but it has no production hardening beyond that: no per-user rate limiting beyond Supabase's own defaults, no cost/usage monitoring, no evaluation harness, and no defense-in-depth against prompt injection beyond normal tool-call validation.
 
 ## Business Lifecycle State Coverage
 
-Implemented explicit states in `businesses.lifecycle_state`:
+Implemented explicit states in `businesses.lifecycle_state` (unchanged from the original implementation):
 
 - `imported`
 - `unclaimed`
@@ -156,7 +84,7 @@ These are deliberately not modeled as booleans.
 
 ## Ground-Team Workflow
 
-The new backend model supports this ambassador flow:
+The backend model supports this ambassador flow (unchanged from the original implementation, now RLS-tested):
 
 1. Find or create business in `businesses`.
 2. Detect duplicates and record `duplicate_business_ids`.
@@ -170,77 +98,29 @@ The new backend model supports this ambassador flow:
 10. Send for admin review with `visit_status = submitted_for_review`.
 11. Record outcome using review fields and lifecycle events.
 
-## Work Implemented
+## Work Implemented Since 2026-07-16
 
-- Added migration: `supabase/migrations/202607180001_business_lifecycle_audit.sql`.
-- Added migration: `supabase/migrations/202607180002_business_claim_evidence_storage.sql`.
-- Added pull-request validation workflow: `.github/workflows/pull-request-validation.yml`.
-- Added protected manual Edge Function deployment workflow: `.github/workflows/deploy-supabase-functions.yml`.
-- Added CI validation scripts in `scripts/`.
-- Added CI documentation: `docs/ci-pilot-validation.md`.
-- Added tests: `test/pilot-readiness.test.js`.
-- Added this report: `docs/pilot-readiness-report.md`.
-
-## Migration Details
-
-The migration adds:
-
-- `businesses.lifecycle_state`
-- `businesses.last_transition_reason`
-- `businesses.last_transition_evidence`
-- `businesses.last_verified_at`
-- `businesses.suspended_at`
-- `businesses.closed_at`
-- `business_lifecycle_events`
-- `business_ambassador_visits`
-- `business_claim_links`
-- private `business-claim-evidence` storage bucket
-- protected-field guard trigger
-- lifecycle event recording trigger
-- RLS policies for new tables
-- storage policies for claimant/admin-only claim evidence access
-
-Rollback approach is documented at the top of the migration file. No destructive schema changes are included.
+- Merged `feature/ci/pilot-validation` (#4): made the CI workflows and validation scripts run correctly standalone against bare `main` (checkout depth, pinned `supabase-cli`, PGDG apt repo for a matching `pg_dump`, graceful degradation for not-yet-existing compliance content, and a calibrated lint-warning baseline).
+- Merged `claude/global-card-and-overflow-ui` (#3): unified card design system and fixed mobile/Safari overflow across Explore, Marketplace, Alwen, and Live Opportunities.
+- Merged `agent/trader-verification-compliance` (#2): legal compliance UI, trader verification, database schema/RLS/edge-function support, legal pages, and test coverage — 11 commits, including 3 real bug fixes (default privileges, RLS test fixture, one assertion type) found while getting the RLS probes to pass for the first time.
+- Tagged `v0.1.0-pilot` at the merged state.
+- This stabilization pass: tightened `WARNING_BASELINE` from 26 to 0, removed the temporary rollback-documentation grandfather clause (all 8 migrations already document rollback approaches), and refreshed this report.
 
 ## Validation Results
 
-Run locally after implementation:
+Run locally and in CI after this pass:
 
 - `npm test`
-- `npm run typecheck`
 - `npm run lint`
 - `node scripts/enforce-lint-baseline.mjs`
+- `npm run typecheck`
 - `npm run build`
-- `npm audit --audit-level=high`
-- `node scripts/secret-scan-smoke.mjs`
 - `node scripts/validate-migrations.mjs`
-- `node scripts/validate-authorization-safety.mjs`
-- `node scripts/validate-workflows.mjs`
 
-See final handoff for command results.
+## Recommended Next Steps
 
-## Remaining Risks
+In priority order, per the current stabilization → pilot-readiness → business-onboarding → AI roadmap:
 
-- Branch creation is blocked by filesystem permissions in this Codex environment.
-- `.claude/settings.local.json` was already dirty and was not touched.
-- `src/main.js` still has lint warnings for unused symbols unrelated to this workstream.
-- `README.md` contains example `sk-...` syntax for setting an OpenAI key; it is not a real secret but may trip naïve secret scanners.
-- Production Supabase migrations still need to be applied and manually verified.
-- GitHub branch protection must be configured in repository settings for CI to become mandatory.
-
-## Recommended Next Codex Task
-
-Add CI and a pilot secret/migration validation workflow:
-
-- run test/typecheck/lint/build on every PR
-- detect committed real secrets
-- verify migrations include RLS for new public tables
-- verify Supabase Edge Function source does not log secrets or prompt content
-- optionally deploy Edge Functions from CI with `SUPABASE_ACCESS_TOKEN`
-
-## Merge Instructions
-
-1. Merge Claude’s narrative/copy branch first if it touches `src/main.js`, locales, or visual files.
-2. Rebase this backend-only migration/test/doc change afterward.
-3. Expected conflicts are low because this work adds `docs/pilot-readiness-report.md`, `test/pilot-readiness.test.js`, and a new migration file.
-4. Do not overwrite `.claude/settings.local.json`; it was pre-existing local state.
+1. **Pilot readiness**: wire `src/services/observability.js` to a real sink (Sentry/Logtail), add a typed analytics event schema with an ingestion destination, run and document a backup/restore drill against a staging Supabase project, and write an operator-facing deployment runbook.
+2. **Business onboarding**: run the ambassador workflow against real Vilnius businesses at meaningful scale; assess search/data quality once real volume exists.
+3. **AI**: add production hardening (rate limiting, cost monitoring, an evaluation harness) to the Alwen edge function before expanding its capabilities or connecting more real data sources.

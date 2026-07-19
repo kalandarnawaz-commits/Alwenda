@@ -1,9 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-// Calibrated to main's actual warning count as of this CI-infra branch (dead
-// code cleanup lives in the compliance branch, out of scope here — lower
-// this once that merges and removes the underlying warnings).
-const WARNING_BASELINE = 26;
+const WARNING_BASELINE = 0;
 
 const result = spawnSync("npx", ["eslint", "src", "test", "--format", "json"], {
   encoding: "utf8",

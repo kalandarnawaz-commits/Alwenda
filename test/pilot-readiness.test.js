@@ -103,11 +103,14 @@ test("business claim evidence storage is private and scoped to claimant or admin
   assert.match(sql, /Admins manage all claim evidence files/);
 });
 
-test("pilot readiness report documents rollback and launch blockers", async () => {
+test("pilot readiness report documents closed and open launch blockers", async () => {
   const report = await readRepoFile("docs/pilot-readiness-report.md");
-  assert.match(report, /Critical before external pilot/);
-  assert.match(report, /Business lifecycle and claim verification/);
+  assert.match(report, /## Closed since 2026-07-16/);
+  assert.match(report, /## Still open/);
+  assert.match(report, /### Business lifecycle auditing/);
+  assert.match(report, /### Trader verification controls/);
+  assert.match(report, /### RLS authorization coverage/);
   assert.match(report, /business-claim-evidence/);
-  assert.match(report, /Rollback approach/);
+  assert.match(report, /rollback \*approach\*/);
   assert.match(report, /Pilot-readiness score/);
 });

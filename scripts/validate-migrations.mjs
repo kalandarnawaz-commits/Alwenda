@@ -2,11 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const migrationsDir = path.resolve("supabase/migrations");
-// Migrations from before rollback-doc requirements were introduced
-// (2026-07-18) are grandfathered to a warning instead of a hard failure —
-// tighten this back to "required on everything" once every pre-existing
-// migration has been backfilled with rollback documentation.
-const ROLLBACK_DOC_REQUIRED_FROM = "202607180000";
 const destructivePatterns = [
   /\bdrop\s+table\b/i,
   /\bdrop\s+schema\b/i,
@@ -39,14 +34,7 @@ if (JSON.stringify(files) !== JSON.stringify(sorted)) fail("Migration filenames 
 for (const file of files) {
   const sql = await readFile(path.join(migrationsDir, file), "utf8");
   migrationTexts.set(file, sql);
-  if (!/rollback approach:/i.test(sql)) {
-    const identifier = file.match(/^(\d{12,14})_/)?.[1];
-    if (identifier && identifier >= ROLLBACK_DOC_REQUIRED_FROM) {
-      fail(`${file} must document a rollback approach.`);
-    } else {
-      console.warn(`[migration-check] ${file} predates the rollback-approach requirement — please backfill.`);
-    }
-  }
+  if (!/rollback approach:/i.test(sql)) fail(`${file} must document a rollback approach.`);
   for (const pattern of destructivePatterns) {
     if (pattern.test(sql)) fail(`${file} contains a potentially destructive operation: ${pattern}`);
   }
