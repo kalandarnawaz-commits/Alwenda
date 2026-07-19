@@ -61,7 +61,11 @@ test("live opportunity detail is deep-linkable and opens through one helper", ()
 test("live cards have a dedicated click and keyboard activation path", () => {
   const bindEvents = extractFunction(main, "bindEvents");
   assert.match(bindEvents, /'\[data-view="liveOpportunityDetail"\]\[data-opportunity-id\]'/);
+  assert.match(bindEvents, /document\.addEventListener\(\s*"click"/);
+  assert.match(bindEvents, /event\.target\.closest\('\[data-view="liveOpportunityDetail"\]\[data-opportunity-id\]'\)/);
+  assert.match(bindEvents, /true\s*\)/);
   assert.match(bindEvents, /openLiveOpportunityDetail\(card\.dataset\.opportunityId\)/);
+  assert.match(bindEvents, /openLiveOpportunityDetail\(opportunityId\)/);
   assert.match(bindEvents, /event\.stopImmediatePropagation\(\)/);
   assert.match(bindEvents, /event\.key !== "Enter" && event\.key !== " " && event\.key !== "Spacebar"/);
 });

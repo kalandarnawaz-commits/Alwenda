@@ -114,7 +114,7 @@
     "peopleLookingForHelp": "people looking for help",
     "newNeighbourPosts": "new neighbour posts",
     "localAlerts": "local alerts",
-    "nearby": "nearby",
+    "nearby": "Nearby",
     "you": "You",
     "viewProfile": "View profile",
     "bookNow": "Book now",
@@ -279,7 +279,39 @@
     "responseTime": "Response time",
     "distanceAway": "{distance} away",
     "discoverNearby": "Discover nearby",
-    "discoverResultsTitle": "Nearby picks"
+    "discoverResultsTitle": "Nearby picks",
+    "postedBy": "Posted by",
+    "trust": "Trust",
+    "response": "Response",
+    "fastMatch": "Fast match",
+    "openRequest": "Open request",
+    "whatTheyNeed": "What they need",
+    "opportunityEyebrow": "Live around you · {area}",
+    "opportunityDistanceMeta": "{distance} km away · {time}",
+    "trustScore": "{score} trust score",
+    "activeOpportunitiesNearby": "active opportunities nearby",
+    "estimatedEarningsToday": "estimated earnings available today",
+    "liveOpportunitiesTitle": "Live opportunities",
+    "liveOpportunitiesSubtitle": "Earn money by helping people nearby.",
+    "highestPaying": "Highest paying",
+    "verified": "Verified",
+    "category": "Category",
+    "allCategoriesLabel": "All categories",
+    "anyDistance": "Any distance",
+    "withinDistance": "Within {distance} km",
+    "whatCanYouEarnToday": "What can you earn today?",
+    "freshVerifiedRequests": "Fresh, verified requests from people around Vilnius.",
+    "matches": "{count} matches",
+    "noOpportunitiesMatch": "No opportunities match these filters yet.",
+    "needHelpInstead": "Need help instead?",
+    "postYourOwnRequest": "Post your own request",
+    "postYourOwnRequestHint": "Tell nearby verified people what you need and choose the right response.",
+    "createRequest": "Create a request",
+    "accept": "Accept",
+    "viewDetails": "View details",
+    "transactionSafetyTitle": "Trade safely",
+    "transactionSafetyBody": "This offer is made by the user shown in the listing, not by Alwenda. Alwenda does not collect transaction payments and does not guarantee users, goods, services, payments, delivery or refunds. Verify the other party, keep agreements in writing and be cautious with advance payments. Report suspicious or illegal activity using the Report function.",
+    "urgentLabel": "Urgent"
   },
   "nav": {
     "home": "Home",
@@ -2058,6 +2090,130 @@
       "sig8Detail": "Rewards placeholder for contribution economy",
       "sig1Value": "Complete",
       "sig2Value": "5 skills"
+    }
+  },
+  "opportunities": {
+    "items": {
+      "airport-pickup": {
+        "title": "Airport pickup",
+        "category": "Transport",
+        "time": "Starts in 30 min",
+        "requester": "Verified traveller",
+        "description": "Pick up one traveller at Vilnius Airport and drive them to the Old Town.",
+        "tag1": "Car required",
+        "tag2": "1 passenger",
+        "action": "Accept"
+      },
+      "babysitter": {
+        "title": "Need babysitter",
+        "category": "Childcare",
+        "time": "Tonight · 19:00",
+        "requester": "Verified family",
+        "description": "Help with two children for three hours while their parents attend an event.",
+        "tag1": "Experience required",
+        "tag2": "3 hours",
+        "action": "Apply"
+      },
+      "deliver-package": {
+        "title": "Deliver package",
+        "category": "Delivery",
+        "time": "45 min",
+        "requester": "Verified neighbour",
+        "description": "Pick up a prepaid parcel near Old Town and deliver it along your route.",
+        "tag1": "On your route",
+        "tag2": "Light parcel",
+        "action": "Accept"
+      },
+      "help-move-sofa": {
+        "title": "Help move sofa",
+        "category": "Moving",
+        "time": "Today · 17:30",
+        "requester": "Verified resident",
+        "description": "Two people needed to move a sofa from a flat into a van in Žvėrynas.",
+        "tag1": "2 people needed",
+        "tag2": "Heavy lifting",
+        "action": "Accept"
+      },
+      "translate-document": {
+        "title": "Translate document",
+        "category": "Translation",
+        "time": "30 min",
+        "requester": "Verified resident",
+        "description": "Translate a short English-Lithuanian document and explain the key points in simple language.",
+        "tag1": "Remote",
+        "tag2": "Matches languages",
+        "action": "Apply"
+      },
+      "teach-english": {
+        "title": "Teach English",
+        "category": "Tutoring",
+        "time": "Tomorrow",
+        "requester": "Verified learner",
+        "description": "One-hour conversational English lesson for a beginner near Užupis.",
+        "tag1": "Profile match",
+        "tag2": "Beginner",
+        "action": "Apply"
+      },
+      "furniture": {
+        "title": "Assemble furniture",
+        "category": "Home services",
+        "time": "Tonight",
+        "requester": "Verified homeowner",
+        "description": "Assemble a flat-pack chair and small shelving unit in Šnipiškės. Tools preferred.",
+        "tag1": "Tools required",
+        "tag2": "Indoor",
+        "action": "View details"
+      },
+      "dog-walk": {
+        "title": "Evening dog walk",
+        "category": "Pet care",
+        "time": "Today · 18:30",
+        "requester": "Verified neighbour",
+        "description": "Take a friendly golden retriever for a 45-minute walk around Bernardine Garden.",
+        "tag1": "Pet friendly",
+        "tag2": "45 min",
+        "action": "Accept"
+      },
+      "photo-event": {
+        "title": "Event photographer",
+        "category": "Creative",
+        "time": "Saturday · 16:00",
+        "requester": "Verified organiser",
+        "description": "Photograph a small community event and deliver a curated digital gallery.",
+        "tag1": "Portfolio",
+        "tag2": "2 hours",
+        "action": "Apply"
+      },
+      "grocery-delivery": {
+        "title": "Grocery delivery",
+        "category": "Delivery",
+        "time": "Within 1 hour",
+        "requester": "Verified resident",
+        "description": "Collect a prepaid grocery order and deliver it to a nearby apartment.",
+        "tag1": "Quick task",
+        "tag2": "No stairs",
+        "action": "Accept"
+      },
+      "language-help": {
+        "title": "Lithuanian conversation practice",
+        "category": "Tutoring",
+        "time": "Tomorrow · 17:00",
+        "requester": "Verified learner",
+        "description": "Friendly conversation practice for an English speaker learning Lithuanian.",
+        "tag1": "Lithuanian",
+        "tag2": "Beginner",
+        "action": "View details"
+      },
+      "moving-boxes": {
+        "title": "Help moving boxes",
+        "category": "Moving",
+        "time": "Today · 15:00",
+        "requester": "Verified homeowner",
+        "description": "Move packed boxes from a second-floor flat into a waiting van.",
+        "tag1": "Physical task",
+        "tag2": "2 hours",
+        "action": "Accept"
+      }
     }
   }
 }

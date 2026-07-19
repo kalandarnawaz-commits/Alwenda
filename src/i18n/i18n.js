@@ -28,6 +28,7 @@ export const SUPPORTED_LANGUAGES = [
 export const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
 const FALLBACK_LANGUAGE = "en";
+const LOCALE_ASSET_VERSION = "marketplace-trending-detail-1";
 const localeCache = new Map();
 let currentLanguage = FALLBACK_LANGUAGE;
 
@@ -50,7 +51,7 @@ function interpolate(template, params) {
 export async function loadLocale(code) {
   if (localeCache.has(code)) return localeCache.get(code);
   try {
-    const response = await fetch(`/locales/${code}.json`, { cache: "no-store" });
+    const response = await fetch(`/locales/${code}.json?v=${LOCALE_ASSET_VERSION}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     localeCache.set(code, data);

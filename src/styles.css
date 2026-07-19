@@ -12502,6 +12502,16 @@ strong:has(> .verified-check) {
 
   .opportunity-detail-title {
     display: grid;
+    gap: 10px;
+  }
+
+  .opportunity-detail-title h1 {
+    font-size: clamp(1.8rem, 10vw, 2.8rem);
+    line-height: 1;
+  }
+
+  .opportunity-detail-title > strong {
+    font-size: 2rem;
   }
 
   .opportunity-detail-grid {

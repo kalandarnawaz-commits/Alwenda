@@ -31,8 +31,7 @@ import {
   reservations,
   reputationProfile,
   SEED_CITY_META,
-  serviceProfessionals,
-  trendingMarketplace
+  serviceProfessionals
 } from "./data/mockData.js?v=production-sprint-24";
 import { integrations } from "./services/integrationPlaceholders.js";
 import {
@@ -2169,6 +2168,19 @@ function filteredListings() {
   }).sort((a, b) => queryScore(`${listingTitle(b)} ${listingTitle(b)} ${listingMeta(b)} ${b.type}`) - queryScore(`${listingTitle(a)} ${listingTitle(a)} ${listingMeta(a)} ${a.type}`));
 }
 
+function listingMovementScore(item) {
+  const popularity = Number.parseInt(String(item.popularity || "").match(/\d+/)?.[0] || "0", 10);
+  const verifiedBoost = item.verifiedSeller ? 8 : 0;
+  const activeBoost = /open|available|hiring|this week|matched/i.test(item.status || "") ? 6 : 0;
+  return popularity + verifiedBoost + activeBoost + Number(item.id || 0) / 1000;
+}
+
+function trendingListingItems(limit = 10) {
+  return [...listings]
+    .sort((a, b) => listingMovementScore(b) - listingMovementScore(a))
+    .slice(0, limit);
+}
+
 function filteredBusinesses() {
   return businesses.filter((item) => {
     const areaMatch = state.area === "All" || item.area === state.area;
@@ -2360,7 +2372,9 @@ function renderNavButton([view, label, iconName]) {
     </button>`;
 }
 
-const TRANSACTION_SAFETY_NOTICE = `<aside class="transaction-safety-notice" role="note"><strong>Trade safely</strong><p>This offer is made by the user shown in the listing, not by Alwenda. Alwenda does not collect transaction payments and does not guarantee users, goods, services, payments, delivery or refunds. Verify the other party, keep agreements in writing and be cautious with advance payments. Report suspicious or illegal activity using the Report function.</p></aside>`;
+function renderTransactionSafetyNotice() {
+  return `<aside class="transaction-safety-notice" role="note"><strong>${t("common.transactionSafetyTitle")}</strong><p>${t("common.transactionSafetyBody")}</p></aside>`;
+}
 
 function renderPersistentFooter() {
   return `<footer class="legal-footer"><nav aria-label="Legal and support">
@@ -3608,6 +3622,7 @@ function renderLiveAroundYou() {
 }
 
 function renderTrendingMarketplace() {
+  const trendingItems = trendingListingItems(10);
   return renderLivingSection(
     "home.rail.trendingMarketplace",
     "home.rail.trendingMarketplaceHint",
@@ -3615,16 +3630,7 @@ function renderTrendingMarketplace() {
     renderCarousel(
       "trendingMarketplace",
       "living-rail marketplace-rail",
-      trendingMarketplace.map((item) => `
-        <article class="market-mini-card" data-view="marketplace">
-          <div class="card-photo" style="background-image: url('${item.image}')"></div>
-          <button class="mini-save" aria-label="${t("common.favourite")}">${icon("heart")}</button>
-          <span>${categoryLabel(item.type)}</span>
-          <h3>${t(item.titleKey)}</h3>
-          <div class="mini-price-line"><strong>${item.price}</strong><em>${t(item.signalKey)}</em></div>
-          <p>${item.area} · ${t("common.distanceAway", { distance: formatDistance(item.distanceMeters) })}</p>
-        </article>
-      `).join("")
+      trendingItems.map(renderMarketplaceMiniCard).join("")
     )
   );
 }
@@ -5017,6 +5023,20 @@ function renderExploreCategoryPage() {
   `;
 }
 
+function renderMarketplaceMiniCard(item) {
+  const isSaved = state.savedListingIds.includes(String(item.id));
+  return `
+    <article class="market-mini-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0" aria-label="${escapeHtml(`${listingTitle(item)} ${item.price}`)}">
+      <div class="card-photo" style="background-image: url('${item.image}')"></div>
+      <button type="button" class="mini-save ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
+      <span>${categoryLabel(item.type)}</span>
+      <h3>${listingTitle(item)}</h3>
+      <div class="mini-price-line"><strong>${item.price}</strong><em>${item.popularity || item.aiInsight || item.status}</em></div>
+      <p>${joinNonEmpty([item.area, item.distance])}</p>
+    </article>
+  `;
+}
+
 function marketplaceListingRail(titleKey, hintKey, items) {
   if (!items.length) return "";
   return renderLivingSection(
@@ -5026,16 +5046,7 @@ function marketplaceListingRail(titleKey, hintKey, items) {
     renderCarousel(
       titleKey,
       "living-rail marketplace-rail",
-      items.map((item) => `
-        <article class="market-mini-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
-          <div class="card-photo" style="background-image: url('${item.image}')"></div>
-          <button type="button" class="mini-save ${state.savedListingIds.includes(String(item.id)) ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
-          <span>${categoryLabel(item.type)}</span>
-          <h3>${t(item.titleKey)}</h3>
-          <div class="mini-price-line"><strong>${item.price}</strong><em>${item.popularity}</em></div>
-          <p>${item.area} · ${item.distance}</p>
-        </article>
-      `).join("")
+      items.map(renderMarketplaceMiniCard).join("")
     )
   );
 }
@@ -5116,6 +5127,7 @@ function renderMarketplacePicker() {
         </div>
         ${renderAiSearch("marketplace")}
       </section>
+      ${marketplaceListingRail("home.rail.trendingMarketplace", "home.rail.trendingMarketplaceHint", trendingListingItems(10))}
       <div class="explore-hub-grid">
         ${["all", ...categories.map((category) => category.id)].map((categoryId, index) => renderMarketplaceHubCard(categoryId, index)).join("")}
       </div>
@@ -5455,7 +5467,7 @@ function renderCreateListingForm() {
         <p>${t("createListing.createListingHint")}</p>
       </div>
       <form class="claim-form create-listing-form" data-role="create-listing-form">
-        ${TRANSACTION_SAFETY_NOTICE}
+        ${renderTransactionSafetyNotice()}
         <div class="auth-field">
           <label for="listing-offeror-status">Your marketplace status</label>
           <select id="listing-offeror-status" data-role="listing-offeror-status" required>
@@ -5702,7 +5714,7 @@ function renderListingDetail() {
       }
 
       <div class="section-title"><h2>${t("common.contactSeller")}</h2></div>
-      ${TRANSACTION_SAFETY_NOTICE}
+      ${renderTransactionSafetyNotice()}
       <div class="seller-row" role="button" tabindex="0" ${sellerAttrs}>
         <img src="${item.sellerAvatar}" alt="" />
         <div>
@@ -5756,7 +5768,7 @@ function renderHire() {
   const pros = filteredProfessionals();
   return `
     <section class="section-shell hire-shell">
-      ${TRANSACTION_SAFETY_NOTICE}
+      ${renderTransactionSafetyNotice()}
       <section class="city-hero page-hero hire-hero-photo" aria-labelledby="hire-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("hire.hireEyebrow")} · ${currentAreaLabel()}</p>
@@ -5784,7 +5796,7 @@ function renderNeedHelp() {
 
   return `
     <section class="section-shell help-shell">
-      ${TRANSACTION_SAFETY_NOTICE}
+      ${renderTransactionSafetyNotice()}
       <div class="screen-heading">
         <p class="eyebrow">${t("common.activeMarketplace")}</p>
         <h1>${t("needHelp.needHelpTitle")}</h1>
@@ -5869,55 +5881,77 @@ function filteredLiveOpportunities() {
   return items;
 }
 
+function opportunityText(item, field, fallback = item[field]) {
+  const key = `opportunities.items.${item.id}.${field}`;
+  const value = t(key);
+  return value === key ? fallback : value;
+}
+
+function opportunityTags(item) {
+  return item.tags.map((tag, index) => opportunityText(item, `tag${index + 1}`, tag));
+}
+
 function renderOpportunityCard(item) {
-  return `<article class="opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${item.title} ${item.priceLabel}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">
-    <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${item.category}</span>${item.urgent ? '<strong>Urgent</strong>' : ''}</div>
-    <div class="opportunity-body"><div class="opportunity-price-row"><h2>${item.title}</h2><b>${item.priceLabel}</b></div>
-    <p class="opportunity-meta">${item.distance} km away · ${item.time}</p>
-    <p>${item.description}</p><div class="opportunity-trust"><span>✓ ${item.requester}</span><span>★ ${item.trust} trust score</span></div>
-    <div class="opportunity-tags">${item.tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
-    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${item.action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">View details</a></div></div>
+  const title = opportunityText(item, "title");
+  const category = opportunityText(item, "category");
+  const time = opportunityText(item, "time");
+  const requester = opportunityText(item, "requester");
+  const description = opportunityText(item, "description");
+  const action = opportunityText(item, "action");
+  return `<article class="opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${title} ${item.priceLabel}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">
+    <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${category}</span>${item.urgent ? `<strong>${t("common.urgentLabel")}</strong>` : ""}</div>
+    <div class="opportunity-body"><div class="opportunity-price-row"><h2>${title}</h2><b>${item.priceLabel}</b></div>
+    <p class="opportunity-meta">${t("common.opportunityDistanceMeta", { distance: item.distance, time })}</p>
+    <p>${description}</p><div class="opportunity-trust"><span>✓ ${requester}</span><span>★ ${t("common.trustScore", { score: item.trust })}</span></div>
+    <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
+    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">${t("common.viewDetails")}</a></div></div>
   </article>`;
 }
 
 function renderLiveOpportunityDetail() {
   const item = findOpportunityById(state.selectedOpportunityId) || LIVE_OPPORTUNITIES[0];
   state.selectedOpportunityId = item.id;
+  const title = opportunityText(item, "title");
+  const category = opportunityText(item, "category");
+  const time = opportunityText(item, "time");
+  const requester = opportunityText(item, "requester");
+  const description = opportunityText(item, "description");
+  const action = opportunityText(item, "action");
   const related = LIVE_OPPORTUNITIES
     .filter((candidate) => candidate.id !== item.id && (candidate.category === item.category || candidate.today === item.today))
     .slice(0, 3);
   return `<section class="section-shell opportunity-detail-shell">
-    ${TRANSACTION_SAFETY_NOTICE}
+    ${renderTransactionSafetyNotice()}
     <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
     <article class="opportunity-detail-card">
       <div class="opportunity-detail-hero" style="background-image:url('${item.image}')">
         <div class="opportunity-detail-badges">
-          <span>${item.category}</span>
-          ${item.urgent ? "<strong>Urgent</strong>" : ""}
+          <span>${category}</span>
+          ${item.urgent ? `<strong>${t("common.urgentLabel")}</strong>` : ""}
           ${item.today ? `<span>${t("common.today")}</span>` : ""}
         </div>
       </div>
       <div class="opportunity-detail-body">
         <div class="opportunity-detail-title">
           <div>
-            <p class="eyebrow">Live around you · ${currentAreaLabel()}</p>
-            <h1>${item.title}</h1>
-            <p>${item.distance} km away · ${item.time}</p>
+            <p class="eyebrow">${t("common.opportunityEyebrow", { area: currentAreaLabel() })}</p>
+            <h1>${title}</h1>
+            <p>${t("common.opportunityDistanceMeta", { distance: item.distance, time })}</p>
           </div>
           <strong>${item.priceLabel}</strong>
         </div>
         <div class="opportunity-detail-grid">
-          <article><span>Posted by</span><strong>${item.requester}</strong></article>
-          <article><span>Trust</span><strong>★ ${item.trust}</strong></article>
-          <article><span>Response</span><strong>${item.urgent ? "Fast match" : "Open request"}</strong></article>
+          <article><span>${t("common.postedBy")}</span><strong>${requester}</strong></article>
+          <article><span>${t("common.trust")}</span><strong>★ ${item.trust}</strong></article>
+          <article><span>${t("common.response")}</span><strong>${item.urgent ? t("common.fastMatch") : t("common.openRequest")}</strong></article>
         </div>
         <div class="opportunity-detail-section">
-          <h2>What they need</h2>
-          <p>${item.description}</p>
+          <h2>${t("common.whatTheyNeed")}</h2>
+          <p>${description}</p>
         </div>
-        <div class="opportunity-tags">${item.tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
+        <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
         <div class="opportunity-detail-actions">
-          <button type="button" class="opportunity-primary" data-view="messages">${item.action}</button>
+          <button type="button" class="opportunity-primary" data-view="messages">${action}</button>
           <button type="button" data-view="messages">${t("common.message")}</button>
           <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
         </div>
@@ -5935,18 +5969,22 @@ function renderLiveOpportunities() {
   const categories = [...new Set(LIVE_OPPORTUNITIES.map((item) => item.category))];
   const earnings = LIVE_OPPORTUNITIES.filter((item) => item.today).reduce((sum, item) => sum + item.price, 0);
   return `<section class="section-shell opportunities-shell">
-    ${TRANSACTION_SAFETY_NOTICE}
-    <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>LIVE OPPORTUNITIES</h1><p>Earn money by helping people nearby.</p>
-      <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>active opportunities nearby</span></article><article><strong>€${earnings}</strong><span>estimated earnings available today</span></article></div>
+    ${renderTransactionSafetyNotice()}
+    <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>${t("common.liveOpportunitiesTitle")}</h1><p>${t("common.liveOpportunitiesSubtitle")}</p>
+      <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>${t("common.activeOpportunitiesNearby")}</span></article><article><strong>€${earnings}</strong><span>${t("common.estimatedEarningsToday")}</span></article></div>
     </header>
     <div class="opportunity-toolbar" aria-label="Opportunity filters"><div class="chip-row explore-category-row opportunity-filter-row">
-      ${[["nearby","Nearby"],["today","Today"],["highest","Highest paying"],["urgent","Urgent"],["verified","Verified"]].map(([value,label]) => `<button type="button" class="${state.opportunityFilter === value ? "is-active" : ""}" data-opportunity-filter="${value}">${label}</button>`).join("")}
-      <label>Category<select data-opportunity-category><option value="all">All categories</option>${categories.map((category) => `<option value="${category}" ${state.opportunityCategory === category ? "selected" : ""}>${category}</option>`).join("")}</select></label>
-      <label>Distance<select data-opportunity-distance><option value="all">Any distance</option>${[1,2,5].map((distance) => `<option value="${distance}" ${state.opportunityDistance === String(distance) ? "selected" : ""}>Within ${distance} km</option>`).join("")}</select></label>
+      ${[["nearby",t("common.nearby")],["today",t("common.today")],["highest",t("common.highestPaying")],["urgent",t("common.urgentLabel")],["verified",t("common.verified")]].map(([value,label]) => `<button type="button" class="${state.opportunityFilter === value ? "is-active" : ""}" data-opportunity-filter="${value}">${label}</button>`).join("")}
+      <label>${t("common.category")}<select data-opportunity-category><option value="all">${t("common.allCategoriesLabel")}</option>${categories.map((category) => {
+        const match = LIVE_OPPORTUNITIES.find((item) => item.category === category);
+        const label = match ? opportunityText(match, "category", category) : category;
+        return `<option value="${category}" ${state.opportunityCategory === category ? "selected" : ""}>${label}</option>`;
+      }).join("")}</select></label>
+      <label>${t("common.distance")}<select data-opportunity-distance><option value="all">${t("common.anyDistance")}</option>${[1,2,5].map((distance) => `<option value="${distance}" ${state.opportunityDistance === String(distance) ? "selected" : ""}>${t("common.withinDistance", { distance })}</option>`).join("")}</select></label>
     </div></div>
-    <div class="opportunity-feed-heading"><div><h2>What can you earn today?</h2><p>Fresh, verified requests from people around Vilnius.</p></div><span>${items.length} matches</span></div>
-    <div class="opportunity-feed">${items.map(renderOpportunityCard).join("") || renderEmptyState("No opportunities match these filters yet.")}</div>
-    <section class="opportunity-post-cta"><p class="eyebrow">Need help instead?</p><h2>Post your own request</h2><p>Tell nearby verified people what you need and choose the right response.</p><button type="button" data-view="needHelp">Create a request</button></section>
+    <div class="opportunity-feed-heading"><div><h2>${t("common.whatCanYouEarnToday")}</h2><p>${t("common.freshVerifiedRequests")}</p></div><span>${t("common.matches", { count: items.length })}</span></div>
+    <div class="opportunity-feed">${items.map(renderOpportunityCard).join("") || renderEmptyState(t("common.noOpportunitiesMatch"))}</div>
+    <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t("common.postYourOwnRequestHint")}</p><button type="button" data-view="needHelp">${t("common.createRequest")}</button></section>
   </section>`;
 }
 
@@ -6829,7 +6867,7 @@ function renderConversationDetail() {
           <p>${t(thread.context.metaKey)}</p>
         </div>
       ` : ""}
-      ${TRANSACTION_SAFETY_NOTICE}
+      ${renderTransactionSafetyNotice()}
       <button type="button" class="settings-row-button" data-report-target="user" data-report-id="${thread.id}">Report user</button>
       <div class="conversation-history">
         ${thread.messages.map((message) => `
@@ -6850,7 +6888,7 @@ function renderConversationDetail() {
 function renderOffers() {
   return `
     <section class="section-shell">
-      ${TRANSACTION_SAFETY_NOTICE}
+      ${renderTransactionSafetyNotice()}
       <div class="screen-heading">
         <p class="eyebrow">${currentAreaLabel()}</p>
         <h1>${t("common.localOffers")}</h1>
@@ -8827,6 +8865,23 @@ function bindEvents() {
     event.preventDefault();
     submitClaim(new FormData(event.target));
   });
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const card = event.target.closest('[data-view="liveOpportunityDetail"][data-opportunity-id]');
+      if (!card) return;
+      if (event.target.closest(".floating-card-actions, .mini-save")) return;
+      if (event.target.closest("button") && event.target.closest("button") !== card) return;
+      const opportunityId = card.dataset.opportunityId;
+      if (!findOpportunityById(opportunityId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      openLiveOpportunityDetail(opportunityId);
+    },
+    true
+  );
 
   document.querySelectorAll('[data-view="liveOpportunityDetail"][data-opportunity-id]').forEach((card) => {
     const activateOpportunity = (event) => {

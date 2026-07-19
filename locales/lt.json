@@ -114,7 +114,7 @@
     "peopleLookingForHelp": "žmonės ieško pagalbos",
     "newNeighbourPosts": "nauji kaimynų įrašai",
     "localAlerts": "vietiniai įspėjimai",
-    "nearby": "netoliese",
+    "nearby": "Netoliese",
     "you": "Jūs",
     "viewProfile": "Žiūrėti profilį",
     "bookNow": "Rezervuoti dabar",
@@ -279,7 +279,39 @@
     "responseTime": "Atsakymo laikas",
     "distanceAway": "už {distance}",
     "discoverNearby": "Atrasti netoliese",
-    "discoverResultsTitle": "Pasiūlymai netoliese"
+    "discoverResultsTitle": "Pasiūlymai netoliese",
+    "postedBy": "Paskelbė",
+    "trust": "Pasitikėjimas",
+    "response": "Atsakas",
+    "fastMatch": "Greitas sutapimas",
+    "openRequest": "Atvira užklausa",
+    "whatTheyNeed": "Ko reikia",
+    "opportunityEyebrow": "Gyva aplink jus · {area}",
+    "opportunityDistanceMeta": "už {distance} km · {time}",
+    "trustScore": "{score} pasitikėjimo įvertinimas",
+    "activeOpportunitiesNearby": "aktyvių galimybių netoliese",
+    "estimatedEarningsToday": "numatomas uždarbis šiandien",
+    "liveOpportunitiesTitle": "Aktyvios galimybės",
+    "liveOpportunitiesSubtitle": "Uždirbkite padėdami žmonėms netoliese.",
+    "highestPaying": "Didžiausias atlygis",
+    "verified": "Patikrinta",
+    "category": "Kategorija",
+    "allCategoriesLabel": "Visos kategorijos",
+    "anyDistance": "Bet koks atstumas",
+    "withinDistance": "Iki {distance} km",
+    "whatCanYouEarnToday": "Ką galite uždirbti šiandien?",
+    "freshVerifiedRequests": "Naujos, patikrintos užklausos iš žmonių Vilniuje.",
+    "matches": "{count} atitikmenys",
+    "noOpportunitiesMatch": "Kol kas nėra galimybių pagal šiuos filtrus.",
+    "needHelpInstead": "Reikia pagalbos?",
+    "postYourOwnRequest": "Paskelbkite savo užklausą",
+    "postYourOwnRequestHint": "Pasakykite patikrintiems žmonėms netoliese, ko reikia, ir pasirinkite tinkamą atsakymą.",
+    "createRequest": "Sukurti užklausą",
+    "accept": "Priimti",
+    "viewDetails": "Peržiūrėti",
+    "transactionSafetyTitle": "Prekiaukite saugiai",
+    "transactionSafetyBody": "Šį pasiūlymą pateikia skelbime nurodytas naudotojas, ne Alwenda. Alwenda nerenka mokėjimų už sandorius ir negarantuoja naudotojų, prekių, paslaugų, mokėjimų, pristatymo ar pinigų grąžinimo. Patikrinkite kitą šalį, susitarimus fiksuokite raštu ir atsargiai mokėkite avansu. Apie įtartiną ar neteisėtą veiklą praneškite per pranešimo funkciją.",
+    "urgentLabel": "Skubu"
   },
   "nav": {
     "home": "Pradžia",
@@ -2058,6 +2090,130 @@
       "sig8Detail": "Būsimos indėlio ekonomikos apdovanojimų vieta",
       "sig1Value": "Užbaigta",
       "sig2Value": "5 įgūdžiai"
+    }
+  },
+  "opportunities": {
+    "items": {
+      "airport-pickup": {
+        "title": "Pavėžėjimas iš oro uosto",
+        "category": "Transportas",
+        "time": "Prasideda po 30 min",
+        "requester": "Patikrintas keliautojas",
+        "description": "Paimti vieną keliautoją iš Vilniaus oro uosto ir nuvežti į Senamiestį.",
+        "tag1": "Reikia automobilio",
+        "tag2": "1 keleivis",
+        "action": "Priimti"
+      },
+      "babysitter": {
+        "title": "Reikia auklės",
+        "category": "Vaikų priežiūra",
+        "time": "Šįvakar · 19:00",
+        "requester": "Patikrinta šeima",
+        "description": "Padėti prižiūrėti du vaikus tris valandas, kol tėvai dalyvauja renginyje.",
+        "tag1": "Reikia patirties",
+        "tag2": "3 valandos",
+        "action": "Kandidatuoti"
+      },
+      "deliver-package": {
+        "title": "Pristatyti siuntinį",
+        "category": "Pristatymas",
+        "time": "45 min",
+        "requester": "Patikrintas kaimynas",
+        "description": "Paimti apmokėtą siuntinį netoli Senamiesčio ir pristatyti pakeliui.",
+        "tag1": "Pakeliui",
+        "tag2": "Lengvas siuntinys",
+        "action": "Priimti"
+      },
+      "help-move-sofa": {
+        "title": "Padėti perkelti sofą",
+        "category": "Kraustymas",
+        "time": "Šiandien · 17:30",
+        "requester": "Patikrintas gyventojas",
+        "description": "Reikia dviejų žmonių perkelti sofą iš buto į mikroautobusą Žvėryne.",
+        "tag1": "Reikia 2 žmonių",
+        "tag2": "Sunkus kėlimas",
+        "action": "Priimti"
+      },
+      "translate-document": {
+        "title": "Išversti dokumentą",
+        "category": "Vertimas",
+        "time": "30 min",
+        "requester": "Patikrintas gyventojas",
+        "description": "Išversti trumpą anglų-lietuvių dokumentą ir paprastai paaiškinti svarbiausius punktus.",
+        "tag1": "Nuotoliniu būdu",
+        "tag2": "Atitinka kalbas",
+        "action": "Kandidatuoti"
+      },
+      "teach-english": {
+        "title": "Mokyti anglų kalbos",
+        "category": "Korepetitoriai",
+        "time": "Rytoj",
+        "requester": "Patikrintas mokinys",
+        "description": "Vienos valandos pokalbio anglų kalbos pamoka pradedančiajam netoli Užupio.",
+        "tag1": "Atitinka profilį",
+        "tag2": "Pradedantysis",
+        "action": "Kandidatuoti"
+      },
+      "furniture": {
+        "title": "Surinkti baldus",
+        "category": "Namų paslaugos",
+        "time": "Šįvakar",
+        "requester": "Patikrintas būsto savininkas",
+        "description": "Surinkti supakuotą kėdę ir mažą lentyną Šnipiškėse. Pageidautina turėti įrankius.",
+        "tag1": "Reikia įrankių",
+        "tag2": "Viduje",
+        "action": "Peržiūrėti"
+      },
+      "dog-walk": {
+        "title": "Vakarinis šuns vedžiojimas",
+        "category": "Gyvūnų priežiūra",
+        "time": "Šiandien · 18:30",
+        "requester": "Patikrintas kaimynas",
+        "description": "Išvesti draugišką auksaspalvį retriverį 45 minučių pasivaikščiojimui Bernardinų sode.",
+        "tag1": "Draugiška gyvūnams",
+        "tag2": "45 min",
+        "action": "Priimti"
+      },
+      "photo-event": {
+        "title": "Renginio fotografas",
+        "category": "Kūryba",
+        "time": "Šeštadienį · 16:00",
+        "requester": "Patikrintas organizatorius",
+        "description": "Nufotografuoti nedidelį bendruomenės renginį ir pristatyti atrinktą skaitmeninę galeriją.",
+        "tag1": "Portfolio",
+        "tag2": "2 valandos",
+        "action": "Kandidatuoti"
+      },
+      "grocery-delivery": {
+        "title": "Maisto prekių pristatymas",
+        "category": "Pristatymas",
+        "time": "Per 1 valandą",
+        "requester": "Patikrintas gyventojas",
+        "description": "Paimti apmokėtą maisto prekių užsakymą ir pristatyti į netoliese esantį butą.",
+        "tag1": "Greita užduotis",
+        "tag2": "Be laiptų",
+        "action": "Priimti"
+      },
+      "language-help": {
+        "title": "Lietuvių kalbos pokalbio praktika",
+        "category": "Korepetitoriai",
+        "time": "Rytoj · 17:00",
+        "requester": "Patikrintas mokinys",
+        "description": "Draugiška pokalbio praktika anglakalbiui, besimokančiam lietuvių kalbos.",
+        "tag1": "Lietuvių kalba",
+        "tag2": "Pradedantysis",
+        "action": "Peržiūrėti"
+      },
+      "moving-boxes": {
+        "title": "Padėti pernešti dėžes",
+        "category": "Kraustymas",
+        "time": "Šiandien · 15:00",
+        "requester": "Patikrintas būsto savininkas",
+        "description": "Pernešti supakuotas dėžes iš antro aukšto buto į laukiantį mikroautobusą.",
+        "tag1": "Fizinė užduotis",
+        "tag2": "2 valandos",
+        "action": "Priimti"
+      }
     }
   }
 }
