@@ -21,6 +21,7 @@
 window.__ALWENDA_ENV__ = {
   SUPABASE_URL: null, // e.g. "https://xxxxxxxxxxxx.supabase.co"
   SUPABASE_PUBLISHABLE_KEY: null, // the publishable/anon key from Project Settings → API
+  ELEVENLABS_TTS_FUNCTION_SLUG: "elevenlabs-tts", // override only if Supabase deployed this function under a temporary generated slug
   APP_ENV: "development", // "development", "staging", "production", or "test"
   APP_RELEASE_VERSION: "local-dev",
   PUBLIC_FEATURE_FLAGS: {

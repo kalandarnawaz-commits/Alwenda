@@ -1,0 +1,86 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const rootDir = fileURLToPath(new URL("../", import.meta.url));
+
+async function readRepoFile(path) {
+  return readFile(`${rootDir}${path}`, "utf8");
+}
+
+async function readSourceTree(dir) {
+  const entries = await readdir(`${rootDir}${dir}`, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) return readSourceTree(path);
+      if (!entry.isFile()) return [];
+      return [{ path, text: await readRepoFile(path) }];
+    })
+  );
+  return files.flat();
+}
+
+test("ElevenLabs Edge Function handles auth, validation, safe errors, and audio response", async () => {
+  const source = await readRepoFile("supabase/functions/elevenlabs-tts/index.ts");
+
+  assert.match(source, /Deno\.env\.get\("ELEVENLABS_API_KEY"\)/);
+  assert.match(source, /Deno\.env\.get\("ELEVENLABS_VOICE_ID"\)/);
+  assert.match(source, /req\.method === "OPTIONS"/);
+  assert.match(source, /req\.method !== "POST"/);
+  assert.match(source, /supabase\.auth\.getUser\(\)/);
+  assert.match(source, /Authentication required\.", 401/);
+  assert.match(source, /Text is required\.", 400/);
+  assert.match(source, /MAX_TEXT_LENGTH = 1000/);
+  assert.match(source, /Speech playback is not configured yet\.", 503/);
+  assert.match(source, /https:\/\/api\.elevenlabs\.io\/v1\/text-to-speech/);
+  assert.match(source, /model_id: "eleven_multilingual_v2"/);
+  assert.doesNotMatch(source, /language_code/);
+  assert.match(source, /Content-Type": "audio\/mpeg"/);
+  assert.match(source, /response\.status === 429/);
+  assert.doesNotMatch(source, /console\.log\(ELEVENLABS_API_KEY/);
+  assert.doesNotMatch(source, /errorBody/);
+});
+
+test("frontend voice service calls the configured Supabase function with translated text only", async () => {
+  const source = await readRepoFile("src/services/voiceService.js");
+
+  assert.match(source, /ELEVENLABS_TTS_FUNCTION_SLUG/);
+  assert.match(source, /MAX_TRANSLATION_SPEECH_CHARACTERS = 1000/);
+  assert.match(source, /getSupabaseAccessToken\(\)/);
+  assert.match(source, /Authorization: `Bearer \$\{accessToken\}`/);
+  assert.match(source, /apikey: SUPABASE_ANON_KEY/);
+  assert.match(source, /JSON\.stringify\(\{ text: trimmed \}\)/);
+  assert.match(source, /contentType\.toLowerCase\(\)\.startsWith\("audio\/"\)/);
+  assert.match(source, /URL\.createObjectURL\(blob\)/);
+  assert.match(source, /URL\.revokeObjectURL\(activeObjectUrl\)/);
+  assert.match(source, /activeRequest/);
+  assert.match(source, /stopTranslationSpeech/);
+});
+
+test("translation UI sends the successful translated result to cloud speech", async () => {
+  const source = await readRepoFile("src/main.js");
+
+  assert.match(source, /speakTranslatedText\(/);
+  assert.match(source, /const text = isSource \? state\.translateInputText\.trim\(\) : state\.translateOutputText\.trim\(\)/);
+  assert.match(source, /panel === "to"/);
+  assert.match(source, /translationSpeechTooLong/);
+  assert.match(source, /translate\.generatingSpeech/);
+  assert.match(source, /stopTranslationSpeech\(\)/);
+});
+
+test("browser source never exposes ElevenLabs secrets or VITE-style speech keys", async () => {
+  const sourceFiles = await readSourceTree("src");
+  for (const file of sourceFiles) {
+    assert.ok(!file.text.includes("ELEVENLABS_API_KEY"), `${file.path} must not expose ELEVENLABS_API_KEY`);
+    assert.ok(!file.text.includes("ELEVENLABS_VOICE_ID"), `${file.path} must not expose ELEVENLABS_VOICE_ID`);
+    assert.ok(!file.text.includes("VITE_ELEVENLABS"), `${file.path} must not use VITE_ELEVENLABS`);
+  }
+
+  const envExample = await readRepoFile("env.example.js");
+  assert.ok(!envExample.includes("ELEVENLABS_API_KEY"));
+  assert.ok(!envExample.includes("ELEVENLABS_VOICE_ID"));
+  assert.ok(!envExample.includes("VITE_ELEVENLABS"));
+  assert.match(envExample, /ELEVENLABS_TTS_FUNCTION_SLUG/);
+});

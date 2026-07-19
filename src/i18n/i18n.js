@@ -28,7 +28,7 @@ export const SUPPORTED_LANGUAGES = [
 export const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
 const FALLBACK_LANGUAGE = "en";
-const LOCALE_ASSET_VERSION = "marketplace-carousel-1";
+const LOCALE_ASSET_VERSION = "elevenlabs-tts-1";
 const localeCache = new Map();
 let currentLanguage = FALLBACK_LANGUAGE;
 
