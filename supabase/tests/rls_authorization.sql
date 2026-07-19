@@ -93,6 +93,12 @@ values
   ('10000000-0000-4000-8000-000000000002', 'Unclaimed Repair', 'repair', null, 'unclaimed', 'unverified', 'imported')
 on conflict (id) do nothing;
 
+insert into public.user_offeror_status (user_id, offeror_status, accuracy_confirmed, confirmed_at, terms_version)
+values
+  ('00000000-0000-4000-8000-000000000001', 'private', true, now(), 'RLS-TEST-FIXTURE'),
+  ('00000000-0000-4000-8000-000000000002', 'private', true, now(), 'RLS-TEST-FIXTURE')
+on conflict (user_id) do nothing;
+
 insert into public.listings (id, owner_user_id, title, category, status)
 values
   ('20000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', 'Alice bicycle', 'buy_sell', 'published'),
