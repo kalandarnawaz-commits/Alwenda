@@ -4,7 +4,7 @@ window.__ALWENDA_ENV__ = {
 };
 
 (() => {
-  const CURRENT_APP_VERSION = "marketplace-trending-detail-1";
+  const CURRENT_APP_VERSION = "marketplace-carousel-1";
   window.addEventListener("load", () => {
     const scripts = Array.from(document.scripts);
     const hasCurrentApp = scripts.some((script) => script.src.includes(`src/main.js?v=${CURRENT_APP_VERSION}`));

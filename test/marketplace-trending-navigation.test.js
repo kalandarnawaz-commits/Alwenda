@@ -43,3 +43,9 @@ test("marketplace landing shows top ten trending listing cards above category ti
   assert.match(picker, /trendingListingItems\(10\)/);
 });
 
+test("marketplace carousel rails use the dedicated shelf shell", () => {
+  const carousel = extractFunction(main, "renderCarousel");
+
+  assert.match(carousel, /trackClass\.includes\("marketplace-rail"\)/);
+  assert.match(carousel, /carousel-shell-marketplace/);
+});

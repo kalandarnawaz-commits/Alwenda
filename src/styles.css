@@ -4923,6 +4923,7 @@ select:focus-visible,
   .carousel-track.real-place-rail > * {
     flex: 0 0 46%;
   }
+
 }
 
 @media (min-width: 768px) {
@@ -4958,6 +4959,7 @@ select:focus-visible,
   .carousel-track.community-preview {
     grid-auto-columns: minmax(280px, 33%);
   }
+
 }
 
 .app-shell.is-home-shell .main {
@@ -13021,5 +13023,53 @@ strong:has(> .verified-check) {
   }
   .explore-hub-card:hover {
     transform: none;
+  }
+}
+
+/* Final carousel polish: Marketplace shelves should behave like a deliberate
+   media-store rail, with roomy side gutters, snap points, and full-card reveal. */
+.carousel-shell-marketplace {
+  overflow: hidden;
+}
+
+.carousel-shell-marketplace .carousel-track.marketplace-rail,
+.carousel-shell-marketplace .carousel-track.living-rail.marketplace-rail {
+  grid-auto-columns: clamp(252px, 22vw, 322px) !important;
+  gap: 16px !important;
+  padding: 8px 88px 22px !important;
+  scroll-padding-inline: 88px !important;
+  scroll-snap-type: x mandatory !important;
+}
+
+.carousel-shell-marketplace .carousel-control-left {
+  left: 14px;
+}
+
+.carousel-shell-marketplace .carousel-control-right {
+  right: 14px;
+}
+
+.carousel-shell-marketplace .market-mini-card {
+  min-height: 390px;
+}
+
+.carousel-shell-marketplace .market-mini-card .card-photo {
+  min-height: 182px;
+}
+
+@media (max-width: 768px) {
+  .carousel-shell-marketplace .carousel-track.marketplace-rail,
+  .carousel-shell-marketplace .carousel-track.living-rail.marketplace-rail {
+    padding: 6px 18px 18px 0 !important;
+    scroll-padding-inline: 0 18px !important;
+  }
+
+  .carousel-shell-marketplace .carousel-track.marketplace-rail > *,
+  .carousel-shell-marketplace .carousel-track.living-rail.marketplace-rail > * {
+    flex: 0 0 min(82%, 310px) !important;
+  }
+
+  .carousel-shell-marketplace .market-mini-card {
+    min-height: 360px;
   }
 }
