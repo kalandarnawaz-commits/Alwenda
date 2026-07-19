@@ -20,6 +20,22 @@ function jsonError(message: string, status: number) {
   });
 }
 
+function speechProviderError(status: number) {
+  if (status === 401 || status === 403) {
+    return jsonError("Speech provider credentials need attention.", 502);
+  }
+  if (status === 404) {
+    return jsonError("Speech voice is not available. Check the configured voice.", 502);
+  }
+  if (status === 422) {
+    return jsonError("Speech provider could not use this text or voice.", 502);
+  }
+  if (status === 429) {
+    return jsonError("Speech playback is busy. Please try again in a moment.", 429);
+  }
+  return jsonError("Could not generate speech right now.", 502);
+}
+
 async function requireAuthenticatedUser(authorization: string) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { response: jsonError("Supabase authentication is not configured for this function.", 503), user: null };
@@ -80,8 +96,7 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       console.error("[elevenlabs-tts] ElevenLabs request failed", { status: response.status });
-      if (response.status === 429) return jsonError("Speech playback is busy. Please try again in a moment.", 429);
-      return jsonError("Could not generate speech right now.", 502);
+      return speechProviderError(response.status);
     }
 
     const audio = await response.arrayBuffer();
