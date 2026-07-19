@@ -33,6 +33,17 @@ function capture(command, args) {
   });
 }
 
+function stripRestrictGuards(sql) {
+  // pg_dump 17+ wraps output in \restrict/\unrestrict lines carrying a
+  // fresh random nonce on every run (a psql meta-command safety feature) —
+  // they're not schema content and would make every dump "differ" even
+  // when nothing about the schema actually changed.
+  return sql
+    .split("\n")
+    .filter((line) => !/^\\(restrict|unrestrict)\b/.test(line))
+    .join("\n");
+}
+
 async function dumpSchema(filePath) {
   const output = capture("pg_dump", [
     dbUrl,
@@ -41,7 +52,7 @@ async function dumpSchema(filePath) {
     "--no-privileges",
     "--no-comments"
   ]);
-  await import("node:fs/promises").then(({ writeFile }) => writeFile(filePath, output));
+  await import("node:fs/promises").then(({ writeFile }) => writeFile(filePath, stripRestrictGuards(output)));
 }
 
 const workDir = await mkdtemp(path.join(tmpdir(), "alwenda-supabase-validation-"));
