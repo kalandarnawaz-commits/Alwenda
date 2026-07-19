@@ -61,6 +61,18 @@ try {
 
   if (firstSchema !== secondSchema) {
     console.error("[local-supabase] Schema dump changed between clean rebuilds.");
+    const firstLines = firstSchema.split("\n");
+    const secondLines = secondSchema.split("\n");
+    const maxLines = Math.max(firstLines.length, secondLines.length);
+    let shown = 0;
+    for (let i = 0; i < maxLines && shown < 40; i += 1) {
+      if (firstLines[i] !== secondLines[i]) {
+        console.error(`  line ${i + 1}:`);
+        console.error(`    first:  ${firstLines[i] ?? "<missing>"}`);
+        console.error(`    second: ${secondLines[i] ?? "<missing>"}`);
+        shown += 1;
+      }
+    }
     process.exit(1);
   }
 
