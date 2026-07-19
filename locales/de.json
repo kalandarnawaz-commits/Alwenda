@@ -1312,7 +1312,7 @@
       "capabilityReviews": "Bewertungen",
       "capabilityRatings": "Bewertungspunkte",
       "capabilityAvailability": "Verfügbarkeit",
-      "capabilitySecurePayments": "Sichere Zahlungen"
+      "capabilitySecurePayments": "Direkte Vereinbarungen zwischen Nutzern"
     },
     "condition": {
       "new": "Neu",
@@ -1343,7 +1343,7 @@
     "needHelp": "Hilfe benötigt",
     "needHelpHint": "Aufgabe posten, Angebote erhalten",
     "needHelpTitle": "Hilfe benötigt?",
-    "needHelpBody": "Beschreibe einmal, was du brauchst. Verifizierte Fachkräfte in der Nähe können mit Verfügbarkeit, Angebot, Chat, Bewertungen und sicherer Zahlung in zukünftigen Phasen antworten.",
+    "needHelpBody": "Beschreibe einmal, was du brauchst. Fachkräfte in der Nähe können mit Verfügbarkeit, Angeboten und Chat antworten. Zahlungen und Vereinbarungen erfolgen direkt zwischen den Nutzern.",
     "needHelpCta": "Anfrage posten",
     "needHelpPosting": "Wird gepostet...",
     "postError": "Das hat nicht geklappt. Bitte versuche es erneut.",
@@ -1889,7 +1889,7 @@
       "notif4Action": "Ansehen",
       "notif5Category": "System",
       "notif5Title": "Zahlungsplatzhalter bereit",
-      "notif5Summary": "Sichere Zahlungen werden in einer zukünftigen Phase mit Marktplatz, Buchungen, Jobs und Dienstleistungen verknüpft.",
+      "notif5Summary": "Hinweise zur Transaktionssicherheit und Meldefunktionen sind für Marktplatz, Jobs, Vermietungen und Dienstleistungen verfügbar.",
       "notif5Priority": "Zukünftig",
       "notif5Time": "Heute",
       "notif5Action": "Mehr erfahren",

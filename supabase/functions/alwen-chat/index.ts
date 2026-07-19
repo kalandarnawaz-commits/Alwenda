@@ -111,13 +111,14 @@ const tools = [
         condition: { type: "string", enum: LISTING_CONDITIONS, description: "Only for physical items being sold — omit for rentals/jobs/services." },
         pickupAvailable: { type: "boolean", description: "True if the user said the buyer can pick it up in person." },
         deliveryAvailable: { type: "boolean", description: "True if the user said they can deliver it." },
+        offerorStatus: { type: "string", enum: ["private", "trader"], description: "Required declaration from the user: private for a private seller/provider, trader for a trader/business. Ask the user and do not infer it." },
         tags: {
           type: "array",
           items: { type: "string" },
           description: "A few short keywords buyers might search for, e.g. ['bike', 'mountain', 'trek']. Omit if nothing obvious."
         }
       },
-      required: ["title", "description", "category"],
+      required: ["title", "description", "category", "offerorStatus"],
       additionalProperties: false
     }
   }
@@ -321,10 +322,21 @@ Deno.serve(async (req) => {
       const pricePeriod = typeof args.pricePeriod === "string" && LISTING_PRICE_PERIODS.includes(args.pricePeriod) ? args.pricePeriod : priceAmount ? "one_time" : null;
       const area = typeof args.area === "string" && args.area.trim() ? args.area.trim().slice(0, 120) : null;
       const condition = typeof args.condition === "string" && LISTING_CONDITIONS.includes(args.condition) ? args.condition : null;
+      const offerorStatus = args.offerorStatus === "private" || args.offerorStatus === "trader" ? args.offerorStatus : null;
       const tags = Array.isArray(args.tags) ? args.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 10) : [];
 
       let toolOutput: string;
-      if (title && description) {
+      if (title && description && offerorStatus) {
+        const { error: classificationError } = await supabase.rpc("set_offeror_status", {
+          p_status: offerorStatus,
+          p_terms_version: "ALWENDA_LEGAL_POLICIES_EN-2026-07-18",
+          p_confirmed: true,
+          p_reason: "Explicitly confirmed in Alwen listing conversation"
+        });
+        if (classificationError) {
+          console.error("[alwen-chat] Failed to record offeror classification", classificationError.code);
+          toolOutput = JSON.stringify({ status: "error", message: "Confirm your private or trader status in Marketplace settings before publishing." });
+        } else {
         const { data: inserted, error: insertError } = await supabase
           .from("listings")
           .insert({
@@ -355,8 +367,9 @@ Deno.serve(async (req) => {
           createdListing = inserted;
           toolOutput = JSON.stringify({ status: "created", listingId: inserted.id });
         }
+        }
       } else {
-        toolOutput = JSON.stringify({ status: "error", message: "Missing title or description." });
+        toolOutput = JSON.stringify({ status: "error", message: "Missing title, description, or offeror status." });
       }
 
       const followUpInput = [
