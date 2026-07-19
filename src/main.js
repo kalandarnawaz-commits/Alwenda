@@ -1744,6 +1744,28 @@ function bindCarousels() {
   });
 }
 
+/** Single source of truth for opening a place's detail sheet — every
+ * PlaceCard variant (grid, compact/coverflow, center or side slide) calls
+ * this instead of duplicating the state.selectedPlaceId/activeSheet/
+ * trackEvent/render() sequence. A missing or unrecognised id is refused
+ * rather than opening a broken sheet (renderPlaceDetailSheet expects to
+ * find a matching business by id). */
+function openPlaceDetail(placeId) {
+  if (!placeId) {
+    console.warn("[place-card] Missing place id — navigation disabled.");
+    return;
+  }
+  const item = importedBusinesses.find((business) => business.id === placeId);
+  if (!item) {
+    console.warn(`[place-card] No place found for id "${placeId}" — navigation disabled.`);
+    return;
+  }
+  state.selectedPlaceId = placeId;
+  state.activeSheet = "place";
+  trackEvent("business_viewed", { businessId: placeId, category: item.category });
+  render();
+}
+
 /** Cover-Flow 3D scroller: a real horizontally-scrollable track underneath
  * (touch/trackpad/scrollbar drag all just work) — this only decorates each
  * slide's transform based on how far its center actually is from the
@@ -1797,20 +1819,21 @@ function bindCoverflow() {
       if (!card || !viewport.contains(card)) return;
       event.preventDefault();
       event.stopPropagation();
-      state.selectedPlaceId = card.dataset.placeId;
-      state.activeSheet = "place";
-      const item = importedBusinesses.find((business) => business.id === card.dataset.placeId);
-      trackEvent("business_viewed", { businessId: card.dataset.placeId, category: item?.category });
-      render();
+      openPlaceDetail(card.dataset.placeId);
     });
 
-    /* A capture-phase click handler used to swallow taps on any slide that
-       wasn't already centered (recentering it instead of opening it), so a
-       card only opened on a second tap — and for a slide that could never
-       become "active" (e.g. the first/last one, with nowhere left to
-       scroll to center it), it never opened at all. Every other card type
-       in the app opens on a single tap; this rail should match that
-       instead of requiring a hidden double-tap. */
+    /* Keyboard equivalent of the click handler above — only fires when the
+       card itself (not a nested favourite/action button) has focus, so
+       Enter/Space on those buttons keeps triggering their own handler
+       instead of also opening the sheet. */
+    viewport.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+      const card = event.target.closest('[data-sheet="place"][data-place-id]');
+      if (!card || event.target !== card || !viewport.contains(card)) return;
+      event.preventDefault();
+      openPlaceDetail(card.dataset.placeId);
+    });
+
     update();
   });
 }
@@ -3726,8 +3749,12 @@ function renderPlaceCardCompact(item) {
         ? t("status.closedNow")
         : item.address || item.neighbourhood || "Vilnius";
   const specialty = realPlaceSpecialty(item);
+  const hasValidId = Boolean(item.id);
+  const navAttrs = hasValidId
+    ? `data-sheet="place" data-place-id="${item.id}" role="button" tabindex="0" aria-label="${escapeHtml(item.name)}"`
+    : "";
   return `
-    <article class="place-card place-card--compact" data-sheet="place" data-place-id="${item.id}">
+    <article class="place-card place-card--compact" ${navAttrs}>
       <div class="place-card-photo">
         ${renderPlacePhoto(item)}
         <span class="place-card-category-badge" aria-hidden="true">${categoryIconFor(item)}</span>
@@ -8405,9 +8432,16 @@ function renderOpenStatusBadge(item) {
 function renderPlaceCard(item) {
   const distance = formatDistance(distanceFromCenter(item));
   const photoCount = (item.photos && item.photos.length) || (item.photoUrl ? 1 : 0);
+  const hasValidId = Boolean(item.id);
+  // Mouse-only trigger on the photo (kept out of the tab order to avoid a
+  // duplicate stop for the same action) plus a real role="button" on the
+  // body — the primary keyboard target — so Tab reaches the card exactly
+  // once and Enter/Space there opens the same sheet a click does.
+  const photoNavAttrs = hasValidId ? `data-sheet="place" data-place-id="${item.id}"` : "";
+  const bodyNavAttrs = hasValidId ? `data-sheet="place" data-place-id="${item.id}" role="button" tabindex="0" aria-label="${escapeHtml(item.name)}"` : "";
   return `
     <article class="place-card">
-      <div class="place-card-photo" data-sheet="place" data-place-id="${item.id}">
+      <div class="place-card-photo" ${photoNavAttrs}>
         ${renderPlacePhoto(item)}
         <div class="place-photo-overlay place-photo-overlay-top">
           <span class="badge category-chip">${categoryIconFor(item)} ${businessCategoryLabel(item.category)}</span>
@@ -8422,7 +8456,7 @@ function renderPlaceCard(item) {
           ${photoCount > 1 ? `<span class="badge photo-count-badge">${icon("camera")}${photoCount}</span>` : ""}
         </div>
       </div>
-      <div class="place-card-body" data-sheet="place" data-place-id="${item.id}">
+      <div class="place-card-body" ${bodyNavAttrs}>
         <h3 class="place-card-title">${item.name}</h3>
         <p class="place-card-meta">${pinIcon()}${item.address || item.neighbourhood || "Vilnius"}</p>
         ${honestPlaceDescription(item) ? `<p class="place-card-description">${honestPlaceDescription(item)}</p>` : ""}
@@ -8894,16 +8928,37 @@ function bindEvents() {
     if (liveFieldRenderTimers.has("global-search")) flushLiveFieldRender("global-search");
   });
 
+  /* Coverflow-rail place cards (data-coverflow ancestor) are excluded here
+     and handled entirely inside bindCoverflow() instead — that viewport
+     already owns their click/keydown activation, and giving them a second,
+     independent binding here would open the same sheet twice per tap. */
   document.querySelectorAll("[data-sheet]").forEach((button) => {
+    if (button.closest("[data-coverflow]")) return;
     button.addEventListener("click", () => {
+      if (button.dataset.sheet === "place") {
+        openPlaceDetail(button.dataset.placeId);
+        return;
+      }
       state.activeSheet = button.dataset.sheet;
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
-      if (button.dataset.sheet === "place" && button.dataset.placeId) {
-        const item = importedBusinesses.find((business) => business.id === button.dataset.placeId);
-        trackEvent("business_viewed", { businessId: button.dataset.placeId, category: item?.category });
-      }
       if (button.dataset.sheet === "tyt") trackEvent("tyt_opened", {});
       render();
+    });
+  });
+
+  /* Keyboard equivalent of the place-card click handler above, scoped to
+     grid/full PlaceCard elements (the compact/coverflow variant handles
+     its own keydown inside bindCoverflow, since its click already goes
+     through the viewport rather than the card element directly). Only
+     fires when the card itself has focus, not a nested favourite/action
+     button, so those keep their own Enter/Space behaviour. */
+  document.querySelectorAll('[data-sheet="place"][role="button"]').forEach((card) => {
+    if (card.closest("[data-coverflow]")) return;
+    card.addEventListener("keydown", (event) => {
+      if (event.target !== card) return;
+      if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+      event.preventDefault();
+      openPlaceDetail(card.dataset.placeId);
     });
   });
 

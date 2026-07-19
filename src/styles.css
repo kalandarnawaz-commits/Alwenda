@@ -3571,7 +3571,8 @@ button:active {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+[role="button"]:focus-visible {
   outline: 3px solid rgba(10, 132, 255, 0.26);
   outline-offset: 2px;
 }
@@ -8175,6 +8176,15 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
 }
 
+/* The category chip has no click behaviour of its own — unlike the other
+   badges in this row, re-disable the pointer-events: auto above so a tap
+   on it doesn't ride through to the photo underneath and open the card,
+   keeping it a purely visual label rather than a second navigation
+   trigger for the same destination. */
+.place-photo-overlay .category-chip {
+  pointer-events: none;
+}
+
 .place-photo-overlay .open-now-badge {
   background: rgba(52, 211, 153, 0.94);
   color: #06341f;
@@ -8524,6 +8534,9 @@ body {
   font-size: 1.1rem;
   line-height: 1;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  /* Purely a visual label (already aria-hidden) — don't let it ride
+     through to the card's own navigation as a second trigger. */
+  pointer-events: none;
 }
 
 /* The save button lives over the photo like the category badge, but on
@@ -8618,16 +8631,25 @@ body {
   align-items: center;
   gap: 20px;
   padding: 8px 24px 20px;
-  transform-style: preserve-3d;
+  /* transform-style stays "flat" here deliberately — see .coverflow-slide
+     below for why "preserve-3d" on this pair of elements broke clicks. */
 }
 
 .coverflow-slide {
   flex: 0 0 auto;
   width: 300px;
   scroll-snap-align: center;
-  transform-style: preserve-3d;
-  will-change: transform;
   cursor: pointer;
+  /* "preserve-3d" here (and on .coverflow-track above) used to put pointer
+     hit-testing and paint order out of sync inside an overflow:auto 3D
+     scene: elementFromPoint() at a card's visible position resolved to the
+     flat .coverflow-track underneath it instead of the rotated card, so
+     clicks/taps on the card silently did nothing. Each slide's own
+     rotateY/translateZ/scale transform (set inline by bindCoverflow()) is
+     unaffected by this — transform-style only governs how a *child's* own
+     3D transforms compose, and neither the slide nor the compact card
+     inside it has one, so removing "preserve-3d" here doesn't change how
+     the rail looks, only whether it's clickable. */
 }
 
 .coverflow-slide .place-card--compact {
