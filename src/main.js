@@ -1690,8 +1690,9 @@ function carouselId(key) {
 
 function renderCarousel(labelKey, trackClass, cards) {
   const id = carouselId(labelKey);
+  const shellClass = trackClass.includes("marketplace-rail") ? " carousel-shell-marketplace" : "";
   return `
-    <div class="carousel-shell">
+    <div class="carousel-shell${shellClass}">
       <button class="carousel-control carousel-control-left" data-carousel-control="${id}" data-carousel-direction="-1" aria-label="${t("common.scrollLeft")}" type="button">${icon("arrow")}</button>
       <div id="${id}" class="carousel-track ${trackClass}" tabindex="0">
         ${cards}
