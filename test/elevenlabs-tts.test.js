@@ -38,7 +38,11 @@ test("ElevenLabs Edge Function handles auth, validation, safe errors, and audio 
   assert.match(source, /model_id: "eleven_multilingual_v2"/);
   assert.doesNotMatch(source, /language_code/);
   assert.match(source, /Content-Type": "audio\/mpeg"/);
-  assert.match(source, /response\.status === 429/);
+  assert.match(source, /speechProviderError\(status: number\)/);
+  assert.match(source, /Speech provider credentials need attention\./);
+  assert.match(source, /Speech voice is not available\. Check the configured voice\./);
+  assert.match(source, /Speech provider could not use this text or voice\./);
+  assert.match(source, /status === 429/);
   assert.doesNotMatch(source, /console\.log\(ELEVENLABS_API_KEY/);
   assert.doesNotMatch(source, /errorBody/);
 });

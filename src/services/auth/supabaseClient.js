@@ -54,6 +54,282 @@ async function importSupabaseSdk() {
   throw new Error("Alwenda couldn't reach its sign-in service. Check your connection and try again.");
 }
 
+function authStorageKey() {
+  try {
+    const ref = new URL(SUPABASE_URL).hostname.split(".")[0];
+    return `sb-${ref}-auth-token`;
+  } catch {
+    return "sb-alwenda-auth-token";
+  }
+}
+
+function getStoredSession() {
+  try {
+    const raw = window.localStorage.getItem(authStorageKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.currentSession || parsed?.session || parsed;
+  } catch {
+    return null;
+  }
+}
+
+function storeSession(session) {
+  if (!session) return;
+  window.localStorage.setItem(authStorageKey(), JSON.stringify({ currentSession: session, expiresAt: session.expires_at || null }));
+}
+
+function clearStoredSession() {
+  window.localStorage.removeItem(authStorageKey());
+}
+
+function sessionFromUrl() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (!accessToken || !refreshToken) return null;
+  const expiresIn = Number(params.get("expires_in") || "3600");
+  const session = {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: params.get("token_type") || "bearer",
+    expires_in: expiresIn,
+    expires_at: Math.floor(Date.now() / 1000) + expiresIn
+  };
+  storeSession(session);
+  if (window.history?.replaceState) {
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+  }
+  return session;
+}
+
+async function apiJson(path, { method = "GET", token = null, body = undefined, headers = {} } = {}) {
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...headers
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text ? { message: text } : null;
+  }
+  if (!response.ok) return { data: null, error: data?.error_description || data?.msg || data?.message || response.statusText };
+  return { data, error: null };
+}
+
+async function refreshSessionIfNeeded(session) {
+  if (!session?.refresh_token) return session || null;
+  if (session.expires_at && session.expires_at - 60 > Math.floor(Date.now() / 1000)) return session;
+  const { data, error } = await apiJson("/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    body: { refresh_token: session.refresh_token }
+  });
+  if (error || !data?.access_token) {
+    clearStoredSession();
+    return null;
+  }
+  storeSession(data);
+  return data;
+}
+
+async function fallbackSession() {
+  return refreshSessionIfNeeded(sessionFromUrl() || getStoredSession());
+}
+
+class RestQuery {
+  constructor(table, operation = "select", payload = null) {
+    this.table = table;
+    this.operation = operation;
+    this.payload = payload;
+    this.columns = "*";
+    this.filters = [];
+    this.ordering = null;
+    this.rowLimit = null;
+    this.expectSingle = false;
+    this.expectMaybeSingle = false;
+    this.onConflict = null;
+  }
+
+  select(columns = "*") {
+    this.columns = columns;
+    return this;
+  }
+
+  insert(payload) {
+    this.operation = "insert";
+    this.payload = payload;
+    return this;
+  }
+
+  upsert(payload, options = {}) {
+    this.operation = "upsert";
+    this.payload = payload;
+    this.onConflict = options.onConflict || null;
+    return this;
+  }
+
+  update(payload) {
+    this.operation = "update";
+    this.payload = payload;
+    return this;
+  }
+
+  eq(column, value) {
+    this.filters.push([column, `eq.${value}`]);
+    return this;
+  }
+
+  in(column, values) {
+    this.filters.push([column, `in.(${values.join(",")})`]);
+    return this;
+  }
+
+  order(column, options = {}) {
+    this.ordering = `${column}.${options.ascending === false ? "desc" : "asc"}`;
+    return this;
+  }
+
+  limit(value) {
+    this.rowLimit = value;
+    return this;
+  }
+
+  single() {
+    this.expectSingle = true;
+    return this.execute();
+  }
+
+  maybeSingle() {
+    this.expectMaybeSingle = true;
+    return this.execute();
+  }
+
+  then(resolve, reject) {
+    return this.execute().then(resolve, reject);
+  }
+
+  async execute() {
+    const session = await fallbackSession();
+    const params = new URLSearchParams();
+    params.set("select", this.columns);
+    this.filters.forEach(([key, value]) => params.append(key, value));
+    if (this.ordering) params.set("order", this.ordering);
+    if (this.rowLimit) params.set("limit", String(this.rowLimit));
+    if (this.onConflict) params.set("on_conflict", this.onConflict);
+    const path = `/rest/v1/${this.table}?${params.toString()}`;
+    const method = this.operation === "select" ? "GET" : this.operation === "update" ? "PATCH" : "POST";
+    const prefer = [
+      this.operation === "upsert" ? "resolution=merge-duplicates" : null,
+      this.operation !== "select" ? "return=representation" : null
+    ].filter(Boolean).join(",");
+    const { data, error } = await apiJson(path, {
+      method,
+      token: session?.access_token || SUPABASE_ANON_KEY,
+      body: this.operation === "select" ? undefined : this.payload,
+      headers: prefer ? { Prefer: prefer } : {}
+    });
+    if (error) return { data: null, error };
+    if (this.expectSingle) return { data: Array.isArray(data) ? data[0] || null : data, error: null };
+    if (this.expectMaybeSingle) return { data: Array.isArray(data) ? data[0] || null : data, error: null };
+    return { data, error: null };
+  }
+}
+
+function createFallbackClient() {
+  return {
+    auth: {
+      async signInWithOAuth({ provider, options = /** @type {any} */ ({}) }) {
+        const redirectTo = options.redirectTo || authRedirectUrl();
+        window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
+        return { data: null, error: null };
+      },
+      async signInWithOtp({ email, phone, options = /** @type {any} */ ({}) }) {
+        const body = email
+          ? { email, create_user: options.shouldCreateUser !== false, email_redirect_to: options.emailRedirectTo || authRedirectUrl() }
+          : { phone };
+        return apiJson("/auth/v1/otp", { method: "POST", body });
+      },
+      async resetPasswordForEmail(email, options = {}) {
+        return apiJson("/auth/v1/recover", { method: "POST", body: { email, redirect_to: options.redirectTo || authRedirectUrl() } });
+      },
+      async updateUser(payload) {
+        const session = await fallbackSession();
+        if (!session?.access_token) return { data: null, error: "Authentication required." };
+        return apiJson("/auth/v1/user", { method: "PUT", token: session.access_token, body: payload });
+      },
+      async verifyOtp(payload) {
+        const result = await apiJson("/auth/v1/verify", { method: "POST", body: payload });
+        if (result.data?.access_token) storeSession(result.data);
+        return result;
+      },
+      async getSession() {
+        const session = await fallbackSession();
+        return { data: { session }, error: null };
+      },
+      async getUser() {
+        const session = await fallbackSession();
+        if (!session?.access_token) return { data: { user: null }, error: null };
+        const { data, error } = await apiJson("/auth/v1/user", { token: session.access_token });
+        return { data: { user: data }, error };
+      },
+      onAuthStateChange(callback) {
+        window.setTimeout(async () => callback("INITIAL_SESSION", await fallbackSession()), 0);
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
+      async signOut() {
+        const session = await fallbackSession();
+        if (session?.access_token) await apiJson("/auth/v1/logout", { method: "POST", token: session.access_token, body: {} });
+        clearStoredSession();
+        return { error: null };
+      }
+    },
+    from(table) {
+      return new RestQuery(table);
+    },
+    rpc(name, args) {
+      return apiJson(`/rest/v1/rpc/${name}`, { method: "POST", token: getStoredSession()?.access_token || SUPABASE_ANON_KEY, body: args });
+    },
+    storage: {
+      from(bucket) {
+        return {
+          async upload(path, file, options = {}) {
+            const session = await fallbackSession();
+            const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+              method: "POST",
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+                "Content-Type": options.contentType || file.type || "application/octet-stream"
+              },
+              body: file
+            });
+            return { data: response.ok ? { path } : null, error: response.ok ? null : await response.text() };
+          },
+          async remove(paths) {
+            const session = await fallbackSession();
+            return apiJson(`/storage/v1/object/${bucket}`, {
+              method: "DELETE",
+              token: session?.access_token || SUPABASE_ANON_KEY,
+              body: { prefixes: paths }
+            });
+          },
+          getPublicUrl(path) {
+            return { data: { publicUrl: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}` } };
+          }
+        };
+      }
+    }
+  };
+}
+
 /** Lazily imports the SDK and creates the client — only ever runs the
  * network import when a project is actually configured, so the app never
  * pays for or depends on Supabase when running without credentials. */
@@ -66,6 +342,10 @@ function getClient() {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
         })
       )
+      .catch((error) => {
+        console.warn("[auth] Supabase SDK import failed; using REST auth fallback.", { message: error?.message || "unknown" });
+        return createFallbackClient();
+      })
       .catch((error) => {
         // Don't cache a failed attempt — the next call (e.g. the user
         // tapping "sign in" again) should get a fresh try instead of being
