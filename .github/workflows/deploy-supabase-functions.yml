@@ -1,0 +1,46 @@
+name: Deploy Supabase Edge Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      function_name:
+        description: Supabase Edge Function to deploy
+        required: true
+        default: alwen-chat
+      environment:
+        description: GitHub protected environment
+        required: true
+        default: supabase-edge-functions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-supabase-functions-${{ inputs.environment }}-${{ inputs.function_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Edge Function
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Validate function path
+        run: test -f "supabase/functions/${{ inputs.function_name }}/index.ts"
+
+      - name: Deploy selected function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy "${{ inputs.function_name }}" --project-ref "$SUPABASE_PROJECT_ID"
