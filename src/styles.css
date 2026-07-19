@@ -34,6 +34,14 @@
   --ink-inverse: #f7f6f3;
   --shadow-premium: 0 20px 60px rgba(15, 31, 27, 0.35);
   --shadow-glow: 0 0 0 1px rgba(52, 211, 153, 0.28), 0 8px 24px rgba(52, 211, 153, 0.25);
+  /* Aliases for a couple of token names referenced by newer components
+     (e.g. the live-opportunities screen) that were never actually
+     declared — they were silently falling back to browser defaults
+     instead of theming correctly. --surface-2 mirrors --surface-soft
+     (the existing "one step off white/black" surface); --text mirrors
+     --ink (the existing primary text color). */
+  --surface-2: var(--surface-soft);
+  --text: var(--ink);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -163,14 +171,14 @@ button {
 :root[data-theme="dark"] .section-shell,
 :root[data-theme="dark"] .living-section,
 :root[data-theme="dark"] .market-card,
-:root[data-theme="dark"] .imported-card,
+:root[data-theme="dark"] .place-card,
 :root[data-theme="dark"] .pro-card,
 :root[data-theme="dark"] .food-card,
 :root[data-theme="dark"] .visual-card,
 :root[data-theme="dark"] .live-card,
 :root[data-theme="dark"] .earn-card,
 :root[data-theme="dark"] .market-mini-card,
-:root[data-theme="dark"] .real-place-card,
+:root[data-theme="dark"] .place-card--compact,
 :root[data-theme="dark"] .pulse-card,
 :root[data-theme="dark"] .social-post-card,
 :root[data-theme="dark"] .request-card,
@@ -1606,6 +1614,8 @@ body.has-open-sheet {
 .section-shell {
   display: grid;
   gap: 16px;
+  width: 100%;
+  min-width: 0;
   padding: clamp(18px, 4vw, 30px);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1623,15 +1633,10 @@ body.has-open-sheet {
   padding-inline: 2px;
 }
 
-.living-rail {
-  display: grid;
-  grid-auto-columns: minmax(210px, 250px);
-  grid-auto-flow: column;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 2px 2px 10px;
-  scroll-snap-type: x mandatory;
-}
+/* .living-rail's real, cascade-winning definition is further down (one
+   canonical rail engine for both Home's rails and Community's — see the
+   comment there); an earlier, fully-superseded duplicate with different
+   numbers (210/250px vs 230px/28%) used to live here and was removed. */
 
 /* .live-card/.market-mini-card/.earn-card/.food-card/.visual-card are all
    fully re-styled later (shared --radius-lg/--shadow-soft card system, plus
@@ -1780,9 +1785,12 @@ body.has-open-sheet {
   min-height: 130px;
 }
 
-.community-preview {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
+/* .community-preview's real, cascade-winning definition is further down
+   (grid-auto-flow: column, an actual scroll rail) — an earlier duplicate
+   here set grid-template-columns instead (a wrapping grid, a genuinely
+   different layout mode), which could fight with the rail rule below
+   for how items actually flow. Removed rather than left to cascade
+   ambiguously. */
 
 .alwen-recommendation-card {
   display: grid;
@@ -1953,36 +1961,27 @@ body.has-open-sheet {
   background: rgba(255, 255, 255, 0.58);
 }
 
+/* MarketplaceCard — same radius/shadow token family as PlaceCard, one
+ * fixed size per grid/rail (no more Pinterest-style masonry column-count
+ * with per-item tall/wide/compact variants — see renderMarketplaceListing's
+ * comment in main.js). */
 .market-grid {
-  display: block;
-  column-count: 3;
-  column-gap: 16px;
+  display: grid;
+  gap: 16px;
 }
 
 .visual-market-card {
-  display: inline-block;
   width: 100%;
   overflow: hidden;
-  margin: 0 0 16px;
-  break-inside: avoid;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 20px 60px rgba(28, 25, 20, 0.11);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
 }
 
 .market-photo {
   position: relative;
-  min-height: 240px;
   background-position: center;
   background-size: cover;
-}
-
-.visual-market-card.is-tall .market-photo {
-  min-height: 340px;
-}
-
-.visual-market-card.is-wide .market-photo {
-  min-height: 210px;
 }
 
 .favourite-float,
@@ -2387,7 +2386,7 @@ body.has-open-sheet {
   grid-column: 1 / -1;
   min-height: 160px;
   margin: -16px -16px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background-position: center;
   background-size: cover;
 }
@@ -2625,7 +2624,6 @@ body.has-open-sheet {
 .screen-heading p,
 .content-card h3,
 .business-card h3,
-.place-card h3,
 .pulse-card h3,
 .offer-card h3,
 .match-row h3 {
@@ -2636,7 +2634,6 @@ body.has-open-sheet {
 .screen-heading p,
 .content-card p,
 .business-card p,
-.place-card p,
 .pulse-card p,
 .match-row p,
 .integration-list p,
@@ -2696,7 +2693,6 @@ body.has-open-sheet {
   scroll-snap-type: x mandatory;
 }
 
-.place-card,
 .content-card,
 .market-card,
 .contribution-card,
@@ -2838,15 +2834,6 @@ body.has-open-sheet {
   color: #a3372a;
 }
 
-.place-card {
-  display: grid;
-  gap: 10px;
-  min-height: 170px;
-  padding: 16px;
-  scroll-snap-align: start;
-}
-
-.place-card span,
 .badge,
 .match-row > span {
   display: inline-flex;
@@ -2866,15 +2853,6 @@ body.has-open-sheet {
   margin-inline-start: 6px;
   background: rgba(52, 211, 153, 0.14);
   color: var(--emerald-text);
-}
-
-.place-card button {
-  align-self: end;
-  min-height: 38px;
-  border-radius: 8px;
-  background: var(--mint);
-  color: var(--ink);
-  font-weight: 800;
 }
 
 .pulse-list,
@@ -3945,14 +3923,20 @@ select:focus-visible {
 
 .living-section .section-title h2 {
   font-size: clamp(1.35rem, 2.4vw, 2rem);
-  color: var(--ink);
 }
 
 .living-section .section-title p {
   max-width: 560px;
-  color: var(--muted);
 }
 
+/* The one canonical horizontal-rail engine — CSS-grid-based scroll-snap,
+   shared by every Home/Community rail (as opposed to the separate 3D
+   coverflow engine used only for real-place rails, see
+   .coverflow-viewport). .community-preview below shares this same
+   engine at a wider column size — post cards carry more content
+   (title, body preview, author, action row) than the compact place/
+   market tiles this rail was originally sized for, so the extra width
+   is a deliberate size choice, not an accidental duplicate. */
 .living-rail {
   display: grid;
   grid-auto-flow: column;
@@ -4084,6 +4068,8 @@ select:focus-visible {
   font-size: 1.25rem;
 }
 
+/* Same rail engine as .living-rail above, wider columns for post
+   content — see the comment there. */
 .community-preview {
   display: grid;
   grid-auto-flow: column;
@@ -4240,29 +4226,6 @@ select:focus-visible {
 
 .market-grid {
   column-gap: 18px;
-}
-
-.visual-market-card.market-card {
-  overflow: hidden;
-  border: 1px solid rgba(20, 20, 20, 0.08);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 20px 58px rgba(28, 25, 20, 0.11);
-}
-
-.visual-market-card .market-photo {
-  position: relative;
-  min-height: 250px;
-  background-position: center;
-  background-size: cover;
-}
-
-.visual-market-card.is-tall .market-photo {
-  min-height: 350px;
-}
-
-.visual-market-card.is-wide .market-photo {
-  min-height: 220px;
 }
 
 .ai-verified {
@@ -5049,9 +5012,9 @@ select:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 248px), 1fr));
 }
 
-.visual-market-card .market-photo,
-.visual-market-card.is-tall .market-photo,
-.visual-market-card.is-wide .market-photo {
+/* MarketplaceCard's one fixed image ratio (4:3, per the brief) — the
+   canonical rule; see main.js for why every card is one size now. */
+.visual-market-card .market-photo {
   aspect-ratio: 4 / 3;
   border-radius: 22px 22px 0 0;
 }
@@ -6885,13 +6848,6 @@ body {
   aspect-ratio: 1.35 / 1;
 }
 
-.visual-market-card .market-photo,
-.visual-market-card.is-tall .market-photo,
-.visual-market-card.is-wide .market-photo {
-  min-height: 0 !important;
-  aspect-ratio: 1.12 / 1;
-}
-
 .market-card-body,
 .pulse-content,
 .earn-body,
@@ -7113,12 +7069,16 @@ body {
    at full card width and visibly broke — overlapping text, a button
    sitting on top of the avatar — as soon as cards got narrower than
    roughly one-per-row. */
+/* ProfileCard — same radius/shadow token family as the rest of the
+ * shared card system. */
 .pro-card {
   display: grid !important;
   grid-template-columns: 1fr 1fr;
   align-items: start;
   gap: 10px;
   padding: 14px !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-soft);
 }
 
 .pro-card-identity {
@@ -8013,31 +7973,81 @@ body {
    invisible safety net underneath, for the rare case a photo URL
    fails to load at runtime.
    ============================================================ */
-.imported-card {
+/* PlaceCard — the shared card family for every real place (restaurants,
+   pharmacies, hotels, shops, attractions...). Two members share this
+   base: the full grid card below (.place-card, Explore/Saved/import
+   review) and the compact rail card (.place-card--compact, Home
+   sections) further down — same radius/shadow/photo-ratio tokens,
+   different content density per PLACE_CARD.md's own size rules. */
+.place-card {
   display: grid;
   gap: 10px;
   padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.imported-card > div {
+.place-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .place-card {
+    transition: none;
+  }
+  .place-card:hover {
+    transform: none;
+  }
+}
+
+.place-card-body {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  cursor: pointer;
 }
 
-.imported-card h3 {
+.place-card-title {
   margin: 0;
+  font-size: 1rem;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.imported-card > p {
+.place-card-meta {
   margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.place-card-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* `.imported-card > div { display: grid }` above outranks the plain
    `.imported-card-actions` class on specificity, which was silently
    forcing this (and the footer below) into a single-column grid and
    stacking every button full-width regardless of flex-basis. Scoping
-   with the `.imported-card >` parent restores the intended flex row. */
-.imported-card > .imported-card-actions {
+   with the `.place-card >` parent restores the intended flex row —
+   renderPlaceActionButtons()/renderPlaceFooterActions() still emit the
+   `.imported-card-*` class names themselves since they're shared
+   verbatim with the place-detail sheet, only the parent selector here
+   changed when the card root became `.place-card`. */
+.place-card > .imported-card-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -8084,8 +8094,8 @@ body {
 /* Tighter action buttons inside the directory grid tile specifically —
    the place-detail sheet (full-width, one place at a time) keeps the
    roomier default sizing above. */
-.imported-card .imported-card-actions .directions-btn,
-.imported-card .imported-card-actions button {
+.place-card .imported-card-actions .directions-btn,
+.place-card .imported-card-actions button {
   flex: 1 1 90px;
   min-height: 38px;
   padding: 0 10px;
@@ -8117,31 +8127,10 @@ body {
   font-weight: 800;
 }
 
-.imported-card-photo {
+.place-card-photo {
   margin: -16px -16px 0;
   cursor: pointer;
   position: relative;
-}
-
-/* Cards lift toward the viewer on hover — the same "premium, alive"
-   motion language already used for .real-place-card (Home's coverflow
-   rails); the directory grid never had it. */
-.imported-card {
-  transition: transform 160ms ease, box-shadow 160ms ease;
-}
-
-.imported-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .imported-card {
-    transition: none;
-  }
-  .imported-card:hover {
-    transform: none;
-  }
 }
 
 /* Category/open-status/distance/rating badges float directly on the
@@ -8196,17 +8185,13 @@ body {
   gap: 4px;
 }
 
-.imported-card > div[data-sheet] {
-  cursor: pointer;
-}
-
 /* Footer row: quiet source metadata + save/share icons + the subtle
    claim link. Deliberately NOT styled like the primary action buttons —
    claiming a business is a secondary path, not the card's headline.
-   Scoped with `.imported-card >` for the same specificity reason as
-   .imported-card-actions above — otherwise `.imported-card > div`
+   Scoped with `.place-card >` for the same specificity reason as
+   .imported-card-actions above — otherwise `.place-card > div`
    forces this back into a single-column grid. */
-.imported-card > .imported-card-footer,
+.place-card > .imported-card-footer,
 .place-detail-footer {
   display: flex;
   align-items: center;
@@ -8262,8 +8247,14 @@ body {
   overflow: hidden;
 }
 
-.imported-card-photo .place-photo {
-  height: 190px;
+/* PlaceCard's one fixed image ratio (16:10) — every place card, full or
+   compact, uses this instead of the fixed per-breakpoint pixel heights
+   the two former separate systems each had (190px on the grid card,
+   132/190/160/150px across four different breakpoints on the compact
+   rail card) — the ratio scales naturally with whatever width the card
+   actually has, so there's one rule instead of five. */
+.place-card-photo .place-photo {
+  aspect-ratio: 16 / 10;
   border-radius: var(--radius-md, 12px) var(--radius-md, 12px) 0 0;
   overflow: hidden;
 }
@@ -8464,13 +8455,12 @@ body {
   font-size: 0.7rem;
 }
 
-/* Compact "real place" carousel card — Home sections fed by real
-   imported city data (src/data/seedCityData.js). Photo-on-top,
-   white-body tile language shared with .market-mini-card (Trending
-   Marketplace): the photo is a fixed-height header, name/category/
-   status sit in their own padded box below it on the card surface,
-   never overlaid on the image itself. */
-.real-place-card {
+/* PlaceCard's compact rail member — Home sections fed by real imported
+   city data (src/data/seedCityData.js). Same border-radius family
+   (var(--radius-lg), 22px) and photo aspect-ratio as the full grid card
+   above; smaller padding and no action row is the deliberate, size-
+   appropriate difference (see renderPlaceCardCompact's own comment). */
+.place-card--compact {
   position: relative;
   display: grid;
   gap: 4px;
@@ -8478,48 +8468,49 @@ body {
   overflow: hidden;
   border: 1px solid rgba(20, 20, 20, 0.08);
   border-top: 3px solid rgba(20, 20, 20, 0.08);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 14px 34px rgba(28, 25, 20, 0.08);
+  box-shadow: var(--shadow-soft);
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
-.real-place-card:hover {
+.place-card--compact:hover {
   transform: translateY(-3px);
-  box-shadow: 0 22px 46px rgba(28, 25, 20, 0.14);
+  box-shadow: var(--shadow-card);
 }
 
 /* A thin top accent in the card's own category colour — the same palette
    already used for the photo-placeholder tint — so a whole rail reads as
    one category at a glance even before the icon/text registers. */
-.real-place-card:has(.category-placeholder-food-drink) { border-top-color: #e0b400; }
-.real-place-card:has(.category-placeholder-nightlife) { border-top-color: #9b6fd6; }
-.real-place-card:has(.category-placeholder-groceries) { border-top-color: #34d399; }
-.real-place-card:has(.category-placeholder-pharmacy) { border-top-color: #ef8a7a; }
-.real-place-card:has(.category-placeholder-healthcare) { border-top-color: #4fb3b3; }
-.real-place-card:has(.category-placeholder-hotels) { border-top-color: #c99a4a; }
-.real-place-card:has(.category-placeholder-shops) { border-top-color: #5b93e0; }
-.real-place-card:has(.category-placeholder-beauty-wellness) { border-top-color: #e26fa8; }
-.real-place-card:has(.category-placeholder-transport) { border-top-color: #7b8ba3; }
-.real-place-card:has(.category-placeholder-public-services) { border-top-color: #6b9e64; }
-.real-place-card:has(.category-placeholder-attractions) { border-top-color: #e0a83a; }
-.real-place-card:has(.category-placeholder-parks) { border-top-color: #5fa855; }
-.real-place-card:has(.category-placeholder-finance) { border-top-color: #a8c14a; }
-.real-place-card:has(.category-placeholder-automobile) { border-top-color: #6f838f; }
+.place-card--compact:has(.category-placeholder-food-drink) { border-top-color: #e0b400; }
+.place-card--compact:has(.category-placeholder-nightlife) { border-top-color: #9b6fd6; }
+.place-card--compact:has(.category-placeholder-groceries) { border-top-color: #34d399; }
+.place-card--compact:has(.category-placeholder-pharmacy) { border-top-color: #ef8a7a; }
+.place-card--compact:has(.category-placeholder-healthcare) { border-top-color: #4fb3b3; }
+.place-card--compact:has(.category-placeholder-hotels) { border-top-color: #c99a4a; }
+.place-card--compact:has(.category-placeholder-shops) { border-top-color: #5b93e0; }
+.place-card--compact:has(.category-placeholder-beauty-wellness) { border-top-color: #e26fa8; }
+.place-card--compact:has(.category-placeholder-transport) { border-top-color: #7b8ba3; }
+.place-card--compact:has(.category-placeholder-public-services) { border-top-color: #6b9e64; }
+.place-card--compact:has(.category-placeholder-attractions) { border-top-color: #e0a83a; }
+.place-card--compact:has(.category-placeholder-parks) { border-top-color: #5fa855; }
+.place-card--compact:has(.category-placeholder-finance) { border-top-color: #a8c14a; }
+.place-card--compact:has(.category-placeholder-automobile) { border-top-color: #6f838f; }
 
-.real-place-photo {
-  position: relative;
-  height: 132px;
+.place-card--compact .place-card-photo {
   margin: -10px -10px 10px;
   border-radius: 18px 18px 14px 14px;
-  overflow: hidden;
+}
+
+.place-card--compact .place-card-photo .place-photo {
+  border-radius: 0;
 }
 
 /* Small category "seal" over the photo corner — a quick visual
    identifier you can scan across a whole grid of cards without
    reading any text, on top of the text badge below the photo. */
-.real-place-category-badge {
+.place-card-category-badge {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -8535,7 +8526,32 @@ body {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
 }
 
-.real-place-card > span {
+/* The save button lives over the photo like the category badge, but on
+   the opposite corner — a heart toggle is the compact card's one action
+   beyond tap-to-open (see renderPlaceCardCompact's design note). Reuses
+   .icon-action's active-state colours so a saved place looks the same
+   whether the heart was toggled from a rail card or the full grid
+   card's footer. */
+.place-card-save {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #151515;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+}
+
+.place-card-save.is-active {
+  color: var(--emerald-text);
+}
+
+.place-card-eyebrow {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 800;
@@ -8543,29 +8559,27 @@ body {
   letter-spacing: 0.02em;
 }
 
-.real-place-card h3 {
-  margin: 0;
+.place-card--compact .place-card-title {
   font-size: 1rem;
-  color: var(--ink);
+  -webkit-line-clamp: 1;
 }
 
-.real-place-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
+.place-card--compact .place-card-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.real-place-card .open-now {
+.place-card--compact .open-now {
   color: var(--emerald-text);
   font-weight: 700;
 }
 
-.real-place-card .real-place-specialty {
+.place-card-specialty {
+  margin: 0;
   color: var(--ink);
   font-weight: 700;
+  font-size: 0.82rem;
 }
 
 /* Cover-Flow 3D scroller — a real scrollable track (touch/trackpad/
@@ -8616,31 +8630,23 @@ body {
   cursor: pointer;
 }
 
-.coverflow-slide .real-place-card {
+.coverflow-slide .place-card--compact {
   width: 300px;
   height: 100%;
-}
-
-.coverflow-slide .real-place-photo {
-  height: 190px;
 }
 
 .coverflow-slide.is-active {
   z-index: 100 !important;
 }
 
-.coverflow-slide.is-active .real-place-card {
+.coverflow-slide.is-active .place-card--compact {
   box-shadow: 0 32px 64px rgba(15, 31, 27, 0.28);
 }
 
 @media (max-width: 900px) {
   .coverflow-slide,
-  .coverflow-slide .real-place-card {
+  .coverflow-slide .place-card--compact {
     width: 250px;
-  }
-
-  .coverflow-slide .real-place-photo {
-    height: 160px;
   }
 }
 
@@ -8651,12 +8657,8 @@ body {
   }
 
   .coverflow-slide,
-  .coverflow-slide .real-place-card {
+  .coverflow-slide .place-card--compact {
     width: 76vw;
-  }
-
-  .coverflow-slide .real-place-photo {
-    height: 150px;
   }
 }
 
@@ -11008,9 +11010,15 @@ strong:has(> .verified-check) {
   font-weight: 800;
 }
 
-/* Post cards */
+/* Post cards (CommunityCard) — same radius/shadow token family as
+ * PlaceCard/MarketplaceCard, so a community post reads as the same kind
+ * of object even though its own content (type-colored left border, one
+ * primary action + counters) is deliberately different, per the shared
+ * card system's "same skeleton, different content" principle. */
 .pulse-card {
   border-left: 3px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
 }
 
 .pulse-card.type-alert {
@@ -11393,6 +11401,8 @@ strong:has(> .verified-check) {
   display: flex;
   flex-direction: column;
   gap: 28px;
+  width: 100%;
+  min-width: 0;
   max-width: 720px;
   margin-inline: auto;
   padding: clamp(16px, 4vw, 28px) clamp(14px, 3vw, 0px) 40px;
@@ -11419,6 +11429,8 @@ strong:has(> .verified-check) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+  min-width: 0;
   padding: clamp(28px, 6vw, 44px) clamp(20px, 5vw, 32px);
   border-radius: 28px;
   border: 1px solid var(--line);
@@ -11450,6 +11462,7 @@ strong:has(> .verified-check) {
   display: flex;
   align-items: flex-end;
   gap: 10px;
+  min-width: 0;
   margin-top: 6px;
   padding: 12px 12px 12px 20px;
   border-radius: 999px;
@@ -11467,6 +11480,8 @@ strong:has(> .verified-check) {
 
 .alwen-hero-form textarea {
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   max-height: 120px;
   min-height: 26px;
   padding: 6px 0;
@@ -11620,6 +11635,8 @@ strong:has(> .verified-check) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
+  min-width: 0;
   animation: alwenCardIn 360ms ease both;
 }
 
@@ -11650,12 +11667,15 @@ strong:has(> .verified-check) {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .alwen-quick-card {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   min-height: 56px;
   padding: 12px 14px;
   border-radius: 16px;
@@ -11683,6 +11703,10 @@ strong:has(> .verified-check) {
   border-radius: 999px;
   background: rgba(52, 211, 153, 0.14);
   font-size: 1.05rem;
+}
+
+.alwen-quick-card > span:last-child {
+  min-width: 0;
 }
 
 /* Running tasks */
@@ -11991,8 +12015,321 @@ strong:has(> .verified-check) {
 }
 
 /* Live opportunities — discovery-first demand marketplace */
-.opportunities-shell{max-width:1440px;margin-inline:auto}.opportunities-hero{padding:clamp(28px,5vw,72px);border-radius:32px;color:#fff;background:linear-gradient(110deg,rgba(5,35,29,.96),rgba(7,92,69,.78)),url('https://images.unsplash.com/photo-1569447891824-7a1758aa73a2?auto=format&fit=crop&w=1800&q=82') center/cover}.opportunities-hero h1{margin:8px 0 4px;font-size:clamp(2.5rem,7vw,6rem);line-height:.92;letter-spacing:-.06em}.opportunities-hero>p:last-of-type{font-size:clamp(1.05rem,2vw,1.5rem);opacity:.9}.opportunity-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:720px;margin-top:32px}.opportunity-stats article{display:flex;flex-direction:column;padding:18px;border:1px solid rgba(255,255,255,.24);border-radius:20px;background:rgba(0,0,0,.24);backdrop-filter:blur(14px)}.opportunity-stats strong{font-size:clamp(1.8rem,4vw,3rem)}.opportunity-stats span{opacity:.82}.opportunity-toolbar{position:sticky;top:72px;z-index:8;margin:18px 0 30px;padding:12px;border:1px solid var(--line);border-radius:20px;background:color-mix(in srgb,var(--surface) 90%,transparent);backdrop-filter:blur(18px)}.opportunity-filter-row{display:flex;gap:8px;overflow-x:auto;align-items:center;scrollbar-width:none}.opportunity-filter-row button,.opportunity-filter-row label{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);font-weight:750}.opportunity-filter-row button{padding:11px 16px}.opportunity-filter-row button.is-active{color:#fff;border-color:#096e54;background:#096e54}.opportunity-filter-row label{display:flex;align-items:center;gap:7px;padding:5px 8px 5px 14px}.opportunity-filter-row select{border:0;border-radius:999px;padding:7px 8px;background:var(--surface-2);color:var(--text);font:inherit}.opportunity-feed-heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:18px}.opportunity-feed-heading h2{margin:0;font-size:clamp(1.8rem,3vw,3rem);letter-spacing:-.04em}.opportunity-feed-heading p{margin:4px 0 0;color:var(--muted)}.opportunity-feed-heading>span{color:var(--muted);white-space:nowrap}.opportunity-feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.opportunity-card{overflow:hidden;border:1px solid var(--line);border-radius:26px;background:var(--surface);box-shadow:0 18px 45px rgba(17,35,29,.08)}.opportunity-cover{min-height:230px;padding:16px;display:flex;align-items:flex-start;justify-content:space-between;background-position:center;background-size:cover}.opportunity-cover span,.opportunity-cover strong{padding:8px 11px;border-radius:999px;color:#fff;background:rgba(7,23,19,.76);backdrop-filter:blur(10px)}.opportunity-cover strong{background:#d75332}.opportunity-body{padding:22px}.opportunity-price-row{display:flex;justify-content:space-between;gap:16px;align-items:start}.opportunity-price-row h2{margin:0;font-size:1.45rem}.opportunity-price-row b{color:#087255;font-size:1.45rem;white-space:nowrap}.opportunity-meta{color:var(--muted);font-weight:700}.opportunity-trust,.opportunity-tags,.opportunity-actions{display:flex;flex-wrap:wrap;gap:8px}.opportunity-trust{justify-content:space-between;padding:14px 0;color:#087255;font-weight:700}.opportunity-tags span{padding:7px 10px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:.82rem}.opportunity-actions{margin-top:20px}.opportunity-actions button,.opportunity-post-cta button{flex:1;padding:13px 18px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);font-weight:800}.opportunity-actions .opportunity-primary,.opportunity-post-cta button{color:#fff;border-color:#087255;background:#087255}.opportunity-post-cta{margin-top:56px;padding:clamp(28px,5vw,64px);border-radius:30px;text-align:center;background:var(--surface-2)}.opportunity-post-cta h2{margin:6px 0;font-size:clamp(2rem,4vw,3.5rem)}.opportunity-post-cta button{display:inline-flex;flex:initial;margin-top:16px}
-@media(max-width:760px){.opportunity-feed{grid-template-columns:1fr}.opportunity-stats{grid-template-columns:1fr}.opportunity-toolbar{top:8px}.opportunity-cover{min-height:190px}.opportunity-trust{flex-direction:column}}
+/* Live Opportunities (OpportunityCard family) — same radius/shadow token
+   language as PlaceCard/MarketplaceCard. Every block here gets an explicit
+   width:100%/min-width:0: this page's ancestor chain (.main/.view/
+   .opportunities-shell) is CSS grid, and grid items default to
+   min-width:auto, which lets an unconstrained child's content (the stat
+   cards, the filter row) inflate the *track* to its content width instead
+   of shrinking to fit the viewport — the actual cause of the horizontal
+   overflow on mobile. flexbox + explicit min-width:0 sidesteps it. */
+.opportunities-shell {
+  width: 100%;
+  min-width: 0;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.opportunities-hero {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(24px, 5vw, 72px);
+  border-radius: var(--radius-xl);
+  color: #fff;
+  background:
+    linear-gradient(110deg, rgba(5, 35, 29, .96), rgba(7, 92, 69, .78)),
+    url('https://images.unsplash.com/photo-1569447891824-7a1758aa73a2?auto=format&fit=crop&w=1800&q=82') center/cover;
+}
+
+.opportunities-hero h1 {
+  margin: 8px 0 4px;
+  font-size: clamp(2rem, 7vw, 6rem);
+  line-height: .95;
+  letter-spacing: -.05em;
+}
+
+.opportunities-hero > p:last-of-type {
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  opacity: .9;
+}
+
+.opportunity-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  max-width: 720px;
+  margin-top: 28px;
+}
+
+.opportunity-stats article {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: var(--radius-lg);
+  background: rgba(0, 0, 0, .24);
+  backdrop-filter: blur(14px);
+}
+
+.opportunity-stats strong {
+  font-size: clamp(1.6rem, 4vw, 3rem);
+}
+
+.opportunity-stats span {
+  opacity: .82;
+}
+
+.opportunity-toolbar {
+  width: 100%;
+  min-width: 0;
+  position: sticky;
+  top: 72px;
+  z-index: 8;
+  margin: 18px 0 30px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+/* .chip-row/.explore-category-row (see Explore) already supply the
+   proven mobile-safe overflow-x scroller and pill-button look — reused
+   here instead of a bespoke filter row, per "same skeleton, different
+   content". Only the <label>/<select> pair (unique to this toolbar) and
+   the is-active state (JS sets is-active, not Explore's is-selected) are
+   styled locally. */
+.opportunity-filter-row label {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 750;
+}
+
+.opportunity-filter-row button.is-active {
+  border-color: transparent;
+  color: #fff;
+  background: #096e54;
+}
+
+.opportunity-filter-row select {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.opportunity-feed-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px 20px;
+  margin-bottom: 18px;
+}
+
+.opportunity-feed-heading h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 3rem);
+  letter-spacing: -.03em;
+}
+
+.opportunity-feed-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.opportunity-feed-heading > span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.opportunity-feed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+}
+
+.opportunity-card {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  transition: box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease);
+}
+
+@media (hover: hover) {
+  .opportunity-card:hover {
+    box-shadow: var(--shadow-card);
+    transform: translateY(-2px);
+  }
+}
+
+.opportunity-cover {
+  aspect-ratio: 16 / 9;
+  padding: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background-position: center;
+  background-size: cover;
+}
+
+.opportunity-cover span,
+.opportunity-cover strong {
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(7, 23, 19, .76);
+  backdrop-filter: blur(10px);
+  font-size: .82rem;
+}
+
+.opportunity-cover strong {
+  background: #d75332;
+}
+
+.opportunity-body {
+  padding: 18px;
+}
+
+.opportunity-price-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.opportunity-price-row h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.opportunity-price-row b {
+  flex: 0 0 auto;
+  color: #087255;
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+
+.opportunity-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: .88rem;
+}
+
+.opportunity-body > p:not([class]) {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: .92rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.opportunity-trust,
+.opportunity-tags,
+.opportunity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.opportunity-trust {
+  justify-content: space-between;
+  padding: 12px 0;
+  color: #087255;
+  font-weight: 700;
+  font-size: .88rem;
+}
+
+.opportunity-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.opportunity-actions {
+  margin-top: 16px;
+}
+
+.opportunity-actions button,
+.opportunity-post-cta button {
+  flex: 1 1 120px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.opportunity-actions .opportunity-primary,
+.opportunity-post-cta button {
+  color: #fff;
+  border-color: #087255;
+  background: #087255;
+}
+
+.opportunity-post-cta {
+  width: 100%;
+  min-width: 0;
+  margin-top: 48px;
+  padding: clamp(24px, 5vw, 64px);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  background: var(--surface-2);
+}
+
+.opportunity-post-cta h2 {
+  margin: 6px 0;
+  font-size: clamp(1.7rem, 4vw, 3.5rem);
+}
+
+.opportunity-post-cta button {
+  display: inline-flex;
+  flex: initial;
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .opportunity-toolbar {
+    top: 8px;
+  }
+  .opportunity-cover {
+    aspect-ratio: 16 / 10;
+  }
+  .opportunity-trust {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
 /* Alwenda Economy (Contribute) redesign — a calm identity/reputation
    experience built entirely from real signals (see contributeRealActivityBreakdown

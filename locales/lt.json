@@ -1299,6 +1299,11 @@
     "marketplaceTitle": "Viskas, ką miestas gali padaryti jums.",
     "marketplaceHeroTitle": "Rinka",
     "marketplaceHeroSubtitle": "Pirk. Parduok. Atrask. Samdyk. Rezervuok.",
+    "hub": {
+      "listingsCount": "{count} skelbimai",
+      "noListingsYet": "Nauja čia",
+      "activeNowCount": "{count} aktyvūs dabar"
+    },
     "capabilities": {
       "capabilityAiSearch": "DI paieška",
       "capabilityChat": "Pokalbiai",
