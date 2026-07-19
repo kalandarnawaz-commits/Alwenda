@@ -1,0 +1,109 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app-validation:
+    name: App validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Enforce lint warning baseline
+        run: node scripts/enforce-lint-baseline.mjs
+
+      - name: Production build
+        run: npm run build
+
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high
+
+      - name: Secret scanner smoke test
+        run: node scripts/secret-scan-smoke.mjs
+
+      - name: Static migration validation
+        run: node scripts/validate-migrations.mjs
+
+      - name: RLS and authorization safety checks
+        run: node scripts/validate-authorization-safety.mjs
+
+      - name: Workflow syntax guardrails
+        run: node scripts/validate-workflows.mjs
+
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  local-supabase-migrations:
+    name: Local Supabase migration rebuild
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Print local validation tool versions
+        run: |
+          docker --version
+          supabase --version
+          psql --version
+          pg_dump --version
+
+      - name: Start disposable local Supabase
+        run: supabase start
+
+      - name: Rebuild twice and run RLS probes
+        run: node scripts/run-local-supabase-validation.mjs
+
+      - name: Stop disposable local Supabase
+        if: always()
+        run: supabase stop --no-backup
