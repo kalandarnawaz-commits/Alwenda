@@ -153,6 +153,7 @@ const state = {
   selectedBusinessId: null,
   selectedListingId: null,
   selectedPlaceId: null,
+  selectedOpportunityId: null,
   activeConversationId: null,
   composerDraft: "",
   notificationFilter: "all",
@@ -713,6 +714,7 @@ const DEEP_LINK_VIEWS = new Set([
   "hire",
   "needHelp",
   "liveOpportunities",
+  "liveOpportunityDetail",
   "businesses",
   "businessProfile",
   "businessClaim",
@@ -739,7 +741,7 @@ const DEEP_LINK_VIEWS = new Set([
 /* Views whose deep link needs a companion ?id= to mean anything — read
    from and written to the URL alongside `view` by syncStateFromUrl /
    syncUrlToState below. */
-const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim"]);
+const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail"]);
 
 /* A directly-typed URL for these still works (syncStateFromUrl honors
    them below) so the internal Ops/city-import tooling stays runnable —
@@ -756,6 +758,7 @@ function currentDeepLinkId() {
   if (state.activeView === "businessProfile") return state.selectedBusinessId != null ? String(state.selectedBusinessId) : null;
   if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
   if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
+  if (state.activeView === "liveOpportunityDetail") return state.selectedOpportunityId != null ? String(state.selectedOpportunityId) : null;
   return null;
 }
 
@@ -782,6 +785,7 @@ function syncStateFromUrl() {
   else if (view === "businessProfile") state.selectedBusinessId = Number(id);
   else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
+  else if (view === "liveOpportunityDetail") state.selectedOpportunityId = id;
 }
 
 /** Keeps the address bar in sync with in-app navigation so browser Back/
@@ -3027,6 +3031,7 @@ function renderView() {
     hire: renderHire,
     needHelp: renderNeedHelp,
     liveOpportunities: renderLiveOpportunities,
+    liveOpportunityDetail: renderLiveOpportunityDetail,
     createListing: renderCreateListingForm,
     listings: renderListings,
     listingDetail: renderListingDetail,
@@ -3584,17 +3589,20 @@ function renderLiveAroundYou() {
     renderCarousel(
       "liveAroundYou",
       "living-rail live-rail",
-      liveAroundYou.map((item) => `
-        <article class="live-card">
+      liveAroundYou.map((item) => {
+        const opportunity = opportunityForHomeLiveItem(item);
+        return `
+        <a class="live-card" href="${liveOpportunityHref(opportunity.id)}" aria-label="${escapeHtml(`${t(item.titleKey)} ${item.value}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${opportunity.id}">
           <div class="card-photo" style="background-image: url('${item.image}')"></div>
-          <div class="floating-card-actions"><button aria-label="${t("common.favourite")}">${icon("heart")}</button></div>
+          <span class="floating-card-actions" aria-hidden="true"><span class="card-favourite-dot">${icon("heart")}</span></span>
           <span class="live-status-pill">${t("status.live")}</span>
           <h3>${t(item.titleKey)}</h3>
           <strong>${item.value}</strong>
           <p>${item.area} · ${t(item.urgencyKey)}</p>
           <small>${t(item.signalKey)}</small>
-        </article>
-      `).join("")
+        </a>
+      `;
+      }).join("")
     )
   );
 }
@@ -3629,8 +3637,10 @@ function renderEarnToday() {
     renderCarousel(
       "earnToday",
       "living-rail earn-rail",
-      earnToday.map((item) => `
-        <article class="earn-card" data-view="liveOpportunities" data-opportunity-filter-target="today">
+      earnToday.map((item) => {
+        const opportunity = opportunityForHomeEarnItem(item);
+        return `
+        <a class="earn-card" href="${liveOpportunityHref(opportunity.id)}" aria-label="${escapeHtml(`${t(item.titleKey)} ${item.value}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${opportunity.id}">
           <div class="earn-image" style="background-image: url('${item.image}')"></div>
           <div class="earn-body">
             <span>${item.time}</span>
@@ -3638,8 +3648,9 @@ function renderEarnToday() {
             <strong>${item.value}</strong>
             <p>${item.area} · ${t(item.fitKey)}</p>
           </div>
-        </article>
-      `).join("")
+        </a>
+      `;
+      }).join("")
     ),
     null,
     "today"
@@ -5803,13 +5814,48 @@ function renderNeedHelp() {
 const LIVE_OPPORTUNITIES = [
   { id: "airport-pickup", title: "Airport pickup", category: "Transport", price: 25, priceLabel: "€25", distance: 2, time: "Starts in 30 min", requester: "Verified traveller", trust: 4.9, urgent: true, today: true, description: "Pick up one traveller at Vilnius Airport and drive them to the Old Town.", tags: ["Car required", "1 passenger"], action: "Accept", image: "https://images.unsplash.com/photo-1515569067071-ec3b51335dd0?auto=format&fit=crop&w=1200&q=82" },
   { id: "babysitter", title: "Need babysitter", category: "Childcare", price: 40, priceLabel: "€40/hr", distance: 1.4, time: "Tonight · 19:00", requester: "Verified family", trust: 4.8, urgent: true, today: true, description: "Help with two children for three hours while their parents attend an event.", tags: ["Experience required", "3 hours"], action: "Apply", image: "https://images.unsplash.com/photo-1602030028438-4cf153cbae9e?auto=format&fit=crop&w=1200&q=82" },
-  { id: "furniture", title: "Furniture assembly", category: "Home services", price: 60, priceLabel: "€60", distance: 3.1, time: "Flexible timing", requester: "Verified homeowner", trust: 5.0, urgent: false, today: false, description: "Assemble a wardrobe and two bedside tables in a new apartment.", tags: ["Tools preferred", "Indoor"], action: "View details", image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=1200&q=82" },
+  { id: "deliver-package", title: "Deliver package", category: "Delivery", price: 15, priceLabel: "€15", distance: 0.9, time: "45 min", requester: "Verified neighbour", trust: 4.7, urgent: true, today: true, description: "Pick up a prepaid parcel near Old Town and deliver it along your route.", tags: ["On your route", "Light parcel"], action: "Accept", image: "https://images.unsplash.com/photo-1580674285054-bed31e145f59?auto=format&fit=crop&w=1200&q=82" },
+  { id: "help-move-sofa", title: "Help move sofa", category: "Moving", price: 35, priceLabel: "€35", distance: 2.4, time: "Today · 17:30", requester: "Verified resident", trust: 4.8, urgent: true, today: true, description: "Two people needed to move a sofa from a flat into a van in Žvėrynas.", tags: ["2 people needed", "Heavy lifting"], action: "Accept", image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=82" },
+  { id: "translate-document", title: "Translate document", category: "Translation", price: 22, priceLabel: "€22", distance: 0, time: "30 min", requester: "Verified resident", trust: 4.9, urgent: false, today: true, description: "Translate a short English-Lithuanian document and explain the key points in simple language.", tags: ["Remote", "Matches languages"], action: "Apply", image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1200&q=82" },
+  { id: "teach-english", title: "Teach English", category: "Tutoring", price: 30, priceLabel: "€30/hr", distance: 2.7, time: "Tomorrow", requester: "Verified learner", trust: 4.8, urgent: false, today: false, description: "One-hour conversational English lesson for a beginner near Užupis.", tags: ["Profile match", "Beginner"], action: "Apply", image: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=82" },
+  { id: "furniture", title: "Assemble furniture", category: "Home services", price: 40, priceLabel: "€40", distance: 3.1, time: "Tonight", requester: "Verified homeowner", trust: 5.0, urgent: false, today: true, description: "Assemble a flat-pack chair and small shelving unit in Šnipiškės. Tools preferred.", tags: ["Tools required", "Indoor"], action: "View details", image: "https://images.unsplash.com/photo-1581539250439-c96689b516dd?auto=format&fit=crop&w=1200&q=82" },
   { id: "dog-walk", title: "Evening dog walk", category: "Pet care", price: 18, priceLabel: "€18", distance: 0.8, time: "Today · 18:30", requester: "Verified neighbour", trust: 4.7, urgent: false, today: true, description: "Take a friendly golden retriever for a 45-minute walk around Bernardine Garden.", tags: ["Pet friendly", "45 min"], action: "Accept", image: "https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=1200&q=82" },
   { id: "photo-event", title: "Event photographer", category: "Creative", price: 120, priceLabel: "€120", distance: 4.2, time: "Saturday · 16:00", requester: "Verified organiser", trust: 4.9, urgent: false, today: false, description: "Photograph a small community event and deliver a curated digital gallery.", tags: ["Portfolio", "2 hours"], action: "Apply", image: "https://images.unsplash.com/photo-1502982720700-bfff97f2ecac?auto=format&fit=crop&w=1200&q=82" },
   { id: "grocery-delivery", title: "Grocery delivery", category: "Delivery", price: 22, priceLabel: "€22", distance: 1.1, time: "Within 1 hour", requester: "Verified resident", trust: 4.6, urgent: true, today: true, description: "Collect a prepaid grocery order and deliver it to a nearby apartment.", tags: ["Quick task", "No stairs"], action: "Accept", image: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=82" },
   { id: "language-help", title: "Lithuanian conversation practice", category: "Tutoring", price: 30, priceLabel: "€30/hr", distance: 2.7, time: "Tomorrow · 17:00", requester: "Verified learner", trust: 4.8, urgent: false, today: false, description: "Friendly conversation practice for an English speaker learning Lithuanian.", tags: ["Lithuanian", "Beginner"], action: "View details", image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=82" },
   { id: "moving-boxes", title: "Help moving boxes", category: "Moving", price: 75, priceLabel: "€75", distance: 3.6, time: "Today · 15:00", requester: "Verified homeowner", trust: 4.9, urgent: true, today: true, description: "Move packed boxes from a second-floor flat into a waiting van.", tags: ["Physical task", "2 hours"], action: "Accept", image: "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1200&q=82" }
 ];
+
+const HOME_LIVE_OPPORTUNITY_IDS = ["airport-pickup", "babysitter", "photo-event", "language-help"];
+const HOME_EARN_OPPORTUNITY_IDS = ["deliver-package", "help-move-sofa", "translate-document", "dog-walk", "teach-english", "furniture"];
+
+function opportunityForHomeLiveItem(item) {
+  const index = liveAroundYou.indexOf(item);
+  return LIVE_OPPORTUNITIES.find((opportunity) => opportunity.id === HOME_LIVE_OPPORTUNITY_IDS[index]) || LIVE_OPPORTUNITIES[0];
+}
+
+function opportunityForHomeEarnItem(item) {
+  const index = earnToday.indexOf(item);
+  return LIVE_OPPORTUNITIES.find((opportunity) => opportunity.id === HOME_EARN_OPPORTUNITY_IDS[index]) || LIVE_OPPORTUNITIES[0];
+}
+
+function findOpportunityById(id) {
+  return LIVE_OPPORTUNITIES.find((item) => String(item.id) === String(id)) || null;
+}
+
+function liveOpportunityHref(id) {
+  return `?view=liveOpportunityDetail&id=${encodeURIComponent(id)}`;
+}
+
+function openLiveOpportunityDetail(id) {
+  const item = findOpportunityById(id) || LIVE_OPPORTUNITIES[0];
+  state.selectedOpportunityId = item.id;
+  state.activeView = "liveOpportunityDetail";
+  state.activeSheet = null;
+  state.alwenOpen = false;
+  state.quickTranslateOpen = false;
+  render();
+}
 
 function filteredLiveOpportunities() {
   let items = LIVE_OPPORTUNITIES.filter((item) => {
@@ -5824,14 +5870,64 @@ function filteredLiveOpportunities() {
 }
 
 function renderOpportunityCard(item) {
-  return `<article class="opportunity-card">
+  return `<article class="opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${item.title} ${item.priceLabel}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">
     <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${item.category}</span>${item.urgent ? '<strong>Urgent</strong>' : ''}</div>
     <div class="opportunity-body"><div class="opportunity-price-row"><h2>${item.title}</h2><b>${item.priceLabel}</b></div>
     <p class="opportunity-meta">${item.distance} km away · ${item.time}</p>
     <p>${item.description}</p><div class="opportunity-trust"><span>✓ ${item.requester}</span><span>★ ${item.trust} trust score</span></div>
     <div class="opportunity-tags">${item.tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
-    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${item.action}</button><button type="button" data-view="messages">View details</button></div></div>
+    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${item.action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">View details</a></div></div>
   </article>`;
+}
+
+function renderLiveOpportunityDetail() {
+  const item = findOpportunityById(state.selectedOpportunityId) || LIVE_OPPORTUNITIES[0];
+  state.selectedOpportunityId = item.id;
+  const related = LIVE_OPPORTUNITIES
+    .filter((candidate) => candidate.id !== item.id && (candidate.category === item.category || candidate.today === item.today))
+    .slice(0, 3);
+  return `<section class="section-shell opportunity-detail-shell">
+    ${TRANSACTION_SAFETY_NOTICE}
+    <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+    <article class="opportunity-detail-card">
+      <div class="opportunity-detail-hero" style="background-image:url('${item.image}')">
+        <div class="opportunity-detail-badges">
+          <span>${item.category}</span>
+          ${item.urgent ? "<strong>Urgent</strong>" : ""}
+          ${item.today ? `<span>${t("common.today")}</span>` : ""}
+        </div>
+      </div>
+      <div class="opportunity-detail-body">
+        <div class="opportunity-detail-title">
+          <div>
+            <p class="eyebrow">Live around you · ${currentAreaLabel()}</p>
+            <h1>${item.title}</h1>
+            <p>${item.distance} km away · ${item.time}</p>
+          </div>
+          <strong>${item.priceLabel}</strong>
+        </div>
+        <div class="opportunity-detail-grid">
+          <article><span>Posted by</span><strong>${item.requester}</strong></article>
+          <article><span>Trust</span><strong>★ ${item.trust}</strong></article>
+          <article><span>Response</span><strong>${item.urgent ? "Fast match" : "Open request"}</strong></article>
+        </div>
+        <div class="opportunity-detail-section">
+          <h2>What they need</h2>
+          <p>${item.description}</p>
+        </div>
+        <div class="opportunity-tags">${item.tags.map((tag) => `<span>${tag}</span>`).join("")}</div>
+        <div class="opportunity-detail-actions">
+          <button type="button" class="opportunity-primary" data-view="messages">${item.action}</button>
+          <button type="button" data-view="messages">${t("common.message")}</button>
+          <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
+        </div>
+      </div>
+    </article>
+    ${related.length ? `<section class="opportunity-related">
+      <div class="section-title"><div><h2>${t("common.similarNearby")}</h2><p>${t("common.liveRequestsHint")}</p></div></div>
+      <div class="opportunity-feed">${related.map(renderOpportunityCard).join("")}</div>
+    </section>` : ""}
+  </section>`;
 }
 
 function renderLiveOpportunities() {
@@ -8732,10 +8828,30 @@ function bindEvents() {
     submitClaim(new FormData(event.target));
   });
 
+  document.querySelectorAll('[data-view="liveOpportunityDetail"][data-opportunity-id]').forEach((card) => {
+    const activateOpportunity = (event) => {
+      if (event.target.closest(".floating-card-actions, .mini-save")) return;
+      if (event.target.closest("button") && event.target.closest("button") !== card) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openLiveOpportunityDetail(card.dataset.opportunityId);
+    };
+    card.addEventListener("click", activateOpportunity);
+    if (card.getAttribute("role") === "button") {
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card) return;
+        if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+        activateOpportunity(event);
+      });
+    }
+  });
+
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", (event) => {
       if (button.tagName === "A") event.preventDefault();
       if (button.closest(".carousel-control")) return;
+      if (button !== event.target.closest("[data-view]")) return;
+      if (event.target.closest(".floating-card-actions, .mini-save")) return;
       if (button.closest(".ai-search, .tyt-ai-search") && state.query.trim()) {
         trackEvent("search_performed", { queryLength: state.query.trim().length, destination: button.dataset.view });
       }
@@ -8783,6 +8899,7 @@ function bindEvents() {
         if (selected?.offerorStatus === "trader") loadTraderDisclosure(selected.sellerId);
       }
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
+      if (button.dataset.opportunityId) state.selectedOpportunityId = button.dataset.opportunityId;
       if (button.dataset.conversationId) state.activeConversationId = Number(button.dataset.conversationId);
       render();
       if (isReturningToSameView) window.scrollTo({ top: 0, behavior: "smooth" });
