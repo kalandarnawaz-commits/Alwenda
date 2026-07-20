@@ -7651,6 +7651,25 @@ function recognitionLocalesForLanguage(languageKey) {
   return TRANSLATE_LANGUAGE_RECOGNITION_LOCALES[languageKey] || [TRANSLATE_LANGUAGE_SPEECH_LOCALE[languageKey] || "en-US"];
 }
 
+async function requestMicrophoneAccessForVoiceInput() {
+  if (!navigator.mediaDevices?.getUserMedia) return true;
+  state.translateVoiceError = null;
+  state.translateVoiceNotice = { panel: "from", message: t("translate.voiceMicPermissionPrompt") };
+  render();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    state.translateVoiceNotice = null;
+    return true;
+  } catch {
+    state.translateRecording = false;
+    state.translateVoiceNotice = null;
+    state.translateVoiceError = t("translate.voiceMicDenied");
+    render();
+    return false;
+  }
+}
+
 /** One-touch voice input: real speech-to-text via the browser's Web Speech
  * API (Chrome/Safari support it; Firefox doesn't — feature-detected, no
  * fabricated transcript on unsupported browsers). Tapping the mic while
@@ -7658,7 +7677,7 @@ function recognitionLocalesForLanguage(languageKey) {
  * buttons. On a successful capture it chains straight into a real
  * translation and then speaks the result — record once, hear the answer,
  * matching a true "one touch translator" flow. */
-function startVoiceInput() {
+async function startVoiceInput() {
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Ctor) {
     state.translateVoiceError = t("translate.voiceNotSupported");
@@ -7669,6 +7688,8 @@ function startVoiceInput() {
     activeSpeechRecognition?.stop();
     return;
   }
+  const microphoneReady = await requestMicrophoneAccessForVoiceInput();
+  if (!microphoneReady) return;
 
   const sourceLanguage = state.translateFromLanguage;
   const sourceLanguageLabel = t(sourceLanguage);

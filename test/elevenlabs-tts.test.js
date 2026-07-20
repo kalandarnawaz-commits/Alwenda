@@ -79,7 +79,9 @@ test("translation voice input follows the selected source language in every tran
 
   assert.match(source, /"translate\.language\.langLithuanian": \["lt-LT", "lt"\]/);
   assert.match(source, /const sourceLanguage = state\.translateFromLanguage/);
+  assert.match(source, /navigator\.mediaDevices\?\.getUserMedia/);
   assert.match(source, /recognition\.lang = recognitionLocales\[localeIndex\]/);
+  assert.match(source, /translate\.voiceMicPermissionPrompt/);
   assert.match(source, /translate\.listeningInLanguage/);
   assert.match(source, /document\.querySelectorAll\("\[data-translate-from\]"\)/);
   assert.match(source, /document\.querySelectorAll\("\[data-translate-record\]"\)/);
