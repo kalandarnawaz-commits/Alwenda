@@ -93,6 +93,7 @@ import {
   speakTranslatedText,
   stopTranslationSpeech
 } from "./services/voiceService.js?v=elevenlabs-tts-1";
+import { transcribeTranslationAudio } from "./services/translationTranscriptionService.js?v=translation-transcribe-1";
 import {
   createPersonaPlaceholderSession,
   IDENTITY_VERIFICATION_STATES,
@@ -7646,9 +7647,126 @@ async function speakText(text, bcp47, button, panel) {
 }
 
 let activeSpeechRecognition = null;
+let activeTranslationRecorder = null;
+let activeTranslationRecorderStream = null;
+let activeTranslationRecorderChunks = [];
+let activeTranslationRecorderTimer = null;
+
+const TRANSLATION_AUDIO_RECORDING_MS = 7000;
 
 function recognitionLocalesForLanguage(languageKey) {
   return TRANSLATE_LANGUAGE_RECOGNITION_LOCALES[languageKey] || [TRANSLATE_LANGUAGE_SPEECH_LOCALE[languageKey] || "en-US"];
+}
+
+function transcriptionLanguageForLanguage(languageKey) {
+  return TRANSLATE_LANGUAGE_ISO[languageKey] || "en";
+}
+
+function canUseAudioTranscriptionFallback() {
+  return Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+}
+
+function stopTranslationAudioRecording() {
+  if (activeTranslationRecorderTimer) {
+    window.clearTimeout(activeTranslationRecorderTimer);
+    activeTranslationRecorderTimer = null;
+  }
+  if (activeTranslationRecorder?.state === "recording") {
+    activeTranslationRecorder.stop();
+    return;
+  }
+  activeTranslationRecorderStream?.getTracks().forEach((track) => track.stop());
+  activeTranslationRecorder = null;
+  activeTranslationRecorderStream = null;
+  activeTranslationRecorderChunks = [];
+}
+
+async function translateCapturedVoiceText() {
+  if (!state.translateInputText.trim()) return;
+  await runTranslation();
+  if (state.translateStatus === "success") {
+    const speakButton = document.querySelector('[data-translate-speak="to"]');
+    speakText(state.translateOutputText.trim(), TRANSLATE_LANGUAGE_SPEECH_LOCALE[state.translateToLanguage], speakButton, "to");
+  }
+}
+
+function preferredAudioMimeType() {
+  const supportedTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/mpeg"];
+  return supportedTypes.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || "";
+}
+
+async function startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLabel) {
+  if (!canUseAudioTranscriptionFallback()) {
+    state.translateRecording = false;
+    state.translateVoiceNotice = null;
+    state.translateVoiceError = t("translate.voiceNotSupported");
+    render();
+    return;
+  }
+
+  try {
+    activeTranslationRecorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.translateRecording = true;
+    state.translateVoiceError = null;
+    state.translateOutputText = "";
+    state.translateStatus = "idle";
+    state.translateVoiceNotice = { panel: "from", message: t("translate.listeningInLanguage", { language: sourceLanguageLabel }) };
+    render();
+
+    activeTranslationRecorderChunks = [];
+    const mimeType = preferredAudioMimeType();
+    activeTranslationRecorder = mimeType
+      ? new MediaRecorder(activeTranslationRecorderStream, { mimeType })
+      : new MediaRecorder(activeTranslationRecorderStream);
+
+    activeTranslationRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data?.size) activeTranslationRecorderChunks.push(event.data);
+    });
+
+    activeTranslationRecorder.addEventListener("stop", async () => {
+      const recordingType = activeTranslationRecorder?.mimeType || mimeType || "audio/webm";
+      const audioBlob = new Blob(activeTranslationRecorderChunks, { type: recordingType });
+      activeTranslationRecorderStream?.getTracks().forEach((track) => track.stop());
+      activeTranslationRecorder = null;
+      activeTranslationRecorderStream = null;
+      activeTranslationRecorderChunks = [];
+      if (activeTranslationRecorderTimer) {
+        window.clearTimeout(activeTranslationRecorderTimer);
+        activeTranslationRecorderTimer = null;
+      }
+
+      try {
+        if (!audioBlob.size) throw new Error("EMPTY_RECORDING");
+        state.translateVoiceNotice = { panel: "from", message: t("translate.processingVoice") };
+        render();
+        state.translateInputText = await transcribeTranslationAudio({
+          audioBlob,
+          language: transcriptionLanguageForLanguage(sourceLanguage)
+        });
+        state.translateRecording = false;
+        state.translateVoiceNotice = null;
+        state.translateVoiceError = null;
+        render();
+        await translateCapturedVoiceText();
+      } catch {
+        state.translateRecording = false;
+        state.translateVoiceNotice = null;
+        state.translateVoiceError = t("translate.voiceRecognitionError");
+        render();
+      }
+    }, { once: true });
+
+    activeTranslationRecorder.start();
+    activeTranslationRecorderTimer = window.setTimeout(() => {
+      stopTranslationAudioRecording();
+    }, TRANSLATION_AUDIO_RECORDING_MS);
+  } catch {
+    stopTranslationAudioRecording();
+    state.translateRecording = false;
+    state.translateVoiceNotice = null;
+    state.translateVoiceError = t("translate.voiceMicDenied");
+    render();
+  }
 }
 
 /** One-touch voice input: real speech-to-text via the browser's Web Speech
@@ -7659,26 +7777,36 @@ function recognitionLocalesForLanguage(languageKey) {
  * translation and then speaks the result — record once, hear the answer,
  * matching a true "one touch translator" flow. */
 function startVoiceInput() {
-  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Ctor) {
-    state.translateVoiceError = t("translate.voiceNotSupported");
-    render();
-    return;
-  }
   if (state.translateRecording) {
     activeSpeechRecognition?.stop();
+    stopTranslationAudioRecording();
     return;
   }
 
   const sourceLanguage = state.translateFromLanguage;
   const sourceLanguageLabel = t(sourceLanguage);
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Ctor) {
+    startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLabel);
+    return;
+  }
+
   const recognitionLocales = recognitionLocalesForLanguage(sourceLanguage);
   let localeIndex = 0;
+  let fallbackStarted = false;
   const recognition = new Ctor();
   activeSpeechRecognition = recognition;
   recognition.lang = recognitionLocales[localeIndex];
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
+
+  const useAudioFallback = () => {
+    if (fallbackStarted) return;
+    fallbackStarted = true;
+    activeSpeechRecognition = null;
+    state.translateRecording = false;
+    startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLabel);
+  };
 
   recognition.onstart = () => {
     state.translateRecording = true;
@@ -7702,37 +7830,31 @@ function startVoiceInput() {
         try {
           recognition.start();
         } catch {
-          state.translateVoiceError = t("translate.voiceRecognitionError");
-          render();
+          useAudioFallback();
         }
       }, 50);
       return;
     }
-    state.translateVoiceError = event.error === "not-allowed" || event.error === "service-not-allowed"
-      ? t("translate.voiceMicDenied")
-      : event.error === "no-speech"
-        ? t("translate.voiceNoSpeech")
-        : t("translate.voiceRecognitionError");
+    if (["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported", "not-supported"].includes(event.error)) {
+      useAudioFallback();
+      return;
+    }
+    state.translateVoiceError = event.error === "no-speech" ? t("translate.voiceNoSpeech") : t("translate.voiceRecognitionError");
   };
 
   recognition.onend = async () => {
+    if (fallbackStarted) return;
     state.translateRecording = false;
     activeSpeechRecognition = null;
     if (state.translateVoiceNotice?.panel === "from") state.translateVoiceNotice = null;
     render();
-    if (!state.translateInputText.trim()) return;
-    await runTranslation();
-    if (state.translateStatus === "success") {
-      const speakButton = document.querySelector('[data-translate-speak="to"]');
-      speakText(state.translateOutputText.trim(), TRANSLATE_LANGUAGE_SPEECH_LOCALE[state.translateToLanguage], speakButton, "to");
-    }
+    await translateCapturedVoiceText();
   };
 
   try {
     recognition.start();
   } catch {
-    state.translateVoiceError = t("translate.voiceRecognitionError");
-    render();
+    useAudioFallback();
   }
 }
 
@@ -10119,6 +10241,7 @@ function bindEvents() {
   document.querySelectorAll("[data-translate-from]").forEach((select) => {
     select.addEventListener("change", (event) => {
       activeSpeechRecognition?.stop();
+      stopTranslationAudioRecording();
       state.translateRecording = false;
       state.translateFromLanguage = event.target.value;
       state.translateOutputText = "";
@@ -10151,6 +10274,7 @@ function bindEvents() {
   document.querySelectorAll("[data-translate-swap]").forEach((button) => {
     button.addEventListener("click", () => {
       activeSpeechRecognition?.stop();
+      stopTranslationAudioRecording();
       state.translateRecording = false;
       [state.translateFromLanguage, state.translateToLanguage] = [state.translateToLanguage, state.translateFromLanguage];
       if (state.translateStatus === "success") state.translateInputText = state.translateOutputText;
@@ -10182,6 +10306,7 @@ function bindEvents() {
     window.speechSynthesis?.cancel();
     stopTranslationSpeech();
     activeSpeechRecognition?.stop();
+    stopTranslationAudioRecording();
     state.translateInputText = "";
     state.translateOutputText = "";
     state.translateStatus = "idle";
