@@ -888,6 +888,8 @@ export const serviceProfessionals = [
     availability: "Tonight",
     price: "€35/hr",
     verified: true,
+    distance: "1.4 km",
+    responseTime: "16 min",
     skills: ["plumbing", "ikea assembly", "moving", "small repairs", "electrical"]
   },
   {
@@ -901,6 +903,8 @@ export const serviceProfessionals = [
     availability: "Tomorrow",
     price: "€28/hr",
     verified: true,
+    distance: "2.2 km",
+    responseTime: "20 min",
     skills: ["cleaning", "childcare", "laundry", "errands"]
   },
   {
@@ -914,6 +918,8 @@ export const serviceProfessionals = [
     availability: "Today 18:00",
     price: "€24/hr",
     verified: true,
+    distance: "2.6 km",
+    responseTime: "22 min",
     skills: ["tutoring", "lithuanian", "english", "homework", "translation"]
   },
   {
@@ -927,6 +933,8 @@ export const serviceProfessionals = [
     availability: "Next slot today",
     price: "Quote",
     verified: true,
+    distance: "0.7 km",
+    responseTime: "10 min",
     skills: ["legal", "accounting", "contracts", "tax", "company setup"]
   },
   {
@@ -940,6 +948,8 @@ export const serviceProfessionals = [
     availability: "This week",
     price: "€45/hr",
     verified: true,
+    distance: "3.3 km",
+    responseTime: "30 min",
     skills: ["photography", "it support", "websites", "devices", "events"]
   },
   {
@@ -1016,6 +1026,21 @@ export const serviceProfessionals = [
     distance: "0.9 km",
     responseTime: "15 min",
     skills: ["babysitter", "pet sitter", "childcare", "dogs", "cats"]
+  },
+  {
+    id: 511,
+    name: "Vilnius Wall Works",
+    category: "Painting & decorating",
+    categoryKey: "mock.proCategory.cat511",
+    area: "Naujamiestis",
+    rating: 4.8,
+    reviews: 57,
+    availability: "This weekend",
+    price: "€26/hr",
+    verified: true,
+    distance: "1.6 km",
+    responseTime: "19 min",
+    skills: ["painter", "painting", "walls", "interior", "wallpaper"]
   }
 ];
 

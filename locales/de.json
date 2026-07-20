@@ -1470,7 +1470,61 @@
     "requestTooShort": "Schreiben Sie ein paar Wörter mehr, damit Fachkräfte wissen, was Sie brauchen.",
     "instantMatchesFound": "{count} {category} in der Nähe, sofort verfügbar",
     "instantMatchesNone": "Noch keine {category} in der Nähe — veröffentliche deine Anfrage und wir benachrichtigen dich.",
-    "instantMatchesSeeAll": "Alle Treffer ansehen"
+    "instantMatchesSeeAll": "Alle Treffer ansehen",
+    "conversationalHeroTitle": "Sag Alwen, was du brauchst.",
+    "conversationalHeroHint": "Tippe ein Wort ein und sieh zu, wie daraus eine echte Anfrage wird — Alwen findet, wer helfen kann.",
+    "composerLabel": "Beschreibe, was du brauchst",
+    "composerPlaceholder": "Probier: ikea, putzen, streichen…",
+    "composerTypingIndicator": "Alwen schreibt deine Anfrage…",
+    "findProfessionalsCta": "Fachleute finden",
+    "aiSummaryNearbyLabel": "Fachleute in der Nähe",
+    "aiSummaryResponseLabel": "typische Antwortzeit",
+    "aiSummaryResponseValue": "~{minutes} Min.",
+    "aiSummaryPriceLabel": "Startpreis",
+    "aiSummaryPriceFallback": "Nach Angebot fragen",
+    "aiSummaryVerifiedLabel": "verifiziert",
+    "intents": {
+      "furniture": {
+        "chipLabel": "Möbel aufbauen",
+        "sentence": "Ich brauche jemanden, der morgen Abend meinen IKEA-Kleiderschrank aufbaut."
+      },
+      "cleaning": {
+        "chipLabel": "Reinigung",
+        "sentence": "Ich brauche eine vertrauenswürdige Reinigungskraft für meine Wohnung diesen Freitag."
+      },
+      "painting": {
+        "chipLabel": "Malerarbeiten",
+        "sentence": "Ich brauche jemanden, der nächstes Wochenende mein Wohnzimmer streicht."
+      },
+      "plumbing": {
+        "chipLabel": "Klempnerarbeiten",
+        "sentence": "Ich brauche schnellstmöglich einen Klempner für ein undichtes Rohr."
+      },
+      "electrical": {
+        "chipLabel": "Elektriker",
+        "sentence": "Ich brauche einen Elektriker für ein Problem mit der Verkabelung bei mir zu Hause."
+      },
+      "moving": {
+        "chipLabel": "Umzugshilfe",
+        "sentence": "Ich brauche Hilfe beim Umzug von Möbeln in eine neue Wohnung dieses Wochenende."
+      },
+      "tutoring": {
+        "chipLabel": "Nachhilfe",
+        "sentence": "Ich brauche diese Woche einen Nachhilfelehrer für zusätzliche Stunden."
+      },
+      "babysitting": {
+        "chipLabel": "Babysitting",
+        "sentence": "Ich brauche für heute Abend einen vertrauenswürdigen Babysitter."
+      },
+      "petcare": {
+        "chipLabel": "Tierbetreuung",
+        "sentence": "Ich brauche jemanden, der dieses Wochenende auf mein Haustier aufpasst."
+      },
+      "mechanic": {
+        "chipLabel": "Autohilfe",
+        "sentence": "Ich brauche diese Woche einen Mechaniker, der sich mein Auto ansieht."
+      }
+    }
   },
   "createListing": {
     "createListingTitle": "Etwas zum Verkauf oder zur Miete anbieten",
@@ -2067,7 +2121,8 @@
       "cat507": "Fahrer & Lieferung",
       "cat508": "Beauty & Schneiderei",
       "cat509": "Mechaniker",
-      "cat510": "Babysitter & Tiersitter"
+      "cat510": "Babysitter & Tiersitter",
+      "cat511": "Malern & Dekorieren"
     },
     "biz": {
       "biz201Tag1": "Reservierungen",

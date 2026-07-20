@@ -10314,6 +10314,18 @@ body {
    one-tap refinements, done. Self-contained (not layered on the shared
    .alwen-card/.request-card selectors above) so it can't be pulled off
    course by unrelated rules in those large combined selectors. === */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .post-request-card {
   display: grid;
   gap: var(--space-2);
@@ -10322,6 +10334,65 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+}
+
+/* Need Help's conversational composer, sitting inside the same
+   .opportunities-hero dark-photo shell as Live Opportunities/Events. */
+.need-help-hero .need-help-composer {
+  margin-top: 24px;
+  max-width: 720px;
+}
+
+.need-help-hero .post-request-input {
+  min-height: 90px;
+}
+
+.need-help-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: .88rem;
+  font-weight: 700;
+  opacity: .85;
+}
+
+.need-help-typing-cursor {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: needHelpCursorBlink 900ms ease-in-out infinite;
+}
+
+@keyframes needHelpCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+
+.need-help-hero .need-help-chip-row {
+  margin-top: 16px;
+  max-width: 720px;
+}
+
+.need-help-chip-row-secondary {
+  animation: alwenCardIn 320ms ease both;
+}
+
+.need-help-hero .need-help-summary {
+  animation: alwenCardIn 320ms ease both;
+}
+
+.need-help-hero .post-request-submit {
+  margin-top: 24px;
+}
+
+.need-help-results-reveal {
+  animation: alwenCardIn 360ms ease both;
+}
+
+.need-help-posted-confirmation {
+  margin-bottom: 20px;
 }
 
 .post-request-input {
@@ -12843,6 +12914,31 @@ strong:has(> .verified-check) {
 
 .opportunity-cover strong {
   background: #d75332;
+}
+
+/* Professionals have no photo, so the Need Help pro cards swap the
+   background-image cover for a centered initials circle instead of
+   faking a photo — everything else about the card shell is unchanged. */
+.opportunity-cover-avatar {
+  background: linear-gradient(135deg, var(--surface-2), var(--surface));
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.opportunity-cover-avatar .opportunity-cover-avatar-circle {
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.2rem;
+  backdrop-filter: none;
 }
 
 .opportunity-body {

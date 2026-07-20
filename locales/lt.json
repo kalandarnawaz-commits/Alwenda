@@ -1470,7 +1470,61 @@
     "requestTooShort": "Parašykite keliais žodžiais daugiau, kad profesionalai suprastų, ko jums reikia.",
     "instantMatchesFound": "{count} {category} netoliese, pasiruošę dabar",
     "instantMatchesNone": "Kol kas nėra {category} netoliese — paskelbkite užklausą ir mes jus informuosime.",
-    "instantMatchesSeeAll": "Žiūrėti visus atitikmenis"
+    "instantMatchesSeeAll": "Žiūrėti visus atitikmenis",
+    "conversationalHeroTitle": "Papasakok Alwen, ko tau reikia.",
+    "conversationalHeroHint": "Įrašyk žodį ir stebėk, kaip jis virsta tikru prašymu — Alwen suras, kas gali padėti.",
+    "composerLabel": "Aprašyk, ko tau reikia",
+    "composerPlaceholder": "Pabandyk: ikea, valymas, dažymas…",
+    "composerTypingIndicator": "Alwen rašo tavo prašymą…",
+    "findProfessionalsCta": "Ieškoti specialistų",
+    "aiSummaryNearbyLabel": "specialistų netoliese",
+    "aiSummaryResponseLabel": "įprastas atsakymo laikas",
+    "aiSummaryResponseValue": "~{minutes} min",
+    "aiSummaryPriceLabel": "pradinė kaina",
+    "aiSummaryPriceFallback": "Paprašyk kainos",
+    "aiSummaryVerifiedLabel": "patikrinti",
+    "intents": {
+      "furniture": {
+        "chipLabel": "Baldų surinkimas",
+        "sentence": "Man reikia žmogaus, kuris surinktų IKEA spintą rytoj vakare."
+      },
+      "cleaning": {
+        "chipLabel": "Valymas",
+        "sentence": "Man reikia patikimo valytojo mano butui šį penktadienį."
+      },
+      "painting": {
+        "chipLabel": "Dažymas",
+        "sentence": "Man reikia žmogaus, kuris nudažytų svetainę kitą savaitgalį."
+      },
+      "plumbing": {
+        "chipLabel": "Santechnika",
+        "sentence": "Man reikia santechniko kuo greičiau sutaisyti tekantį vamzdį."
+      },
+      "electrical": {
+        "chipLabel": "Elektrikas",
+        "sentence": "Man reikia elektriko sutvarkyti laidų problemą namuose."
+      },
+      "moving": {
+        "chipLabel": "Pagalba kraustantis",
+        "sentence": "Man reikia pagalbos perkeliant baldus į naują butą šį savaitgalį."
+      },
+      "tutoring": {
+        "chipLabel": "Korepetitorius",
+        "sentence": "Man reikia korepetitoriaus papildomoms pamokoms šią savaitę."
+      },
+      "babysitting": {
+        "chipLabel": "Auklė",
+        "sentence": "Man reikia patikimos auklės šiam vakarui."
+      },
+      "petcare": {
+        "chipLabel": "Augintinio priežiūra",
+        "sentence": "Man reikia žmogaus, kuris pasirūpintų mano augintiniu šį savaitgalį."
+      },
+      "mechanic": {
+        "chipLabel": "Automechanikas",
+        "sentence": "Man reikia automechaniko, kuris apžiūrėtų mano automobilį šią savaitę."
+      }
+    }
   },
   "createListing": {
     "createListingTitle": "Sukurti skelbimą apie pardavimą ar nuomą",
@@ -2067,7 +2121,8 @@
       "cat507": "Vairuotojas ir pristatymas",
       "cat508": "Grožis ir siuvimas",
       "cat509": "Mechanikas",
-      "cat510": "Auklė ir augintinių priežiūra"
+      "cat510": "Auklė ir augintinių priežiūra",
+      "cat511": "Dažymas ir dekoravimas"
     },
     "biz": {
       "biz201Tag1": "Rezervacijos",
