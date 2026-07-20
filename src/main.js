@@ -10839,6 +10839,8 @@ window.setInterval(refreshLocalWeather, 15 * 60_000);
    pure crossfade reveal of content that was already there.
    ============================================================ */
 const SPLASH_SESSION_KEY = "alwendaSplashShown";
+const SPLASH_TAGLINE_HOLD_MS = 1400;
+const SPLASH_REDUCED_HOLD_MS = 1200;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -10903,11 +10905,12 @@ async function initSplashScreen() {
     `;
   document.body.appendChild(root);
   const stage = root.querySelector(".splash-stage");
+  stage.classList.add("is-tagline-visible");
 
   if (reduced) {
     await wait(20);
     stage.classList.add("is-visible");
-    await wait(650);
+    await wait(SPLASH_REDUCED_HOLD_MS);
   } else {
     const wordmarkHost = stage.querySelector(".splash-wordmark");
     let lettersReady = false;
@@ -10927,8 +10930,7 @@ async function initSplashScreen() {
       await wait(20);
       stage.classList.add("is-alive");
       await wait(450);
-      stage.classList.add("is-tagline-visible");
-      await wait(300);
+      await wait(SPLASH_TAGLINE_HOLD_MS);
     } else {
       await wait(20);
       stage.classList.add("is-visible");
@@ -10939,8 +10941,7 @@ async function initSplashScreen() {
       await wait(200);
       stage.classList.add("is-alive");
       await wait(450);
-      stage.classList.add("is-tagline-visible");
-      await wait(300);
+      await wait(SPLASH_TAGLINE_HOLD_MS);
     }
   }
 
