@@ -6913,9 +6913,86 @@ body {
 }
 
 @media (max-width: 480px) {
+  .quick-translate-dock {
+    top: auto;
+    right: 14px;
+    bottom: calc(108px + env(safe-area-inset-bottom));
+    width: calc(100vw - 28px);
+    justify-items: end;
+  }
+
   .quick-translate-orb {
     width: 44px;
     height: 44px;
+  }
+
+  .quick-translate-panel {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    top: auto;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: min(58vh, 440px);
+    padding: 14px;
+    border-radius: 24px;
+  }
+
+  .quick-translate-panel-head {
+    align-items: center;
+  }
+
+  .quick-translate-panel-head strong {
+    font-size: 1rem;
+  }
+
+  .alwen-quick-translate {
+    gap: 9px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .alwen-quick-translate-badge {
+    font-size: 0.72rem;
+  }
+
+  .alwen-quick-translate-langs {
+    gap: 6px;
+  }
+
+  .alwen-quick-translate-langs .translation-select {
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 8px;
+    font-size: 0.78rem;
+  }
+
+  .alwen-quick-translate-langs .translation-swap-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .translation-voice-notice {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .alwen-quick-mic-row {
+    gap: 10px;
+  }
+
+  .alwen-quick-mic-button {
+    width: 48px;
+    min-width: 48px;
+    height: 48px;
+    min-height: 48px;
+  }
+
+  .alwen-quick-translate-open {
+    padding: 9px !important;
   }
 }
 
