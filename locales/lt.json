@@ -1376,7 +1376,6 @@
     "listening": "Klausoma…",
     "listeningInLanguage": "Klausoma kalba: {language}…",
     "voiceNotSupported": "Šioje naršyklėje balso įvestis nepalaikoma.",
-    "voiceMicPermissionPrompt": "Leiskite mikrofono prieigą, kai naršyklė paprašys. Alwenda ją naudoja tik jums kalbant.",
     "voiceMicDenied": "Mikrofono prieiga nesuteikta. Safari arba Chrome nustatymuose leiskite mikrofoną alwenda.com ir dar kartą palieskite mikrofoną.",
     "voiceNoSpeech": "Nepavyko išgirsti. Bandykite dar kartą.",
     "voiceRecognitionError": "Įvyko klaida naudojant balso įvestį. Bandykite dar kartą.",
