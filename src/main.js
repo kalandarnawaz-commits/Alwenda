@@ -223,6 +223,8 @@ const state = {
   helpRequestPosted: null,
   helpRequestError: null,
   helpRequestSubmitStatus: "idle",
+  needHelpDetectedIntentId: null,
+  needHelpTypewriter: null,
   listingDraft: {
     title: "",
     description: "",
@@ -5956,27 +5958,34 @@ function renderHire() {
 }
 
 function renderNeedHelp() {
-  const pros = filteredProfessionals();
   const requests = filteredHelpRequests();
+  const intent = NEED_HELP_INTENTS.find((item) => item.id === state.needHelpDetectedIntentId) || null;
+  const posted = state.helpRequestPosted;
 
   return `
     <section class="section-shell help-shell">
       ${renderTransactionSafetyNotice()}
-      <div class="screen-heading">
+      <div class="opportunities-hero need-help-hero">
         <p class="eyebrow">${t("common.activeMarketplace")}</p>
-        <h1>${t("needHelp.needHelpTitle")}</h1>
+        <h1>${t("needHelp.conversationalHeroTitle")}</h1>
+        <p>${t("needHelp.conversationalHeroHint")}</p>
+        ${
+          posted
+            ? ""
+            : `
+          ${renderNeedHelpComposer()}
+          ${state.helpRequestError ? `<p class="auth-error">${escapeHtml(state.helpRequestError)}</p>` : ""}
+          ${renderNeedHelpChips()}
+          ${renderNeedHelpSummary(intent)}
+          <button type="button" class="auth-primary-button post-request-submit" data-role="submit-help-request" ${state.helpRequestSubmitStatus === "loading" ? "disabled" : ""}>${state.helpRequestSubmitStatus === "loading" ? t("needHelp.needHelpPosting") : t("needHelp.findProfessionalsCta")}</button>
+        `
+        }
       </div>
-      ${renderPostRequestForm()}
+      ${posted ? renderNeedHelpResults(intent) : ""}
       <div class="connection-flow">
         <article><strong>1</strong><span>${t("common.describeNeed")}</span></article>
         <article><strong>2</strong><span>${t("common.prosRespond")}</span></article>
         <article><strong>3</strong><span>${t("common.bookPay")}</span></article>
-      </div>
-      <div class="section-title">
-        <div><h2>${t("common.matchingPros")}</h2><p>${t("common.matchingProsHint")}</p></div>
-      </div>
-      <div class="pro-list">
-        ${pros.map(renderProfessional).join("") || renderEmptyState(t("common.noResults"), "people")}
       </div>
       <div class="section-title">
         <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
@@ -6294,6 +6303,204 @@ const HELP_URGENCY_OPTIONS = [
   ["flexible", "needHelp.urgencyFlexible"]
 ];
 
+/* Curated keyword -> full-sentence expansions for the conversational Need
+   Help composer. This is a deterministic client-side dictionary, not a
+   live AI call per keystroke — a network round-trip per character would
+   never feel "smooth", and the real conversational AI (submitAlwenChat)
+   is a multi-turn assistant, the wrong shape for instant-typing expansion.
+   matchQuery is the exact string handed to the existing hireCategoryMatches()
+   (used everywhere else in this file for real pro matching) so the pre-submit
+   AI summary, the post-submit results, and the posted help_requests.category
+   all agree on the same real data — never three different numbers for the
+   same request. */
+const NEED_HELP_INTENTS = [
+  { id: "furniture", keywords: ["ikea", "furniture", "assemble", "assembly", "wardrobe"], matchQuery: "ikea assembly", icon: "🪑", chipLabel: "Assemble furniture", sentence: "I need someone to assemble my IKEA wardrobe tomorrow evening." },
+  { id: "cleaning", keywords: ["clean", "cleaning", "cleaner", "tidy"], matchQuery: "cleaning", icon: "🧹", chipLabel: "Cleaning", sentence: "I need a trusted cleaner for my apartment this Friday." },
+  { id: "painting", keywords: ["paint", "painting", "painter"], matchQuery: "painting", icon: "🎨", chipLabel: "Painting", sentence: "I need someone to paint my living room next weekend." },
+  { id: "plumbing", keywords: ["plumb", "plumber", "leak", "pipe", "tap"], matchQuery: "plumbing", icon: "🔧", chipLabel: "Plumbing", sentence: "I need a plumber to fix a leaking pipe as soon as possible." },
+  { id: "electrical", keywords: ["electric", "electrician", "wiring", "socket"], matchQuery: "electrician", icon: "💡", chipLabel: "Electrician", sentence: "I need an electrician to fix a wiring issue at my place." },
+  { id: "moving", keywords: ["move", "moving", "movers", "relocate", "relocation"], matchQuery: "moving help", icon: "📦", chipLabel: "Moving help", sentence: "I need help moving furniture to a new apartment this weekend." },
+  { id: "tutoring", keywords: ["tutor", "tutoring", "lesson", "homework", "study"], matchQuery: "tutoring", icon: "📚", chipLabel: "Tutoring", sentence: "I need a tutor for extra lessons this week." },
+  { id: "babysitting", keywords: ["babysit", "babysitter", "nanny", "childcare"], matchQuery: "babysitter", icon: "🧸", chipLabel: "Babysitting", sentence: "I need a trusted babysitter for this evening." },
+  { id: "petcare", keywords: ["pet", "dog", "cat", "petsit"], matchQuery: "pet sitter", icon: "🐾", chipLabel: "Pet care", sentence: "I need someone to look after my pet this weekend." },
+  { id: "mechanic", keywords: ["car", "mechanic", "vehicle"], matchQuery: "mechanic", icon: "🚗", chipLabel: "Car help", sentence: "I need a mechanic to look at my car this week." }
+];
+
+function needHelpIntentText(intent, field) {
+  const key = `needHelp.intents.${intent.id}.${field}`;
+  const value = t(key);
+  return value === key ? intent[field] : value;
+}
+
+/* Only fires on a short, still-keyword-like input — once the composer
+   holds a full sentence (expanded or hand-typed) it will never be short
+   enough to match again, so no extra "already expanded" guard is needed. */
+function matchNeedHelpIntent(rawText) {
+  const trimmed = rawText.trim().toLowerCase();
+  if (!trimmed || trimmed.length > 24) return null;
+  return NEED_HELP_INTENTS.find((intent) => intent.keywords.some((keyword) => keyword === trimmed || keyword.startsWith(trimmed) || trimmed.startsWith(keyword))) || null;
+}
+
+function professionalsForIntent(intent) {
+  return serviceProfessionals.filter((item) => hireCategoryMatches(item, intent.matchQuery));
+}
+
+/* Every stat below is computed from the same real serviceProfessionals
+   records hireCategoryMatches() already surfaces elsewhere in this file
+   (renderInlineProSuggestions, filteredProfessionals) — never invented. */
+function needHelpSummaryStats(intent) {
+  const matches = professionalsForIntent(intent);
+  const responseTimes = matches.map((item) => parseInt(item.responseTime, 10)).filter((value) => Number.isFinite(value));
+  const avgResponse = responseTimes.length ? Math.round(responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length) : null;
+  const prices = matches.map((item) => Number(String(item.price).match(/\d+/)?.[0])).filter((value) => Number.isFinite(value));
+  const minPrice = prices.length ? Math.min(...prices) : null;
+  return { count: matches.length, avgResponse, minPrice, verifiedCount: matches.filter((item) => item.verified).length, total: matches.length };
+}
+
+let needHelpTypewriterTimer = null;
+let needHelpDetectTimer = null;
+const NEED_HELP_TYPEWRITER_INTERVAL_MS = 22;
+const NEED_HELP_DETECT_IDLE_MS = 350;
+
+function focusNeedHelpComposer() {
+  const el = document.getElementById("need-help-composer");
+  if (!el) return;
+  el.focus();
+  const length = el.value.length;
+  el.setSelectionRange(length, length);
+}
+
+/* commit=true is used when the reveal finishes naturally (bake the fully
+   revealed sentence into the real draft text); commit=false is the
+   interrupt path — the user typed over it, so whatever they typed simply
+   stands and the in-progress reveal is discarded rather than fought. */
+function stopNeedHelpTypewriter(commit) {
+  if (needHelpTypewriterTimer) {
+    window.clearInterval(needHelpTypewriterTimer);
+    needHelpTypewriterTimer = null;
+  }
+  if (commit && state.needHelpTypewriter) {
+    state.helpRequestDraft.text = state.needHelpTypewriter.targetText;
+  }
+  state.needHelpTypewriter = null;
+}
+
+function tickNeedHelpTypewriter(targetText) {
+  if (!state.needHelpTypewriter) return;
+  state.needHelpTypewriter.revealedLength += 1;
+  if (state.needHelpTypewriter.revealedLength >= targetText.length) {
+    stopNeedHelpTypewriter(true);
+  }
+  render();
+  focusNeedHelpComposer();
+}
+
+/* Drives both triggers — a short keyword detected while typing, and a
+   direct tap on a starter chip — through one path, so there's exactly one
+   way this ever happens rather than two behaviors to keep in sync. */
+function startNeedHelpTypewriter(intent) {
+  stopNeedHelpTypewriter(false);
+  const targetText = needHelpIntentText(intent, "sentence");
+  state.hireCategory = intent.matchQuery;
+  state.needHelpDetectedIntentId = intent.id;
+  if (state.helpRequestError) state.helpRequestError = null;
+
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    state.helpRequestDraft.text = targetText;
+    render();
+    focusNeedHelpComposer();
+    return;
+  }
+
+  state.needHelpTypewriter = { targetText, revealedLength: 0 };
+  render();
+  focusNeedHelpComposer();
+  needHelpTypewriterTimer = window.setInterval(() => tickNeedHelpTypewriter(targetText), NEED_HELP_TYPEWRITER_INTERVAL_MS);
+}
+
+function renderNeedHelpComposer() {
+  const draft = state.helpRequestDraft;
+  const typewriter = state.needHelpTypewriter;
+  const displayText = typewriter ? typewriter.targetText.slice(0, typewriter.revealedLength) : draft.text;
+  return `
+    <div class="need-help-composer">
+      <label class="sr-only" for="need-help-composer">${t("needHelp.composerLabel")}</label>
+      ${typewriter ? `<p class="need-help-typing-indicator" aria-hidden="true"><span class="need-help-typing-cursor"></span>${t("needHelp.composerTypingIndicator")}</p>` : ""}
+      <textarea id="need-help-composer" class="post-request-input" rows="3" placeholder="${t("needHelp.composerPlaceholder")}">${escapeHtml(displayText)}</textarea>
+    </div>
+  `;
+}
+
+function renderNeedHelpChips() {
+  const activeIntentId = state.needHelpDetectedIntentId;
+  const starterRow = `
+    <div class="chip-row need-help-chip-row">
+      ${NEED_HELP_INTENTS.map((intent) => `<button type="button" class="chip ${activeIntentId === intent.id ? "is-active" : ""}" data-need-help-intent="${intent.id}">${intent.icon} ${needHelpIntentText(intent, "chipLabel")}</button>`).join("")}
+    </div>
+  `;
+  const urgencyRow = activeIntentId
+    ? `
+    <div class="chip-row need-help-chip-row need-help-chip-row-secondary">
+      ${HELP_URGENCY_OPTIONS.map(([value, labelKey]) => `<button type="button" class="chip ${state.helpRequestDraft.urgency === value ? "is-active" : ""}" data-help-urgency="${value}">${t(labelKey)}</button>`).join("")}
+    </div>
+  `
+    : "";
+  return starterRow + urgencyRow;
+}
+
+function renderNeedHelpSummary(intent) {
+  if (!intent) return "";
+  const stats = needHelpSummaryStats(intent);
+  return `
+    <div class="opportunity-stats need-help-summary" role="status" aria-live="polite">
+      <article><strong>${stats.count}</strong><span>${t("needHelp.aiSummaryNearbyLabel")}</span></article>
+      <article><strong>${stats.avgResponse != null ? t("needHelp.aiSummaryResponseValue", { minutes: stats.avgResponse }) : "—"}</strong><span>${t("needHelp.aiSummaryResponseLabel")}</span></article>
+      <article><strong>${stats.minPrice != null ? `€${stats.minPrice}/hr` : t("needHelp.aiSummaryPriceFallback")}</strong><span>${t("needHelp.aiSummaryPriceLabel")}</span></article>
+      <article><strong>${stats.verifiedCount}/${stats.total}</strong><span>${t("needHelp.aiSummaryVerifiedLabel")}</span></article>
+    </div>
+  `;
+}
+
+/* Reuses the exact opportunity-card shell (Events/Live Opportunities/
+   Marketplace) — professionals have no photo, so opportunity-cover-avatar
+   swaps the background-image cover for a centered initials circle rather
+   than faking a photo, everything else (price row, meta, trust row, tag
+   chips, dual-action footer) is the same class, same look. */
+function renderProCard(item) {
+  const categoryName = t(item.categoryKey);
+  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: categoryName, rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
+  return `<article class="opportunity-card pro-opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${item.name} ${categoryName}`)}" ${personAttrs}>
+    <div class="opportunity-cover opportunity-cover-avatar"><span class="opportunity-cover-avatar-circle">${initials(item.name)}</span><span>${categoryName}</span></div>
+    <div class="opportunity-body">
+      <div class="opportunity-price-row"><h2>${escapeHtml(item.name)}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h2><b>${item.price}</b></div>
+      <p class="opportunity-meta">${escapeHtml(item.area)}${item.distance ? ` · ${escapeHtml(item.distance)}` : ""} · ${escapeHtml(item.availability)}</p>
+      <div class="opportunity-trust"><span>★ ${item.rating} (${item.reviews})</span>${item.responseTime ? `<span>${t("needHelp.aiSummaryResponseValue", { minutes: parseInt(item.responseTime, 10) })}</span>` : ""}</div>
+      <div class="opportunity-tags">${item.skills.slice(0, 3).map((skill) => `<span>${escapeHtml(skill)}</span>`).join("")}</div>
+      <div class="opportunity-actions">
+        <button type="button" class="opportunity-primary" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
+        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderNeedHelpResults(intent) {
+  if (!intent) return "";
+  const matches = professionalsForIntent(intent);
+  return `
+    <section class="need-help-results-reveal">
+      <div class="post-request-success need-help-posted-confirmation">
+        <span class="post-request-success-icon">${icon("verify")}</span>
+        <h2>${t("needHelp.postedTitle")}</h2>
+        <p>${t("needHelp.postedHint")}</p>
+      </div>
+      <div class="section-title"><div><h2>${t("common.matchingPros")}</h2><p>${t("common.matchingProsHint")}</p></div></div>
+      <div class="opportunity-feed">${matches.map(renderProCard).join("") || renderEmptyState(t("common.noResults"), "people")}</div>
+      <button type="button" class="auth-primary-button" data-role="post-another-request">${t("needHelp.postAnother")}</button>
+    </section>
+  `;
+}
+
 function renderPostRequestForm() {
   if (state.auth.status !== "signedIn") {
     return `
@@ -6472,10 +6679,12 @@ async function submitHelpRequest() {
 }
 
 function resetHelpRequestDraft() {
+  stopNeedHelpTypewriter(false);
   state.helpRequestDraft = { text: "", urgency: "flexible" };
   state.helpRequestPosted = null;
   state.helpRequestError = null;
   state.hireCategory = null;
+  state.needHelpDetectedIntentId = null;
   render();
 }
 
@@ -10340,6 +10549,28 @@ function bindEvents() {
   document.querySelector('[data-role="submit-help-request"]')?.addEventListener("click", submitHelpRequest);
   document.querySelector('[data-role="post-another-request"]')?.addEventListener("click", resetHelpRequestDraft);
 
+  /* A dedicated listener rather than bindLiveField — the composer needs to
+     synchronously interrupt+re-render on its own terms the moment a
+     typewriter reveal is running, which would fight bindLiveField's own
+     debounced re-render/cursor-restore timers if the two were mixed. */
+  document.getElementById("need-help-composer")?.addEventListener("input", (event) => {
+    if (state.needHelpTypewriter) stopNeedHelpTypewriter(false);
+    state.helpRequestDraft.text = event.target.value;
+    if (state.helpRequestError) state.helpRequestError = null;
+    window.clearTimeout(needHelpDetectTimer);
+    needHelpDetectTimer = window.setTimeout(() => {
+      const intent = matchNeedHelpIntent(state.helpRequestDraft.text);
+      if (intent && intent.id !== state.needHelpDetectedIntentId) startNeedHelpTypewriter(intent);
+    }, NEED_HELP_DETECT_IDLE_MS);
+  });
+
+  document.querySelectorAll("[data-need-help-intent]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const intent = NEED_HELP_INTENTS.find((item) => item.id === button.dataset.needHelpIntent);
+      if (intent) startNeedHelpTypewriter(intent);
+    });
+  });
+
   bindLiveField("listing-title", (value) => {
     state.listingDraft.title = value;
   });
@@ -10827,6 +11058,14 @@ function bindPublicProfileEvents() {
       event.stopPropagation();
       openPublicProfile(element.dataset);
     });
+    if (element.getAttribute("role") === "button") {
+      element.addEventListener("keydown", (event) => {
+        if (event.target !== element) return;
+        if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+        event.preventDefault();
+        element.click();
+      });
+    }
   });
 
   document.querySelector('[data-person-action="book"]')?.addEventListener("click", () => {

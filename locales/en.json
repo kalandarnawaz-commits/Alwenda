@@ -1470,7 +1470,61 @@
     "requestTooShort": "Add a few more words so pros know what you need.",
     "instantMatchesFound": "{count} {category} nearby, ready now",
     "instantMatchesNone": "No {category} nearby yet — post your request and we'll notify you.",
-    "instantMatchesSeeAll": "See all matches"
+    "instantMatchesSeeAll": "See all matches",
+    "conversationalHeroTitle": "Tell Alwen what you need.",
+    "conversationalHeroHint": "Type a word and watch it turn into a real request — Alwen finds who can help.",
+    "composerLabel": "Describe what you need",
+    "composerPlaceholder": "Try: ikea, clean, paint…",
+    "composerTypingIndicator": "Alwen is writing your request…",
+    "findProfessionalsCta": "Find professionals",
+    "aiSummaryNearbyLabel": "nearby professionals",
+    "aiSummaryResponseLabel": "typical response",
+    "aiSummaryResponseValue": "~{minutes} min",
+    "aiSummaryPriceLabel": "starting price",
+    "aiSummaryPriceFallback": "Ask for a quote",
+    "aiSummaryVerifiedLabel": "verified",
+    "intents": {
+      "furniture": {
+        "chipLabel": "Assemble furniture",
+        "sentence": "I need someone to assemble my IKEA wardrobe tomorrow evening."
+      },
+      "cleaning": {
+        "chipLabel": "Cleaning",
+        "sentence": "I need a trusted cleaner for my apartment this Friday."
+      },
+      "painting": {
+        "chipLabel": "Painting",
+        "sentence": "I need someone to paint my living room next weekend."
+      },
+      "plumbing": {
+        "chipLabel": "Plumbing",
+        "sentence": "I need a plumber to fix a leaking pipe as soon as possible."
+      },
+      "electrical": {
+        "chipLabel": "Electrician",
+        "sentence": "I need an electrician to fix a wiring issue at my place."
+      },
+      "moving": {
+        "chipLabel": "Moving help",
+        "sentence": "I need help moving furniture to a new apartment this weekend."
+      },
+      "tutoring": {
+        "chipLabel": "Tutoring",
+        "sentence": "I need a tutor for extra lessons this week."
+      },
+      "babysitting": {
+        "chipLabel": "Babysitting",
+        "sentence": "I need a trusted babysitter for this evening."
+      },
+      "petcare": {
+        "chipLabel": "Pet care",
+        "sentence": "I need someone to look after my pet this weekend."
+      },
+      "mechanic": {
+        "chipLabel": "Car help",
+        "sentence": "I need a mechanic to look at my car this week."
+      }
+    }
   },
   "createListing": {
     "createListingTitle": "List something to sell or rent",
@@ -2067,7 +2121,8 @@
       "cat507": "Driver & delivery",
       "cat508": "Beauty & tailoring",
       "cat509": "Mechanic",
-      "cat510": "Babysitter & pet sitter"
+      "cat510": "Babysitter & pet sitter",
+      "cat511": "Painting & decorating"
     },
     "biz": {
       "biz201Tag1": "Reservations",
