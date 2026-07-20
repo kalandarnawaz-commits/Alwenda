@@ -79,13 +79,46 @@ test("translation voice input follows the selected source language in every tran
 
   assert.match(source, /"translate\.language\.langLithuanian": \["lt-LT", "lt"\]/);
   assert.match(source, /const sourceLanguage = state\.translateFromLanguage/);
-  assert.doesNotMatch(source, /navigator\.mediaDevices\?\.getUserMedia/);
   assert.match(source, /recognition\.lang = recognitionLocales\[localeIndex\]/);
   assert.match(source, /translate\.listeningInLanguage/);
+  assert.doesNotMatch(source, /requestMicrophoneAccessForVoiceInput/);
   assert.match(source, /document\.querySelectorAll\("\[data-translate-from\]"\)/);
   assert.match(source, /document\.querySelectorAll\("\[data-translate-record\]"\)/);
   assert.doesNotMatch(source, /document\.querySelector\("\[data-translate-from\]"\)\?\.addEventListener/);
   assert.doesNotMatch(source, /document\.querySelector\("\[data-translate-record\]"\)\?\.addEventListener/);
+});
+
+test("translation voice input falls back to secure audio transcription when browser speech fails", async () => {
+  const mainSource = await readRepoFile("src/main.js");
+  const clientSource = await readRepoFile("src/services/translationTranscriptionService.js");
+  const functionSource = await readRepoFile("supabase/functions/translate-transcribe/index.ts");
+
+  assert.match(mainSource, /transcribeTranslationAudio/);
+  assert.match(mainSource, /startAudioTranscriptionFallback/);
+  assert.match(mainSource, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
+  assert.match(mainSource, /new MediaRecorder/);
+  assert.match(mainSource, /TRANSLATION_AUDIO_RECORDING_MS = 7000/);
+  assert.match(mainSource, /"not-allowed"/);
+  assert.match(mainSource, /"language-not-supported"/);
+  assert.match(mainSource, /translate\.processingVoice/);
+
+  assert.match(clientSource, /TRANSLATE_TRANSCRIBE_FUNCTION_SLUG/);
+  assert.match(clientSource, /getSupabaseAccessToken\(\)/);
+  assert.match(clientSource, /Authorization: `Bearer \$\{accessToken\}`/);
+  assert.match(clientSource, /formData\.append\("audio", audioBlob/);
+  assert.match(clientSource, /MAX_TRANSLATION_AUDIO_BYTES/);
+  assert.doesNotMatch(clientSource, /OPENAI_API_KEY/);
+
+  assert.match(functionSource, /Deno\.env\.get\("OPENAI_API_KEY"\)/);
+  assert.match(functionSource, /supabase\.auth\.getUser\(\)/);
+  assert.match(functionSource, /Authentication required\.", 401/);
+  assert.match(functionSource, /MAX_AUDIO_BYTES = 8 \* 1024 \* 1024/);
+  assert.match(functionSource, /await req\.formData\(\)/);
+  assert.match(functionSource, /https:\/\/api\.openai\.com\/v1\/audio\/transcriptions/);
+  assert.match(functionSource, /openAiBody\.append\("model", "whisper-1"\)/);
+  assert.match(functionSource, /openAiBody\.append\("language", language\)/);
+  assert.match(functionSource, /return jsonResponse\(\{ text \}\)/);
+  assert.doesNotMatch(functionSource, /console\.log\(OPENAI_API_KEY/);
 });
 
 test("browser source never exposes ElevenLabs secrets or VITE-style speech keys", async () => {
@@ -93,12 +126,15 @@ test("browser source never exposes ElevenLabs secrets or VITE-style speech keys"
   for (const file of sourceFiles) {
     assert.ok(!file.text.includes("ELEVENLABS_API_KEY"), `${file.path} must not expose ELEVENLABS_API_KEY`);
     assert.ok(!file.text.includes("ELEVENLABS_VOICE_ID"), `${file.path} must not expose ELEVENLABS_VOICE_ID`);
+    assert.ok(!file.text.includes("OPENAI_API_KEY"), `${file.path} must not expose OPENAI_API_KEY`);
     assert.ok(!file.text.includes("VITE_ELEVENLABS"), `${file.path} must not use VITE_ELEVENLABS`);
   }
 
   const envExample = await readRepoFile("env.example.js");
   assert.ok(!envExample.includes("ELEVENLABS_API_KEY"));
   assert.ok(!envExample.includes("ELEVENLABS_VOICE_ID"));
+  assert.ok(!envExample.includes("OPENAI_API_KEY"));
   assert.ok(!envExample.includes("VITE_ELEVENLABS"));
   assert.match(envExample, /ELEVENLABS_TTS_FUNCTION_SLUG/);
+  assert.match(envExample, /TRANSLATE_TRANSCRIBE_FUNCTION_SLUG/);
 });

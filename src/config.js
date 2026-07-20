@@ -14,6 +14,8 @@ export const APP_ENV = env.APP_ENV || "development";
 export const APP_RELEASE_VERSION = env.APP_RELEASE_VERSION || "local-dev";
 export const PUBLIC_FEATURE_FLAGS = Object.freeze(env.PUBLIC_FEATURE_FLAGS || {});
 export const ELEVENLABS_TTS_FUNCTION_SLUG = env.ELEVENLABS_TTS_FUNCTION_SLUG || env.ALWENDA_TTS_FUNCTION_SLUG || "elevenlabs-tts";
+export const TRANSLATE_TRANSCRIBE_FUNCTION_SLUG =
+  env.TRANSLATE_TRANSCRIBE_FUNCTION_SLUG || env.ALWENDA_TRANSLATE_TRANSCRIBE_FUNCTION_SLUG || "translate-transcribe";
 
 export function isSupabaseConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -27,6 +29,7 @@ export function getRuntimeConfigDiagnostics() {
     hasSupabaseUrl: Boolean(SUPABASE_URL),
     hasSupabasePublishableKey: Boolean(SUPABASE_PUBLISHABLE_KEY),
     elevenLabsTtsFunctionSlug: ELEVENLABS_TTS_FUNCTION_SLUG,
+    translateTranscribeFunctionSlug: TRANSLATE_TRANSCRIBE_FUNCTION_SLUG,
     featureFlags: Object.keys(PUBLIC_FEATURE_FLAGS)
   };
 }
