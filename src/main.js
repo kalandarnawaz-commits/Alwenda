@@ -172,6 +172,8 @@ const state = {
   selectedListingId: null,
   selectedPlaceId: null,
   selectedOpportunityId: null,
+  selectedEventId: null,
+  savedEventIds: [],
   activeConversationId: null,
   composerDraft: "",
   notificationFilter: "all",
@@ -734,6 +736,8 @@ const DEEP_LINK_VIEWS = new Set([
   "needHelp",
   "liveOpportunities",
   "liveOpportunityDetail",
+  "events",
+  "eventDetail",
   "businesses",
   "businessProfile",
   "businessCreate",
@@ -761,7 +765,7 @@ const DEEP_LINK_VIEWS = new Set([
 /* Views whose deep link needs a companion ?id= to mean anything — read
    from and written to the URL alongside `view` by syncStateFromUrl /
    syncUrlToState below. */
-const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail"]);
+const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
 
 /* A directly-typed URL for these still works (syncStateFromUrl honors
    them below) so the internal Ops/city-import tooling stays runnable —
@@ -779,6 +783,7 @@ function currentDeepLinkId() {
   if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
   if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
   if (state.activeView === "liveOpportunityDetail") return state.selectedOpportunityId != null ? String(state.selectedOpportunityId) : null;
+  if (state.activeView === "eventDetail") return state.selectedEventId != null ? String(state.selectedEventId) : null;
   return null;
 }
 
@@ -806,6 +811,7 @@ function syncStateFromUrl() {
   else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
   else if (view === "liveOpportunityDetail") state.selectedOpportunityId = id;
+  else if (view === "eventDetail") state.selectedEventId = id;
 }
 
 /** Keeps the address bar in sync with in-app navigation so browser Back/
@@ -1576,19 +1582,32 @@ async function refreshLocalWeather() {
   }
 }
 
+/* Events/Jobs/Apartments values are computed from the real underlying
+   collections (EVENTS, listings) on every call — never hardcoded — so the
+   hero tile can never drift out of sync with what its destination screen
+   actually shows, the same discipline already applied to Weather below. */
 function currentLivingCitySignals() {
-  if (!state.localWeather) return livingCitySignals;
+  const eventsNearYouCount = EVENTS.filter((event) => event.outdoor && event.distanceMinutes <= 25).length;
+  const jobsCount = listings.filter((listing) => listing.type === "jobs").length;
+  const rentalsCount = listings.filter((listing) => listing.type === "rentals").length;
+  const base = [
+    livingCitySignals[0],
+    { ...livingCitySignals[1], value: String(eventsNearYouCount) },
+    { ...livingCitySignals[2], value: String(jobsCount) },
+    { ...livingCitySignals[3], value: String(rentalsCount) }
+  ];
+  if (!state.localWeather) return base;
   const [emoji, condition] = weatherCondition(state.localWeather.weather_code);
   const temperature = Math.round(state.localWeather.temperature_2m);
   const feelsLike = Math.round(state.localWeather.apparent_temperature);
   const wind = Math.round(state.localWeather.wind_speed_10m);
   return [
     {
-      ...livingCitySignals[0],
+      ...base[0],
       value: `${temperature}°C`,
       detail: `${emoji} ${condition} · 🌡️ ${feelsLike}°C · 💨 ${wind} km/h`
     },
-    ...livingCitySignals.slice(1)
+    ...base.slice(1)
   ];
 }
 
@@ -3068,6 +3087,8 @@ function renderView() {
     needHelp: renderNeedHelp,
     liveOpportunities: renderLiveOpportunities,
     liveOpportunityDetail: renderLiveOpportunityDetail,
+    events: renderEvents,
+    eventDetail: renderEventDetail,
     createListing: renderCreateListingForm,
     listings: renderListings,
     listingDetail: renderListingDetail,
@@ -3535,7 +3556,7 @@ function buildTodayDigest() {
    actually about, in the same order as livingCitySignals. */
 const LIVING_SIGNAL_DESTINATION = [
   { view: "explore" },
-  { view: "explore" },
+  { view: "events" },
   { view: "marketplace", category: "jobs" },
   { view: "marketplace", category: "rentals" }
 ];
@@ -5785,7 +5806,9 @@ function renderMarketplaceListing(item) {
         <p>${listingMeta(item)}</p>
         ${item.aiPrice || item.aiMatch ? `<div class="ai-price-pill">${icon("spark")}<span>${joinNonEmpty([item.aiMatch, item.aiPrice])}</span></div>` : ""}
         ${item.popularity || item.aiInsight ? `<div class="trust-row visual-trust">${item.popularity ? `<span>${item.popularity}</span>` : ""}${item.aiInsight ? `<span>${item.aiInsight}</span>` : ""}</div>` : ""}
-        <div class="market-actions"><button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button></div>
+        ${item.verifiedSeller || item.sellerReputation ? `<div class="opportunity-trust">${item.verifiedSeller ? `<span>✓ ${t("common.verifiedSeller")}</span>` : ""}${item.sellerReputation ? `<span>★ ${(item.sellerReputation / 20).toFixed(1)}</span>` : ""}</div>` : ""}
+        ${item.pickupAvailable || item.deliveryAvailable ? `<div class="opportunity-tags">${item.pickupAvailable ? `<span>${t("createListing.pickupAvailableLabel")}</span>` : ""}${item.deliveryAvailable ? `<span>${t("createListing.deliveryAvailableLabel")}</span>` : ""}</div>` : ""}
+        <div class="opportunity-actions market-actions"><button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button><a href="?view=listingDetail&id=${encodeURIComponent(item.id)}" data-view="listingDetail" data-listing-id="${item.id}">${t("common.viewDetails")}</a></div>
       </div>
     </article>
   `;
@@ -6127,6 +6150,137 @@ function renderLiveOpportunities() {
     <div class="opportunity-feed-heading"><div><h2>${t("common.whatCanYouEarnToday")}</h2><p>${t("common.freshVerifiedRequests")}</p></div><span>${t("common.matches", { count: items.length })}</span></div>
     <div class="opportunity-feed">${items.map(renderOpportunityCard).join("") || renderEmptyState(t("common.noOpportunitiesMatch"))}</div>
     <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t("common.postYourOwnRequestHint")}</p><button type="button" data-view="needHelp">${t("common.createRequest")}</button></section>
+  </section>`;
+}
+
+/* ==========================================================================
+   Events — backs the Home hero's "Events" quick-stat tile. Exactly 7 of
+   these satisfy outdoor && distanceMinutes <= 25 (the "near you" set the
+   tile's count is computed from in currentLivingCitySignals() above); the
+   rest form the "explore other events" set further down renderEvents().
+   ========================================================================== */
+const EVENTS = [
+  { id: "garden-yoga", title: "Sunrise Yoga in Bernardine Garden", category: "Wellness", dateLabel: "Today · 08:00", venue: "Bernardine Garden", distanceMinutes: 8, outdoor: true, priceLabel: "Free", organiser: "Vilnius Wellness Collective", rating: 4.8, description: "A gentle outdoor yoga session by the river, open to all levels. Bring your own mat.", tags: ["All levels", "45 min"], image: "https://images.unsplash.com/photo-1552196563-55cd4e45efb3?auto=format&fit=crop&w=1200&q=82" },
+  { id: "old-town-food-market", title: "Old Town Street Food Market", category: "Market", dateLabel: "Today · 12:00–20:00", venue: "Old Town", distanceMinutes: 12, outdoor: true, priceLabel: "Free entry", organiser: "Vilnius Old Town Association", rating: 4.7, description: "Local vendors serving Lithuanian street food, craft drinks, and seasonal produce.", tags: ["Family friendly", "Food & drink"], image: "https://images.unsplash.com/photo-1519677100203-a0e668c92439?auto=format&fit=crop&w=1200&q=82" },
+  { id: "vingis-live-music", title: "Live Music Evening in Vingis Park", category: "Music", dateLabel: "Today · 19:00", venue: "Vingis Park", distanceMinutes: 20, outdoor: true, priceLabel: "€5", organiser: "Vingis Park Concerts", rating: 4.6, description: "An open-air evening of local bands performing on the park's outdoor stage.", tags: ["Bring a blanket", "2 hours"], image: "https://images.unsplash.com/photo-1493676304819-0d7a8d026dcf?auto=format&fit=crop&w=1200&q=82" },
+  { id: "cathedral-square-farmers-market", title: "Cathedral Square Farmers Market", category: "Market", dateLabel: "Saturday · 09:00", venue: "Cathedral Square", distanceMinutes: 15, outdoor: true, priceLabel: "Free entry", organiser: "Vilnius Farmers Guild", rating: 4.9, description: "Fresh produce, honey, and flowers direct from farms around Vilnius county.", tags: ["Morning market", "Local produce"], image: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1200&q=82" },
+  { id: "uzupis-street-fair", title: "Užupis Republic Street Fair", category: "Culture", dateLabel: "Sunday · 11:00", venue: "Užupis", distanceMinutes: 10, outdoor: true, priceLabel: "Free", organiser: "Republic of Užupis", rating: 4.8, description: "Art stalls, street performers, and the neighbourhood's famously eccentric charm.", tags: ["Art & crafts", "All ages"], image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=82" },
+  { id: "neris-fun-run", title: "Neris Riverside 5K Fun Run", category: "Sports", dateLabel: "Tomorrow · 07:30", venue: "Neris Riverside Path", distanceMinutes: 18, outdoor: true, priceLabel: "€10", organiser: "Vilnius Running Club", rating: 4.7, description: "A casual timed 5K along the river, open to all paces. Finisher medal included.", tags: ["Beginner friendly", "Medal included"], image: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=1200&q=82" },
+  { id: "sapieha-open-air-cinema", title: "Open-Air Cinema in Sapieha Park", category: "Culture", dateLabel: "Today · 21:00", venue: "Sapieha Park", distanceMinutes: 22, outdoor: true, priceLabel: "€7", organiser: "Vilnius Film Nights", rating: 4.5, description: "A classic film under the stars — bring a chair or blanket, food trucks on site.", tags: ["Bring a blanket", "Food trucks"], image: "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=1200&q=82" },
+  { id: "philharmonic-concert", title: "National Philharmonic Concert", category: "Music", dateLabel: "Friday · 19:00", venue: "Vilnius Philharmonic Hall", distanceMinutes: 15, outdoor: false, priceLabel: "€25", organiser: "Lithuanian National Philharmonic", rating: 4.9, description: "A classical evening performance by the resident orchestra.", tags: ["Formal attire", "2 hours"], image: "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?auto=format&fit=crop&w=1200&q=82" },
+  { id: "cac-exhibition-opening", title: "Contemporary Art Centre Exhibition Opening", category: "Culture", dateLabel: "Thursday · 18:00", venue: "Contemporary Art Centre", distanceMinutes: 10, outdoor: false, priceLabel: "Free", organiser: "CAC Vilnius", rating: 4.6, description: "Opening night for a new exhibition from emerging Baltic artists.", tags: ["Indoor", "Free entry"], image: "https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=1200&q=82" },
+  { id: "paupys-beer-tasting", title: "Paupys Craft Beer Tasting", category: "Food", dateLabel: "Saturday · 17:00", venue: "Paupys", distanceMinutes: 30, outdoor: false, priceLabel: "€15", organiser: "Paupys Brewers Collective", rating: 4.7, description: "A guided tasting flight from three local craft breweries.", tags: ["18+", "Includes snacks"], image: "https://images.unsplash.com/photo-1518176258769-f227c798150e?auto=format&fit=crop&w=1200&q=82" },
+  { id: "ai-city-meetup", title: "Vilnius Tech Meetup: AI in the City", category: "Workshop", dateLabel: "Wednesday · 18:30", venue: "Vilnius Tech Park", distanceMinutes: 14, outdoor: false, priceLabel: "Free", organiser: "Vilnius Tech Community", rating: 4.5, description: "Local builders share how they're using AI in city services and startups.", tags: ["Networking", "Indoor"], image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=82" },
+  { id: "trakai-castle-tour", title: "Trakai Castle Evening Tour", category: "Culture", dateLabel: "Saturday · 10:00", venue: "Trakai Island Castle", distanceMinutes: 40, outdoor: true, priceLabel: "€20", organiser: "Trakai Heritage Tours", rating: 4.8, description: "A guided evening tour of the lakeside castle, a short trip outside the city.", tags: ["Day trip", "Guided tour"], image: "https://images.unsplash.com/photo-1592907117295-e4d8b7c8f2c4?auto=format&fit=crop&w=1200&q=82" }
+];
+
+function findEventById(id) {
+  return EVENTS.find((item) => String(item.id) === String(id)) || null;
+}
+
+function eventHref(id) {
+  return `?view=eventDetail&id=${encodeURIComponent(id)}`;
+}
+
+function openEventDetail(id) {
+  const item = findEventById(id) || EVENTS[0];
+  state.selectedEventId = item.id;
+  state.activeView = "eventDetail";
+  state.activeSheet = null;
+  state.alwenOpen = false;
+  state.quickTranslateOpen = false;
+  render();
+}
+
+function eventText(item, field, fallback = item[field]) {
+  const key = `events.items.${item.id}.${field}`;
+  const value = t(key);
+  return value === key ? fallback : value;
+}
+
+function eventTags(item) {
+  return item.tags.map((tag, index) => eventText(item, `tag${index + 1}`, tag));
+}
+
+function toggleEventSaveButton(item) {
+  const isSaved = state.savedEventIds.includes(String(item.id));
+  return `<button type="button" class="opportunity-primary ${isSaved ? "is-active" : ""}" data-action="toggle-event-save" data-event-id="${item.id}">${isSaved ? t("common.eventSaved") : t("common.saveEvent")}</button>`;
+}
+
+function renderEventCard(item) {
+  const title = eventText(item, "title");
+  const category = eventText(item, "category");
+  const dateLabel = eventText(item, "dateLabel");
+  const venue = eventText(item, "venue");
+  const description = eventText(item, "description");
+  return `<article class="opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${title} ${item.priceLabel}`)}" data-view="eventDetail" data-event-id="${item.id}">
+    <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${category}</span></div>
+    <div class="opportunity-body"><div class="opportunity-price-row"><h2>${title}</h2><b>${item.priceLabel}</b></div>
+    <p class="opportunity-meta">${dateLabel} · ${venue}</p>
+    <p>${description}</p><div class="opportunity-trust"><span>✓ ${eventText(item, "organiser")}</span><span>★ ${item.rating}</span></div>
+    <div class="opportunity-tags">${eventTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
+    <div class="opportunity-actions">${toggleEventSaveButton(item)}<a href="${eventHref(item.id)}" data-view="eventDetail" data-event-id="${item.id}">${t("common.viewDetails")}</a></div></div>
+  </article>`;
+}
+
+function renderEventDetail() {
+  const item = findEventById(state.selectedEventId) || EVENTS[0];
+  state.selectedEventId = item.id;
+  const title = eventText(item, "title");
+  const category = eventText(item, "category");
+  const dateLabel = eventText(item, "dateLabel");
+  const venue = eventText(item, "venue");
+  const description = eventText(item, "description");
+  const related = EVENTS.filter((candidate) => candidate.id !== item.id && candidate.category === item.category).slice(0, 3);
+  return `<section class="section-shell opportunity-detail-shell">
+    <button type="button" class="back-button" data-view="events">${icon("arrow")}${t("common.back")} · ${t("events.title")}</button>
+    <article class="opportunity-detail-card">
+      <div class="opportunity-detail-hero" style="background-image:url('${item.image}')">
+        <div class="opportunity-detail-badges"><span>${category}</span></div>
+      </div>
+      <div class="opportunity-detail-body">
+        <div class="opportunity-detail-title">
+          <div>
+            <p class="eyebrow">${t("events.detailEyebrow", { area: currentAreaLabel() })}</p>
+            <h1>${title}</h1>
+            <p>${dateLabel} · ${venue}</p>
+          </div>
+          <strong>${item.priceLabel}</strong>
+        </div>
+        <div class="opportunity-detail-grid">
+          <article><span>${t("events.hostedBy")}</span><strong>${eventText(item, "organiser")}</strong></article>
+          <article><span>${t("common.trust")}</span><strong>★ ${item.rating}</strong></article>
+          <article><span>${t("events.whereLabel")}</span><strong>${venue}</strong></article>
+        </div>
+        <div class="opportunity-detail-section">
+          <h2>${t("events.aboutEvent")}</h2>
+          <p>${description}</p>
+        </div>
+        <div class="opportunity-tags">${eventTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
+        <div class="opportunity-detail-actions">
+          ${toggleEventSaveButton(item)}
+          <button type="button" data-view="events">${t("events.otherHeading")}</button>
+        </div>
+      </div>
+    </article>
+    ${related.length ? `<section class="opportunity-related">
+      <div class="section-title"><div><h2>${t("events.similarEvents")}</h2><p>${t("events.similarEventsHint")}</p></div></div>
+      <div class="opportunity-feed">${related.map(renderEventCard).join("")}</div>
+    </section>` : ""}
+  </section>`;
+}
+
+function renderEvents() {
+  const nearYou = EVENTS.filter((event) => event.outdoor && event.distanceMinutes <= 25);
+  const otherEvents = EVENTS.filter((event) => !nearYou.includes(event));
+  return `<section class="section-shell opportunities-shell">
+    <header class="opportunities-hero"><p class="eyebrow">${t("events.eyebrow", { area: currentAreaLabel() })}</p><h1>${t("events.title")}</h1><p>${t("events.subtitle")}</p>
+      <div class="opportunity-stats"><article><strong>${EVENTS.length}</strong><span>${t("events.totalEventsStat")}</span></article><article><strong>${nearYou.length}</strong><span>${t("events.nearYouStat")}</span></article></div>
+    </header>
+    <div class="opportunity-feed-heading"><div><h2>${t("events.nearYouHeading")}</h2><p>${t("events.nearYouHint")}</p></div><span>${t("common.matches", { count: nearYou.length })}</span></div>
+    <div class="opportunity-feed">${nearYou.map(renderEventCard).join("") || renderEmptyState(t("events.noEventsMatch"))}</div>
+    <div class="opportunity-feed-heading"><div><h2>${t("events.otherHeading")}</h2><p>${t("events.otherHint")}</p></div><span>${t("common.matches", { count: otherEvents.length })}</span></div>
+    <div class="opportunity-feed">${otherEvents.map(renderEventCard).join("") || renderEmptyState(t("events.noEventsMatch"))}</div>
   </section>`;
 }
 
@@ -9447,6 +9601,50 @@ function bindEvents() {
         activateOpportunity(event);
       });
     }
+  });
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const card = event.target.closest('[data-view="eventDetail"][data-event-id]');
+      if (!card) return;
+      if (event.target.closest(".floating-card-actions, .mini-save")) return;
+      if (event.target.closest("button") && event.target.closest("button") !== card) return;
+      const eventId = card.dataset.eventId;
+      if (!findEventById(eventId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      openEventDetail(eventId);
+    },
+    true
+  );
+
+  document.querySelectorAll('[data-view="eventDetail"][data-event-id]').forEach((card) => {
+    const activateEvent = (event) => {
+      if (event.target.closest(".floating-card-actions, .mini-save")) return;
+      if (event.target.closest("button") && event.target.closest("button") !== card) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openEventDetail(card.dataset.eventId);
+    };
+    card.addEventListener("click", activateEvent);
+    if (card.getAttribute("role") === "button") {
+      card.addEventListener("keydown", (event) => {
+        if (event.target !== card) return;
+        if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+        activateEvent(event);
+      });
+    }
+  });
+
+  document.querySelectorAll('[data-action="toggle-event-save"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = button.dataset.eventId;
+      state.savedEventIds = state.savedEventIds.includes(id) ? state.savedEventIds.filter((existing) => existing !== id) : [...state.savedEventIds, id];
+      render();
+    });
   });
 
   document.querySelectorAll("[data-view]").forEach((button) => {
