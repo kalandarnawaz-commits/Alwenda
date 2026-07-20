@@ -74,6 +74,19 @@ test("translation UI sends the successful translated result to cloud speech", as
   assert.match(source, /stopTranslationSpeech\(\)/);
 });
 
+test("translation voice input follows the selected source language in every translator surface", async () => {
+  const source = await readRepoFile("src/main.js");
+
+  assert.match(source, /"translate\.language\.langLithuanian": \["lt-LT", "lt"\]/);
+  assert.match(source, /const sourceLanguage = state\.translateFromLanguage/);
+  assert.match(source, /recognition\.lang = recognitionLocales\[localeIndex\]/);
+  assert.match(source, /translate\.listeningInLanguage/);
+  assert.match(source, /document\.querySelectorAll\("\[data-translate-from\]"\)/);
+  assert.match(source, /document\.querySelectorAll\("\[data-translate-record\]"\)/);
+  assert.doesNotMatch(source, /document\.querySelector\("\[data-translate-from\]"\)\?\.addEventListener/);
+  assert.doesNotMatch(source, /document\.querySelector\("\[data-translate-record\]"\)\?\.addEventListener/);
+});
+
 test("browser source never exposes ElevenLabs secrets or VITE-style speech keys", async () => {
   const sourceFiles = await readSourceTree("src");
   for (const file of sourceFiles) {

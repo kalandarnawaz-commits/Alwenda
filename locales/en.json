@@ -1,7 +1,7 @@
 {
   "common": {
     "appName": "Alwenda",
-    "splashTagline": "Your eyes on the city.",
+    "splashTagline": "Your eyes in the city.",
     "city": "Vilnius",
     "profileTagline": "Your reputation travels with you.",
     "all": "All",
@@ -1374,6 +1374,7 @@
     "tapToSpeak": "Tap to speak",
     "stopListening": "Stop listening",
     "listening": "Listening…",
+    "listeningInLanguage": "Listening in {language}…",
     "voiceNotSupported": "Voice input isn't supported in this browser.",
     "voiceMicDenied": "Microphone access was denied. Allow microphone access to use voice input.",
     "voiceNoSpeech": "Didn't catch that. Please try again.",
