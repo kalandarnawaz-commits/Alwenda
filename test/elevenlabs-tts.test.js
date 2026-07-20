@@ -138,3 +138,23 @@ test("browser source never exposes ElevenLabs secrets or VITE-style speech keys"
   assert.match(envExample, /ELEVENLABS_TTS_FUNCTION_SLUG/);
   assert.match(envExample, /TRANSLATE_TRANSCRIBE_FUNCTION_SLUG/);
 });
+
+test("Lithuanian voice input skips the unreliable on-device recognizer and goes straight to Whisper transcription", async () => {
+  const mainSource = await readRepoFile("src/main.js");
+
+  assert.match(mainSource, /const VOICE_INPUT_UNSUPPORTED_LANGUAGES = new Set\(\["translate\.language\.langLithuanian"\]\)/);
+  assert.match(mainSource, /if \(!Ctor \|\| VOICE_INPUT_UNSUPPORTED_LANGUAGES\.has\(sourceLanguage\)\) \{\s*startAudioTranscriptionFallback\(sourceLanguage, sourceLanguageLabel\);/);
+
+  // The Whisper edge function itself must actually support Lithuanian —
+  // this fix is worthless if the fallback it routes to doesn't.
+  const functionSource = await readRepoFile("supabase/functions/translate-transcribe/index.ts");
+  assert.match(functionSource, /SUPPORTED_LANGUAGES = new Set\(\["lt", "en", "ru", "pl", "de", "fr"\]\)/);
+});
+
+test("audio transcription fallback surfaces the real failure reason instead of one generic message", async () => {
+  const mainSource = await readRepoFile("src/main.js");
+  const fallback = mainSource.slice(mainSource.indexOf("async function startAudioTranscriptionFallback"), mainSource.indexOf("async function startAudioTranscriptionFallback") + 3000);
+
+  assert.match(fallback, /\} catch \(error\) \{/);
+  assert.match(fallback, /state\.translateVoiceError = error\?\.message \|\| t\("translate\.voiceRecognitionError"\)/);
+});
