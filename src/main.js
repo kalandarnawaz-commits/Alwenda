@@ -4284,6 +4284,7 @@ function renderAlwenQuickTranslate() {
       </div>
 
       ${state.translateVoiceError ? `<p class="translation-voice-notice is-error">${escapeHtml(state.translateVoiceError)}</p>` : ""}
+      ${state.translateVoiceNotice?.panel === "from" ? `<p class="translation-voice-notice">${escapeHtml(state.translateVoiceNotice.message)}</p>` : ""}
       ${state.translateVoiceNotice?.panel === "to" ? `<p class="translation-voice-notice">${escapeHtml(state.translateVoiceNotice.message)}</p>` : ""}
       ${translationSpeechTooLong ? `<p class="translation-voice-notice is-error">${t("translate.speechTooLong", { max: MAX_TRANSLATION_SPEECH_CHARACTERS })}</p>` : ""}
       ${state.translateCameraStatus === "error" ? `<p class="translation-voice-notice is-error">${escapeHtml(state.translateCameraErrorMessage)}</p>` : ""}
@@ -7290,6 +7291,18 @@ const TRANSLATE_LANGUAGE_SPEECH_LOCALE = {
   "translate.language.langFrench": "fr-FR"
 };
 
+/** Some browsers accept a full regional speech-recognition tag (lt-LT),
+ * others only accept the base language (lt). Try the regional tag first
+ * and fall back without changing the user's selected language. */
+const TRANSLATE_LANGUAGE_RECOGNITION_LOCALES = {
+  "translate.language.langLithuanian": ["lt-LT", "lt"],
+  "translate.language.langEnglish": ["en-GB", "en-US", "en"],
+  "translate.language.langRussian": ["ru-RU", "ru"],
+  "translate.language.langPolish": ["pl-PL", "pl"],
+  "translate.language.langGerman": ["de-DE", "de"],
+  "translate.language.langFrench": ["fr-FR", "fr"]
+};
+
 /** Tesseract OCR's trained-data language codes (3-letter, not the 2-letter
  * ISO codes used elsewhere) for reading text out of a captured photo. */
 const TRANSLATE_LANGUAGE_TESSERACT = {
@@ -7634,6 +7647,10 @@ async function speakText(text, bcp47, button, panel) {
 
 let activeSpeechRecognition = null;
 
+function recognitionLocalesForLanguage(languageKey) {
+  return TRANSLATE_LANGUAGE_RECOGNITION_LOCALES[languageKey] || [TRANSLATE_LANGUAGE_SPEECH_LOCALE[languageKey] || "en-US"];
+}
+
 /** One-touch voice input: real speech-to-text via the browser's Web Speech
  * API (Chrome/Safari support it; Firefox doesn't — feature-detected, no
  * fabricated transcript on unsupported browsers). Tapping the mic while
@@ -7653,9 +7670,13 @@ function startVoiceInput() {
     return;
   }
 
+  const sourceLanguage = state.translateFromLanguage;
+  const sourceLanguageLabel = t(sourceLanguage);
+  const recognitionLocales = recognitionLocalesForLanguage(sourceLanguage);
+  let localeIndex = 0;
   const recognition = new Ctor();
   activeSpeechRecognition = recognition;
-  recognition.lang = TRANSLATE_LANGUAGE_SPEECH_LOCALE[state.translateFromLanguage];
+  recognition.lang = recognitionLocales[localeIndex];
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
@@ -7664,6 +7685,7 @@ function startVoiceInput() {
     state.translateVoiceError = null;
     state.translateOutputText = "";
     state.translateStatus = "idle";
+    state.translateVoiceNotice = { panel: "from", message: t("translate.listeningInLanguage", { language: sourceLanguageLabel }) };
     render();
   };
 
@@ -7673,6 +7695,19 @@ function startVoiceInput() {
   };
 
   recognition.onerror = (event) => {
+    if ((event.error === "language-not-supported" || event.error === "not-supported") && localeIndex < recognitionLocales.length - 1) {
+      localeIndex += 1;
+      recognition.lang = recognitionLocales[localeIndex];
+      window.setTimeout(() => {
+        try {
+          recognition.start();
+        } catch {
+          state.translateVoiceError = t("translate.voiceRecognitionError");
+          render();
+        }
+      }, 50);
+      return;
+    }
     state.translateVoiceError = event.error === "not-allowed" || event.error === "service-not-allowed"
       ? t("translate.voiceMicDenied")
       : event.error === "no-speech"
@@ -7683,6 +7718,7 @@ function startVoiceInput() {
   recognition.onend = async () => {
     state.translateRecording = false;
     activeSpeechRecognition = null;
+    if (state.translateVoiceNotice?.panel === "from") state.translateVoiceNotice = null;
     render();
     if (!state.translateInputText.trim()) return;
     await runTranslation();
@@ -10080,18 +10116,27 @@ function bindEvents() {
     render();
   });
 
-  document.querySelector("[data-translate-from]")?.addEventListener("change", (event) => {
-    state.translateFromLanguage = event.target.value;
-    state.translateOutputText = "";
-    state.translateStatus = "idle";
-    render();
+  document.querySelectorAll("[data-translate-from]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      activeSpeechRecognition?.stop();
+      state.translateRecording = false;
+      state.translateFromLanguage = event.target.value;
+      state.translateOutputText = "";
+      state.translateStatus = "idle";
+      state.translateVoiceError = null;
+      state.translateVoiceNotice = null;
+      render();
+    });
   });
 
-  document.querySelector("[data-translate-to]")?.addEventListener("change", (event) => {
-    state.translateToLanguage = event.target.value;
-    state.translateOutputText = "";
-    state.translateStatus = "idle";
-    render();
+  document.querySelectorAll("[data-translate-to]").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      state.translateToLanguage = event.target.value;
+      state.translateOutputText = "";
+      state.translateStatus = "idle";
+      state.translateVoiceNotice = null;
+      render();
+    });
   });
 
   document.querySelectorAll("[data-translate-quick-lang]").forEach((button) => {
@@ -10103,12 +10148,18 @@ function bindEvents() {
     });
   });
 
-  document.querySelector("[data-translate-swap]")?.addEventListener("click", () => {
-    [state.translateFromLanguage, state.translateToLanguage] = [state.translateToLanguage, state.translateFromLanguage];
-    if (state.translateStatus === "success") state.translateInputText = state.translateOutputText;
-    state.translateOutputText = "";
-    state.translateStatus = "idle";
-    render();
+  document.querySelectorAll("[data-translate-swap]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeSpeechRecognition?.stop();
+      state.translateRecording = false;
+      [state.translateFromLanguage, state.translateToLanguage] = [state.translateToLanguage, state.translateFromLanguage];
+      if (state.translateStatus === "success") state.translateInputText = state.translateOutputText;
+      state.translateOutputText = "";
+      state.translateStatus = "idle";
+      state.translateVoiceError = null;
+      state.translateVoiceNotice = null;
+      render();
+    });
   });
 
   bindLiveField("translation-input", (value) => {
@@ -10159,8 +10210,10 @@ function bindEvents() {
     });
   });
 
-  document.querySelector("[data-translate-record]")?.addEventListener("click", () => {
-    startVoiceInput();
+  document.querySelectorAll("[data-translate-record]").forEach((button) => {
+    button.addEventListener("click", () => {
+      startVoiceInput();
+    });
   });
 
   document.querySelectorAll("[data-translate-mode]").forEach((button) => {

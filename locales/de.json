@@ -1374,6 +1374,7 @@
     "tapToSpeak": "Zum Sprechen tippen",
     "stopListening": "Zuhören beenden",
     "listening": "Hört zu…",
+    "listeningInLanguage": "Hört auf {language} zu…",
     "voiceNotSupported": "Spracheingabe wird in diesem Browser nicht unterstützt.",
     "voiceMicDenied": "Der Mikrofonzugriff wurde verweigert. Erlaube den Mikrofonzugriff, um die Spracheingabe zu nutzen.",
     "voiceNoSpeech": "Das haben wir nicht verstanden. Bitte versuche es erneut.",

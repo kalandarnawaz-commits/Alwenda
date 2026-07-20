@@ -1374,6 +1374,7 @@
     "tapToSpeak": "Palieskite ir kalbėkite",
     "stopListening": "Sustabdyti klausymąsi",
     "listening": "Klausoma…",
+    "listeningInLanguage": "Klausoma kalba: {language}…",
     "voiceNotSupported": "Šioje naršyklėje balso įvestis nepalaikoma.",
     "voiceMicDenied": "Prieiga prie mikrofono buvo atmesta. Leiskite prieigą prie mikrofono, kad naudotumėte balso įvestį.",
     "voiceNoSpeech": "Nepavyko išgirsti. Bandykite dar kartą.",
