@@ -311,7 +311,9 @@
     "viewDetails": "Details ansehen",
     "transactionSafetyTitle": "Sicher handeln",
     "transactionSafetyBody": "Dieses Angebot stammt von dem im Inserat gezeigten Nutzer, nicht von Alwenda. Alwenda zieht keine Transaktionszahlungen ein und garantiert keine Nutzer, Waren, Dienstleistungen, Zahlungen, Lieferungen oder Rückerstattungen. Prüfe die andere Partei, halte Vereinbarungen schriftlich fest und sei vorsichtig mit Vorauszahlungen. Melde verdächtige oder illegale Aktivitäten über die Meldefunktion.",
-    "urgentLabel": "Dringend"
+    "urgentLabel": "Dringend",
+    "saveEvent": "Veranstaltung merken",
+    "eventSaved": "Gemerkt"
   },
   "nav": {
     "home": "Start",
@@ -828,7 +830,7 @@
       "jobsLabel": "Jobs",
       "jobsDetail": "Passend zu deinem Profil heute",
       "apartmentsLabel": "Wohnungen",
-      "apartmentsDetail": "Neue Unterkunft innerhalb deines gespeicherten Budgets"
+      "apartmentsDetail": "Neue Mietangebote zum Entdecken"
     }
   },
   "tyt": {
@@ -2289,5 +2291,145 @@
         "action": "Annehmen"
       }
     }
+  },
+  "events": {
+    "items": {
+      "garden-yoga": {
+        "title": "Sonnenaufgangs-Yoga im Bernhardinergarten",
+        "category": "Wellness",
+        "dateLabel": "Heute · 08:00",
+        "venue": "Bernhardinergarten",
+        "description": "Eine sanfte Outdoor-Yogastunde am Fluss, offen für alle Levels. Eigene Matte mitbringen.",
+        "tag1": "Alle Levels",
+        "tag2": "45 Min.",
+        "organiser": "Vilnius Wellness Kollektiv"
+      },
+      "old-town-food-market": {
+        "title": "Street-Food-Markt in der Altstadt",
+        "category": "Markt",
+        "dateLabel": "Heute · 12:00–20:00",
+        "venue": "Altstadt",
+        "description": "Lokale Anbieter mit litauischem Street Food, Craft-Getränken und saisonalen Produkten.",
+        "tag1": "Familienfreundlich",
+        "tag2": "Essen & Trinken",
+        "organiser": "Vereinigung der Altstadt Vilnius"
+      },
+      "vingis-live-music": {
+        "title": "Live-Musik-Abend im Vingis-Park",
+        "category": "Musik",
+        "dateLabel": "Heute · 19:00",
+        "venue": "Vingis-Park",
+        "description": "Ein Open-Air-Abend mit lokalen Bands auf der Freilichtbühne des Parks.",
+        "tag1": "Decke mitbringen",
+        "tag2": "2 Std.",
+        "organiser": "Vingis Park Konzerte"
+      },
+      "cathedral-square-farmers-market": {
+        "title": "Bauernmarkt am Domplatz",
+        "category": "Markt",
+        "dateLabel": "Samstag · 09:00",
+        "venue": "Domplatz",
+        "description": "Frisches Gemüse, Honig und Blumen direkt von Höfen rund um Vilnius.",
+        "tag1": "Morgenmarkt",
+        "tag2": "Lokale Produkte",
+        "organiser": "Vilnius Bauernzunft"
+      },
+      "uzupis-street-fair": {
+        "title": "Straßenfest der Republik Užupis",
+        "category": "Kultur",
+        "dateLabel": "Sonntag · 11:00",
+        "venue": "Užupis",
+        "description": "Kunststände, Straßenkünstler und der berühmt exzentrische Charme des Viertels.",
+        "tag1": "Kunst & Handwerk",
+        "tag2": "Für alle Altersgruppen",
+        "organiser": "Republik Užupis"
+      },
+      "neris-fun-run": {
+        "title": "5-km-Lauf am Neris-Ufer",
+        "category": "Sport",
+        "dateLabel": "Morgen · 07:30",
+        "venue": "Neris-Uferweg",
+        "description": "Ein lockerer 5-km-Zeitlauf entlang des Flusses, für jedes Tempo geeignet. Zielmedaille inklusive.",
+        "tag1": "Für Anfänger geeignet",
+        "tag2": "Mit Medaille",
+        "organiser": "Vilnius Laufclub"
+      },
+      "sapieha-open-air-cinema": {
+        "title": "Open-Air-Kino im Sapieha-Park",
+        "category": "Kultur",
+        "dateLabel": "Heute · 21:00",
+        "venue": "Sapieha-Park",
+        "description": "Ein klassischer Film unter freiem Himmel — Stuhl oder Decke mitbringen, Foodtrucks vor Ort.",
+        "tag1": "Decke mitbringen",
+        "tag2": "Foodtrucks",
+        "organiser": "Vilnius Filmnächte"
+      },
+      "philharmonic-concert": {
+        "title": "Konzert der Nationalphilharmonie",
+        "category": "Musik",
+        "dateLabel": "Freitag · 19:00",
+        "venue": "Philharmonie Vilnius",
+        "description": "Ein klassischer Abend mit dem Hausorchester.",
+        "tag1": "Elegante Kleidung",
+        "tag2": "2 Std.",
+        "organiser": "Litauische Nationalphilharmonie"
+      },
+      "cac-exhibition-opening": {
+        "title": "Ausstellungseröffnung im Zentrum für zeitgenössische Kunst",
+        "category": "Kultur",
+        "dateLabel": "Donnerstag · 18:00",
+        "venue": "Zentrum für zeitgenössische Kunst",
+        "description": "Eröffnungsabend einer neuen Ausstellung aufstrebender baltischer Künstler.",
+        "tag1": "Drinnen",
+        "tag2": "Eintritt frei",
+        "organiser": "CAC Vilnius"
+      },
+      "paupys-beer-tasting": {
+        "title": "Craft-Bier-Verkostung in Paupys",
+        "category": "Essen",
+        "dateLabel": "Samstag · 17:00",
+        "venue": "Paupys",
+        "description": "Eine geführte Verkostung von drei lokalen Craft-Brauereien.",
+        "tag1": "Ab 18",
+        "tag2": "Inkl. Snacks",
+        "organiser": "Paupys Brauer-Kollektiv"
+      },
+      "ai-city-meetup": {
+        "title": "Vilnius Tech Meetup: KI in der Stadt",
+        "category": "Workshop",
+        "dateLabel": "Mittwoch · 18:30",
+        "venue": "Vilnius Tech Park",
+        "description": "Lokale Entwickler berichten, wie sie KI in Stadtdiensten und Start-ups einsetzen.",
+        "tag1": "Networking",
+        "tag2": "Drinnen",
+        "organiser": "Vilnius Tech Community"
+      },
+      "trakai-castle-tour": {
+        "title": "Abendführung durch die Burg Trakai",
+        "category": "Kultur",
+        "dateLabel": "Samstag · 10:00",
+        "venue": "Wasserburg Trakai",
+        "description": "Eine geführte Abendtour zur Seeburg, ein kurzer Ausflug außerhalb der Stadt.",
+        "tag1": "Tagesausflug",
+        "tag2": "Geführte Tour",
+        "organiser": "Trakai Heritage Tours"
+      }
+    },
+    "title": "Veranstaltungen in deiner Nähe",
+    "subtitle": "Echte Veranstaltungen, die heute in Vilnius stattfinden.",
+    "eyebrow": "Alwenda Stadtkalender · {area}",
+    "nearYouHeading": "Outdoor-Veranstaltungen innerhalb von 25 Minuten",
+    "nearYouHint": "Frische Einträge, täglich aktualisiert.",
+    "otherHeading": "Weitere Veranstaltungen entdecken",
+    "otherHint": "Etwas weiter weg oder drinnen — trotzdem einen Blick wert.",
+    "noEventsMatch": "Gerade keine passenden Veranstaltungen.",
+    "totalEventsStat": "Veranstaltungen diese Woche",
+    "nearYouStat": "innerhalb von 25 Minuten",
+    "detailEyebrow": "Los geht's in {area}",
+    "hostedBy": "Veranstalter",
+    "whereLabel": "Wo",
+    "aboutEvent": "Über diese Veranstaltung",
+    "similarEvents": "Ähnliche Veranstaltungen",
+    "similarEventsHint": "Weitere Dinge, die in der Nähe passieren."
   }
 }

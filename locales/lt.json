@@ -311,7 +311,9 @@
     "viewDetails": "Peržiūrėti",
     "transactionSafetyTitle": "Prekiaukite saugiai",
     "transactionSafetyBody": "Šį pasiūlymą pateikia skelbime nurodytas naudotojas, ne Alwenda. Alwenda nerenka mokėjimų už sandorius ir negarantuoja naudotojų, prekių, paslaugų, mokėjimų, pristatymo ar pinigų grąžinimo. Patikrinkite kitą šalį, susitarimus fiksuokite raštu ir atsargiai mokėkite avansu. Apie įtartiną ar neteisėtą veiklą praneškite per pranešimo funkciją.",
-    "urgentLabel": "Skubu"
+    "urgentLabel": "Skubu",
+    "saveEvent": "Išsaugoti renginį",
+    "eventSaved": "Išsaugota"
   },
   "nav": {
     "home": "Pradžia",
@@ -828,7 +830,7 @@
       "jobsLabel": "Darbai",
       "jobsDetail": "Atitinka tavo profilį šiandien",
       "apartmentsLabel": "Butai",
-      "apartmentsDetail": "Naujas skelbimas pagal tavo išsaugotą biudžetą"
+      "apartmentsDetail": "Nauji nuomos skelbimai"
     }
   },
   "tyt": {
@@ -2289,5 +2291,145 @@
         "action": "Priimti"
       }
     }
+  },
+  "events": {
+    "items": {
+      "garden-yoga": {
+        "title": "Ryto joga Bernardinų sode",
+        "category": "Sveikata",
+        "dateLabel": "Šiandien · 08:00",
+        "venue": "Bernardinų sodas",
+        "description": "Švelni joga lauke prie upės, tinka visiems lygiams. Atsineškite savo kilimėlį.",
+        "tag1": "Visiems lygiams",
+        "tag2": "45 min",
+        "organiser": "Vilniaus sveikatingumo bendruomenė"
+      },
+      "old-town-food-market": {
+        "title": "Senamiesčio gatvės maisto turgus",
+        "category": "Turgus",
+        "dateLabel": "Šiandien · 12:00–20:00",
+        "venue": "Senamiestis",
+        "description": "Vietiniai pardavėjai siūlo lietuvišką gatvės maistą, amatininkų gėrimus ir sezoninę produkciją.",
+        "tag1": "Tinka šeimoms",
+        "tag2": "Maistas ir gėrimai",
+        "organiser": "Vilniaus senamiesčio asociacija"
+      },
+      "vingis-live-music": {
+        "title": "Gyvos muzikos vakaras Vingio parke",
+        "category": "Muzika",
+        "dateLabel": "Šiandien · 19:00",
+        "venue": "Vingio parkas",
+        "description": "Vakaras po atviru dangumi su vietinėmis grupėmis parko lauko scenoje.",
+        "tag1": "Atsineškite pledą",
+        "tag2": "2 val.",
+        "organiser": "Vingio parko koncertai"
+      },
+      "cathedral-square-farmers-market": {
+        "title": "Ūkininkų turgus Katedros aikštėje",
+        "category": "Turgus",
+        "dateLabel": "Šeštadienį · 09:00",
+        "venue": "Katedros aikštė",
+        "description": "Šviežia produkcija, medus ir gėlės tiesiai iš Vilniaus krašto ūkių.",
+        "tag1": "Ryto turgus",
+        "tag2": "Vietinė produkcija",
+        "organiser": "Vilniaus ūkininkų gildija"
+      },
+      "uzupis-street-fair": {
+        "title": "Užupio respublikos gatvės šventė",
+        "category": "Kultūra",
+        "dateLabel": "Sekmadienį · 11:00",
+        "venue": "Užupis",
+        "description": "Meno prekystaliai, gatvės atlikėjai ir rajono garsusis ekscentriškas žavesys.",
+        "tag1": "Menas ir amatai",
+        "tag2": "Visoms amžiaus grupėms",
+        "organiser": "Užupio respublika"
+      },
+      "neris-fun-run": {
+        "title": "5 km bėgimas palei Nerį",
+        "category": "Sportas",
+        "dateLabel": "Rytoj · 07:30",
+        "venue": "Neries pakrantės takas",
+        "description": "Nesudėtingas 5 km bėgimas palei upę, tinka bet kokiam tempui. Įskaičiuotas finišo medalis.",
+        "tag1": "Tinka pradedantiesiems",
+        "tag2": "Su medaliu",
+        "organiser": "Vilniaus bėgimo klubas"
+      },
+      "sapieha-open-air-cinema": {
+        "title": "Kino vakaras po atviru dangumi Sapiegų parke",
+        "category": "Kultūra",
+        "dateLabel": "Šiandien · 21:00",
+        "venue": "Sapiegų parkas",
+        "description": "Klasikinis filmas po žvaigždėmis — atsineškite kėdę ar pledą, vietoje veiks maisto vagonėliai.",
+        "tag1": "Atsineškite pledą",
+        "tag2": "Maisto vagonėliai",
+        "organiser": "Vilniaus kino vakarai"
+      },
+      "philharmonic-concert": {
+        "title": "Nacionalinės filharmonijos koncertas",
+        "category": "Muzika",
+        "dateLabel": "Penktadienį · 19:00",
+        "venue": "Vilniaus filharmonijos salė",
+        "description": "Klasikinės muzikos vakaro koncertas, atliekamas nuolatinio orkestro.",
+        "tag1": "Reikalaujama oficialios aprangos",
+        "tag2": "2 val.",
+        "organiser": "Lietuvos nacionalinė filharmonija"
+      },
+      "cac-exhibition-opening": {
+        "title": "Šiuolaikinio meno centro parodos atidarymas",
+        "category": "Kultūra",
+        "dateLabel": "Ketvirtadienį · 18:00",
+        "venue": "Šiuolaikinio meno centras",
+        "description": "Naujos parodos, pristatančios jaunus Baltijos šalių menininkus, atidarymo vakaras.",
+        "tag1": "Patalpose",
+        "tag2": "Įėjimas nemokamas",
+        "organiser": "ŠMC Vilnius"
+      },
+      "paupys-beer-tasting": {
+        "title": "Amatininkų alaus degustacija Paupyje",
+        "category": "Maistas",
+        "dateLabel": "Šeštadienį · 17:00",
+        "venue": "Paupys",
+        "description": "Vedama trijų vietinių amatininkų aludarių degustacija.",
+        "tag1": "18+",
+        "tag2": "Su užkandžiais",
+        "organiser": "Paupio aludarių bendrija"
+      },
+      "ai-city-meetup": {
+        "title": "Vilniaus technologijų susitikimas: DI mieste",
+        "category": "Seminaras",
+        "dateLabel": "Trečiadienį · 18:30",
+        "venue": "Vilnius Tech Park",
+        "description": "Vietiniai kūrėjai dalinasi, kaip naudoja DI miesto paslaugose ir startuoliuose.",
+        "tag1": "Bendravimas",
+        "tag2": "Patalpose",
+        "organiser": "Vilniaus technologijų bendruomenė"
+      },
+      "trakai-castle-tour": {
+        "title": "Vakarinė ekskursija į Trakų pilį",
+        "category": "Kultūra",
+        "dateLabel": "Šeštadienį · 10:00",
+        "venue": "Trakų salos pilis",
+        "description": "Gidu vedama ekskursija į ežero pakrantėje stovinčią pilį, netoli miesto.",
+        "tag1": "Vienos dienos kelionė",
+        "tag2": "Su gidu",
+        "organiser": "Trakų paveldo turai"
+      }
+    },
+    "title": "Renginiai netoliese",
+    "subtitle": "Tikri renginiai, vykstantys Vilniuje šiandien.",
+    "eyebrow": "Alwenda miesto kalendorius · {area}",
+    "nearYouHeading": "Lauko renginiai per 25 min.",
+    "nearYouHint": "Nauji renginiai, atnaujinami kasdien.",
+    "otherHeading": "Kiti renginiai",
+    "otherHint": "Šiek tiek toliau arba patalpose — vis tiek verta pamatyti.",
+    "noEventsMatch": "Šiuo metu renginių nėra.",
+    "totalEventsStat": "renginių šią savaitę",
+    "nearYouStat": "per 25 min.",
+    "detailEyebrow": "Vyksta {area}",
+    "hostedBy": "Organizuoja",
+    "whereLabel": "Kur",
+    "aboutEvent": "Apie renginį",
+    "similarEvents": "Panašūs renginiai",
+    "similarEventsHint": "Daugiau renginių netoliese."
   }
 }

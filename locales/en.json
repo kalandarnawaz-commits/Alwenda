@@ -311,7 +311,9 @@
     "viewDetails": "View details",
     "transactionSafetyTitle": "Trade safely",
     "transactionSafetyBody": "This offer is made by the user shown in the listing, not by Alwenda. Alwenda does not collect transaction payments and does not guarantee users, goods, services, payments, delivery or refunds. Verify the other party, keep agreements in writing and be cautious with advance payments. Report suspicious or illegal activity using the Report function.",
-    "urgentLabel": "Urgent"
+    "urgentLabel": "Urgent",
+    "saveEvent": "Save event",
+    "eventSaved": "Saved"
   },
   "nav": {
     "home": "Home",
@@ -828,7 +830,7 @@
       "jobsLabel": "Jobs",
       "jobsDetail": "Matched to your profile today",
       "apartmentsLabel": "Apartments",
-      "apartmentsDetail": "New place under your saved budget"
+      "apartmentsDetail": "New rentals to check out"
     }
   },
   "tyt": {
@@ -2289,5 +2291,145 @@
         "action": "Accept"
       }
     }
+  },
+  "events": {
+    "items": {
+      "garden-yoga": {
+        "title": "Sunrise Yoga in Bernardine Garden",
+        "category": "Wellness",
+        "dateLabel": "Today · 08:00",
+        "venue": "Bernardine Garden",
+        "description": "A gentle outdoor yoga session by the river, open to all levels. Bring your own mat.",
+        "tag1": "All levels",
+        "tag2": "45 min",
+        "organiser": "Vilnius Wellness Collective"
+      },
+      "old-town-food-market": {
+        "title": "Old Town Street Food Market",
+        "category": "Market",
+        "dateLabel": "Today · 12:00–20:00",
+        "venue": "Old Town",
+        "description": "Local vendors serving Lithuanian street food, craft drinks, and seasonal produce.",
+        "tag1": "Family friendly",
+        "tag2": "Food & drink",
+        "organiser": "Vilnius Old Town Association"
+      },
+      "vingis-live-music": {
+        "title": "Live Music Evening in Vingis Park",
+        "category": "Music",
+        "dateLabel": "Today · 19:00",
+        "venue": "Vingis Park",
+        "description": "An open-air evening of local bands performing on the park's outdoor stage.",
+        "tag1": "Bring a blanket",
+        "tag2": "2 hours",
+        "organiser": "Vingis Park Concerts"
+      },
+      "cathedral-square-farmers-market": {
+        "title": "Cathedral Square Farmers Market",
+        "category": "Market",
+        "dateLabel": "Saturday · 09:00",
+        "venue": "Cathedral Square",
+        "description": "Fresh produce, honey, and flowers direct from farms around Vilnius county.",
+        "tag1": "Morning market",
+        "tag2": "Local produce",
+        "organiser": "Vilnius Farmers Guild"
+      },
+      "uzupis-street-fair": {
+        "title": "Užupis Republic Street Fair",
+        "category": "Culture",
+        "dateLabel": "Sunday · 11:00",
+        "venue": "Užupis",
+        "description": "Art stalls, street performers, and the neighbourhood's famously eccentric charm.",
+        "tag1": "Art & crafts",
+        "tag2": "All ages",
+        "organiser": "Republic of Užupis"
+      },
+      "neris-fun-run": {
+        "title": "Neris Riverside 5K Fun Run",
+        "category": "Sports",
+        "dateLabel": "Tomorrow · 07:30",
+        "venue": "Neris Riverside Path",
+        "description": "A casual timed 5K along the river, open to all paces. Finisher medal included.",
+        "tag1": "Beginner friendly",
+        "tag2": "Medal included",
+        "organiser": "Vilnius Running Club"
+      },
+      "sapieha-open-air-cinema": {
+        "title": "Open-Air Cinema in Sapieha Park",
+        "category": "Culture",
+        "dateLabel": "Today · 21:00",
+        "venue": "Sapieha Park",
+        "description": "A classic film under the stars — bring a chair or blanket, food trucks on site.",
+        "tag1": "Bring a blanket",
+        "tag2": "Food trucks",
+        "organiser": "Vilnius Film Nights"
+      },
+      "philharmonic-concert": {
+        "title": "National Philharmonic Concert",
+        "category": "Music",
+        "dateLabel": "Friday · 19:00",
+        "venue": "Vilnius Philharmonic Hall",
+        "description": "A classical evening performance by the resident orchestra.",
+        "tag1": "Formal attire",
+        "tag2": "2 hours",
+        "organiser": "Lithuanian National Philharmonic"
+      },
+      "cac-exhibition-opening": {
+        "title": "Contemporary Art Centre Exhibition Opening",
+        "category": "Culture",
+        "dateLabel": "Thursday · 18:00",
+        "venue": "Contemporary Art Centre",
+        "description": "Opening night for a new exhibition from emerging Baltic artists.",
+        "tag1": "Indoor",
+        "tag2": "Free entry",
+        "organiser": "CAC Vilnius"
+      },
+      "paupys-beer-tasting": {
+        "title": "Paupys Craft Beer Tasting",
+        "category": "Food",
+        "dateLabel": "Saturday · 17:00",
+        "venue": "Paupys",
+        "description": "A guided tasting flight from three local craft breweries.",
+        "tag1": "18+",
+        "tag2": "Includes snacks",
+        "organiser": "Paupys Brewers Collective"
+      },
+      "ai-city-meetup": {
+        "title": "Vilnius Tech Meetup: AI in the City",
+        "category": "Workshop",
+        "dateLabel": "Wednesday · 18:30",
+        "venue": "Vilnius Tech Park",
+        "description": "Local builders share how they're using AI in city services and startups.",
+        "tag1": "Networking",
+        "tag2": "Indoor",
+        "organiser": "Vilnius Tech Community"
+      },
+      "trakai-castle-tour": {
+        "title": "Trakai Castle Evening Tour",
+        "category": "Culture",
+        "dateLabel": "Saturday · 10:00",
+        "venue": "Trakai Island Castle",
+        "description": "A guided evening tour of the lakeside castle, a short trip outside the city.",
+        "tag1": "Day trip",
+        "tag2": "Guided tour",
+        "organiser": "Trakai Heritage Tours"
+      }
+    },
+    "title": "Events near you",
+    "subtitle": "Real events happening around Vilnius today.",
+    "eyebrow": "Alwenda city calendar · {area}",
+    "nearYouHeading": "Outdoor events within 25 minutes",
+    "nearYouHint": "Fresh listings, refreshed daily.",
+    "otherHeading": "Explore other events",
+    "otherHint": "A bit further out, or indoors — still worth a look.",
+    "noEventsMatch": "No events match right now.",
+    "totalEventsStat": "events this week",
+    "nearYouStat": "within 25 minutes",
+    "detailEyebrow": "Happening in {area}",
+    "hostedBy": "Hosted by",
+    "whereLabel": "Where",
+    "aboutEvent": "About this event",
+    "similarEvents": "Similar events",
+    "similarEventsHint": "More things happening nearby."
   }
 }
