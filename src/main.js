@@ -32,7 +32,7 @@ import {
   reputationProfile,
   SEED_CITY_META,
   serviceProfessionals
-} from "./data/mockData.js?v=production-sprint-24";
+} from "./data/mockData.js?v=vilnius-neighbourhoods-1";
 import { integrations } from "./services/integrationPlaceholders.js";
 import {
   t,
@@ -93,6 +93,11 @@ import {
   speakTranslatedText,
   stopTranslationSpeech
 } from "./services/voiceService.js?v=elevenlabs-tts-1";
+import {
+  createPersonaPlaceholderSession,
+  IDENTITY_VERIFICATION_STATES,
+  PERSONA_INTEGRATION_PLACEHOLDER
+} from "./services/identity/personaVerification.js?v=persona-placeholder-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
 
@@ -155,6 +160,12 @@ const state = {
     error: null,
     createdHelpRequest: null,
     createdListing: null
+  },
+  alwenListingSelections: {
+    price: "€860",
+    category: "Electronics",
+    delivery: "Pickup today",
+    boost: "48-hour local boost"
   },
   selectedBusinessId: null,
   selectedListingId: null,
@@ -233,6 +244,7 @@ const state = {
   traderPublicProfiles: {},
   myListings: [],
   myHelpRequests: [],
+  identityVerification: null,
   bookingDraft: { dateIndex: null, time: null },
   bookingConfirmed: null,
   directionsOptions: null,
@@ -723,6 +735,7 @@ const DEEP_LINK_VIEWS = new Set([
   "liveOpportunityDetail",
   "businesses",
   "businessProfile",
+  "businessCreate",
   "businessClaim",
   "offers",
   "reservations",
@@ -1886,13 +1899,13 @@ function renderSheet() {
   if (state.activeSheet === "city") {
     return `
       <div class="sheet-backdrop" data-sheet-close="true">
-        <section class="selection-sheet" aria-label="${t("common.chooseCity")}">
+        <section class="selection-sheet city-selection-sheet" aria-label="${t("common.chooseCity")}">
           <div class="sheet-handle"></div>
           <div class="sheet-title">
             <div><h2>${t("home.citySheetTitle")}</h2><p>${t("home.citySheetHint")}</p></div>
             <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
           </div>
-          <div class="sheet-option-grid">
+          <div class="sheet-option-grid city-option-grid">
             ${["All", ...neighbourhoods].map((area) => `
               <button class="${state.area === area ? "is-selected" : ""}" data-area-option="${area}">
                 <strong>${area === "All" ? city.name : area}</strong>
@@ -3058,6 +3071,7 @@ function renderView() {
     listings: renderListings,
     listingDetail: renderListingDetail,
     businesses: renderBusinesses,
+    businessCreate: renderBusinessCreate,
     businessProfile: renderBusinessProfile,
     businessClaim: renderBusinessClaim,
     offers: renderOffers,
@@ -3180,6 +3194,7 @@ function renderAlwenResponseCard() {
    straight into the real chat (submitAlwenChat), the same as if the user
    had typed it themselves. */
 const ALWEN_QUICK_ACTIONS = [
+  { emoji: "🏪", labelKey: "alwen.quickAction.business", view: "businessCreate", featured: true },
   ["🏠", "alwen.quickAction.apartments"],
   ["💊", "alwen.quickAction.translate"],
   ["🚲", "alwen.quickAction.sell"],
@@ -3193,12 +3208,17 @@ function renderAlwenQuickActions() {
     <div class="alwen-section">
       <h2>${t("alwen.quickActionsTitle")}</h2>
       <div class="alwen-quick-grid">
-        ${ALWEN_QUICK_ACTIONS.map(([emoji, labelKey]) => `
-          <button type="button" class="alwen-quick-card" data-action="alwen-quick-prompt" data-prompt-key="${labelKey}">
+        ${ALWEN_QUICK_ACTIONS.map((action) => {
+          const { emoji, labelKey, view, featured } = Array.isArray(action)
+            ? { emoji: action[0], labelKey: action[1], view: null, featured: false }
+            : action;
+          return `
+          <button type="button" class="alwen-quick-card ${featured ? "is-featured" : ""}" ${view ? `data-view="${view}"` : `data-action="alwen-quick-prompt" data-prompt-key="${labelKey}"`}>
             <span class="alwen-quick-emoji" aria-hidden="true">${emoji}</span>
             <span>${t(labelKey)}</span>
           </button>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     </div>
   `;
@@ -4640,7 +4660,7 @@ function renderCreate() {
   const primaryCreationActions = [
     ["tag", "common.sellSomething", "common.sellSomethingHint", "createListing"],
     ["help", "common.requestHelp", "common.requestHelpHint", "needHelp"],
-    ["city", "common.addBusiness", "common.addBusinessHint", "ops"]
+    ["city", "common.addBusiness", "common.addBusinessHint", "businessCreate"]
   ];
   const secondaryCreationActions = [
     ["message", "common.postCommunity", "common.postCommunityHint", "community"],
@@ -5589,30 +5609,127 @@ function renderCreateListingForm() {
 }
 
 function renderAlwenListingCreator() {
-  const editableChips = [
-    alwenListingDraft.suggestedPrice,
-    alwenListingDraft.marketplaceCategory,
-    alwenListingDraft.condition,
-    alwenListingDraft.pickupArea,
-    alwenListingDraft.deliveryOptions[0],
-    alwenListingDraft.recommendedBoost
+  const selections = state.alwenListingSelections || {};
+  const suggestionGroups = [
+    {
+      key: "price",
+      title: t("alwen.listingSuggestionPrice"),
+      options: [
+        { value: "€820", label: t("alwen.listingPriceFast"), meta: t("alwen.listingPriceFastMeta") },
+        { value: "€860", label: t("alwen.listingPriceBalanced"), meta: t("alwen.listingPriceBalancedMeta") },
+        { value: "€890", label: t("alwen.listingPriceMax"), meta: t("alwen.listingPriceMaxMeta") }
+      ]
+    },
+    {
+      key: "delivery",
+      title: t("alwen.listingSuggestionDelivery"),
+      options: [
+        { value: "Pickup today", label: t("alwen.listingDeliveryPickup"), meta: alwenListingDraft.pickupArea },
+        { value: "Courier in Vilnius", label: t("alwen.listingDeliveryCourier"), meta: "€4-7" },
+        { value: "Meet in public place", label: t("alwen.listingDeliveryMeet"), meta: t("alwen.listingRecommended") }
+      ]
+    },
+    {
+      key: "boost",
+      title: t("alwen.listingSuggestionBoost"),
+      options: [
+        { value: "No boost", label: t("alwen.listingBoostNone"), meta: t("alwen.listingBoostNoneMeta") },
+        { value: "48-hour local boost", label: t("alwen.listingBoostLocal"), meta: t("alwen.listingBoostLocalMeta") },
+        { value: "Weekend electronics boost", label: t("alwen.listingBoostWeekend"), meta: t("alwen.listingBoostWeekendMeta") }
+      ]
+    }
+  ];
+  const selectedPrice = selections.price || "€860";
+  const selectedDelivery = selections.delivery || "Pickup today";
+  const selectedBoost = selections.boost || "48-hour local boost";
+  const readinessItems = [
+    [true, t("alwen.listingReadyTitle")],
+    [true, t("alwen.listingReadyPrice")],
+    [true, t("alwen.listingReadyCategory")],
+    [false, t("alwen.listingReadyPhotos")]
+  ];
+  const quickFacts = [
+    ["8 sec", t("alwen.listingTimeSaved")],
+    [alwenListingDraft.nearbyBuyers, t("alwen.listingDemand")],
+    ["92%", t("alwen.listingCompleteness")]
+  ];
+  const smartDrops = [
+    [t("alwen.listingFieldCategory"), alwenListingDraft.marketplaceCategory],
+    [t("field.condition"), alwenListingDraft.condition],
+    [t("alwen.listingFieldBrand"), alwenListingDraft.brand],
+    [t("alwen.listingFieldPickup"), alwenListingDraft.pickupArea],
+    [t("alwen.listingFieldDelivery"), selectedDelivery],
+    [t("alwen.listingFieldBoost"), selectedBoost]
   ];
 
   return `
     <section class="alwen-card alwen-listing-studio">
       <div class="section-title">
         <div><h2>${t("alwen.alwenListingTitle")}</h2><p>${t("alwen.alwenListingHint")}</p></div>
+        <span class="alwen-speed-pill">${icon("spark")}${t("alwen.listingAutopilot")}</span>
       </div>
       <div class="alwen-create-layout">
         <div class="alwen-create-copy">
-          <div class="alwen-prompt">${icon("spark")}<p>${alwenListingDraft.prompt}</p></div>
-          <h3>${alwenListingDraft.title}</h3>
-          <p>${alwenListingDraft.description}</p>
-          <div class="editable-chip-row">
-            ${editableChips.map((chip) => `<button>${chip}</button>`).join("")}
+          <div class="alwen-prompt">${icon("spark")}<div><strong>${t("alwen.listingPromptLabel")}</strong><p>${alwenListingDraft.prompt}</p></div></div>
+          <div class="alwen-workspace-head">
+            <span>${t("alwen.listingDraftStatus")}</span>
+            <h3>${t("alwen.listingReviewHeadline")}</h3>
+            <p>${t("alwen.listingReviewHint")}</p>
           </div>
-          <div class="draft-list"><strong>${t("common.keywords")}</strong><p>${alwenListingDraft.keywords.join(" · ")}</p></div>
-          <div class="draft-actions"><button>${t("common.publish")}</button><button>${t("common.improve")}</button><button>${t("common.addPhotos")}</button></div>
+          <div class="alwen-listing-metrics" aria-label="${t("alwen.listingInsights")}">
+            ${quickFacts.map(([value, label]) => `<article><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`).join("")}
+          </div>
+          <div class="alwen-suggestion-board" aria-label="${t("alwen.listingSuggestionBoard")}">
+            ${suggestionGroups.map((group) => `
+              <article class="alwen-suggestion-group">
+                <div>
+                  <strong>${group.title}</strong>
+                  <span>${t("alwen.listingTapToApply")}</span>
+                </div>
+                <div class="alwen-option-stack">
+                  ${group.options.map((option) => {
+                    const isSelected = (selections[group.key] || group.options[1]?.value || group.options[0].value) === option.value;
+                    return `
+                      <button type="button" class="${isSelected ? "is-selected" : ""}" data-action="alwen-listing-suggestion" data-suggestion-group="${group.key}" data-suggestion-value="${escapeHtml(option.value)}">
+                        <span>${escapeHtml(option.label)}</span>
+                        <strong>${escapeHtml(option.value)}</strong>
+                        <em>${escapeHtml(option.meta)}</em>
+                      </button>
+                    `;
+                  }).join("")}
+                </div>
+              </article>
+            `).join("")}
+          </div>
+          <div class="alwen-smart-dropzone">
+            <div>
+              <strong>${t("alwen.listingSmartDropzone")}</strong>
+              <span>${t("alwen.listingSmartDropzoneHint")}</span>
+            </div>
+            <div class="alwen-generated-grid">
+              ${smartDrops.map(([label, value]) => `
+                <article>
+                  <span>${label}</span>
+                  <strong>${escapeHtml(value)}</strong>
+                </article>
+              `).join("")}
+            </div>
+          </div>
+          <div class="alwen-listing-panels">
+            <article class="alwen-photo-card">
+              <strong>${t("alwen.listingPhotoPlan")}</strong>
+              <div class="alwen-photo-plan">
+                ${alwenListingDraft.suggestedPhotos.map((photo, index) => `<span>${index + 1}. ${escapeHtml(photo)}</span>`).join("")}
+              </div>
+            </article>
+            <article class="alwen-readiness-card">
+              <strong>${t("alwen.listingPublishReadiness")}</strong>
+              <div class="alwen-readiness-list">
+                ${readinessItems.map(([done, label]) => `<span class="${done ? "is-done" : ""}">${done ? "✓" : "○"} ${label}</span>`).join("")}
+              </div>
+            </article>
+          </div>
+          <div class="draft-actions"><button>${t("common.publish")}</button><button>${t("common.addPhotos")}</button><button>${t("common.improve")}</button></div>
         </div>
         <article class="market-card visual-market-card alwen-preview-card">
           <div class="market-photo" style="background-image: url('https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80')">
@@ -5625,9 +5742,13 @@ function renderAlwenListingCreator() {
               <div><strong>${reputationProfile.name}${verifiedCheck(t("common.verifiedSeller"))}</strong><span>${alwenListingDraft.pickupArea} · ${t("common.verifiedSeller")}</span></div>
             </div>
             <h3>${alwenListingDraft.title}</h3>
-            <div class="price-row"><strong>${alwenListingDraft.suggestedPrice}</strong><span>${t("common.goodPrice")}</span></div>
+            <div class="price-row"><strong>${selectedPrice}</strong><span>${t("common.goodPrice")}</span></div>
             <p>${alwenListingDraft.summary}</p>
-            <div class="ai-price-pill">${icon("spark")}<span>${alwenListingDraft.searchOptimisation}</span></div>
+            <div class="ai-price-pill">${icon("spark")}<span>${escapeHtml(`${selectedDelivery} · ${selectedBoost}`)}</span></div>
+            <div class="alwen-preview-next">
+              <strong>${t("alwen.listingNextBestAction")}</strong>
+              <span>${alwenListingDraft.suggestedImprovements[0]}</span>
+            </div>
           </div>
         </article>
       </div>
@@ -5662,7 +5783,7 @@ function renderMarketplaceListing(item) {
         <p>${listingMeta(item)}</p>
         ${item.aiPrice || item.aiMatch ? `<div class="ai-price-pill">${icon("spark")}<span>${joinNonEmpty([item.aiMatch, item.aiPrice])}</span></div>` : ""}
         ${item.popularity || item.aiInsight ? `<div class="trust-row visual-trust">${item.popularity ? `<span>${item.popularity}</span>` : ""}${item.aiInsight ? `<span>${item.aiInsight}</span>` : ""}</div>` : ""}
-        <div class="market-actions"><button type="button" ${personAttrs}>${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button></div>
+        <div class="market-actions"><button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button></div>
       </div>
     </article>
   `;
@@ -5747,7 +5868,7 @@ function renderListingDetail() {
       <button type="button" class="settings-row-button" ${sellerAttrs}>${t("common.viewProfile")}</button>
 
       <div class="business-profile-actions listing-detail-actions">
-        <button type="button" data-view="messages">${t("common.message")}</button>
+        <button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${t("common.message")}</button>
         ${
           item.sellerPhone
             ? `<a class="directions-btn" href="tel:${item.sellerPhone}" title="${t("marketplace.listingDetail.callOpensPhone")}">${t("common.call")}</a>`
@@ -5777,8 +5898,8 @@ function renderProfessional(item) {
           </div>
         </div>
       </div>
-      <button data-view="needHelp">${t("nav.book")}</button>
-      <button ${personAttrs}>${t("common.contact")}</button>
+      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
+      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
     </article>
   `;
 }
@@ -5923,7 +6044,7 @@ function renderOpportunityCard(item) {
     <p class="opportunity-meta">${t("common.opportunityDistanceMeta", { distance: item.distance, time })}</p>
     <p>${description}</p><div class="opportunity-trust"><span>✓ ${requester}</span><span>★ ${t("common.trustScore", { score: item.trust })}</span></div>
     <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
-    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-view="messages">${action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">${t("common.viewDetails")}</a></div></div>
+    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">${t("common.viewDetails")}</a></div></div>
   </article>`;
 }
 
@@ -5970,8 +6091,8 @@ function renderLiveOpportunityDetail() {
         </div>
         <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
         <div class="opportunity-detail-actions">
-          <button type="button" class="opportunity-primary" data-view="messages">${action}</button>
-          <button type="button" data-view="messages">${t("common.message")}</button>
+          <button type="button" class="opportunity-primary" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${action}</button>
+          <button type="button" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${t("common.message")}</button>
           <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
         </div>
       </div>
@@ -6538,7 +6659,7 @@ function renderBusinessProfile() {
         <button type="button" data-view="reservations">${t("common.bookNow")}</button>
         ${renderDirectionsButton(item)}
         ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>` : ""}
-        <button type="button" data-view="messages">${t("common.message")}</button>
+        <button type="button" data-action="start-business-conversation" data-business-id="${item.id}">${t("common.message")}</button>
       </div>
       ${
         item.services
@@ -6650,6 +6771,115 @@ function toggleConversationRead(id) {
   if (thread) thread.unread = thread.unread > 0 ? 0 : 1;
 }
 
+function createConversationNotification(thread, title, summary) {
+  notifications.unshift({
+    id: Date.now() + 1,
+    type: thread.type === "professional" ? "booking" : thread.type === "marketplace" ? "marketplace" : thread.type === "business" ? "business" : "system",
+    priority: "normal",
+    title,
+    summary,
+    timeKey: "notification.groupNow",
+    timeGroup: "now",
+    unread: true,
+    completed: false,
+    primaryActionKey: "messages.messages",
+    primaryActionView: "conversation",
+    conversationId: thread.id
+  });
+}
+
+function openGeneratedConversation({ type, participant, verified = false, preview, contextKind, contextTitle, contextMeta, firstMessage, userMessage }) {
+  const id = Date.now();
+  const thread = {
+    id,
+    type,
+    participant,
+    verified,
+    preview,
+    unread: 1,
+    timeKey: "notification.groupNow",
+    context: { kind: contextKind, title: contextTitle, meta: contextMeta },
+    messages: [
+      { from: "me", text: userMessage, time: t("notification.groupNow") },
+      { from: "them", text: firstMessage, time: t("notification.groupNow") }
+    ]
+  };
+  messageThreads.unshift(thread);
+  createConversationNotification(thread, contextTitle, preview);
+  state.activeConversationId = id;
+  state.activeView = "conversation";
+  state.activeSheet = null;
+  state.alwenOpen = false;
+  render();
+}
+
+function startListingConversation(listingId) {
+  const item = listings.find((listing) => String(listing.id) === String(listingId));
+  if (!item) return;
+  const title = listingTitle(item);
+  openGeneratedConversation({
+    type: "marketplace",
+    participant: item.seller || t("common.verifiedSeller"),
+    verified: Boolean(item.verifiedSeller),
+    preview: `New message about ${title}`,
+    contextKind: "listing",
+    contextTitle: title,
+    contextMeta: `${item.price} · ${item.area || city.name}`,
+    userMessage: `Hi, I'm interested in ${title}. Is it still available?`,
+    firstMessage: `Thanks for your message. I can confirm availability, pickup, and any details here.`
+  });
+}
+
+function startOpportunityConversation(opportunityId) {
+  const item = findOpportunityById(opportunityId);
+  if (!item) return;
+  const title = opportunityText(item, "title");
+  const requester = opportunityText(item, "requester");
+  openGeneratedConversation({
+    type: "professional",
+    participant: requester,
+    verified: true,
+    preview: `You responded to ${title}`,
+    contextKind: "quote",
+    contextTitle: title,
+    contextMeta: `${item.priceLabel} · ${opportunityText(item, "time")} · ${opportunityText(item, "category")}`,
+    userMessage: `Hi, I can help with ${title}. I’m available to discuss details.`,
+    firstMessage: `Great — share your availability and any quote details here so we can confirm.`
+  });
+}
+
+function startProfessionalConversation(personId, mode = "contact") {
+  const pro = serviceProfessionals.find((item) => String(item.id) === String(personId));
+  if (!pro) return;
+  openGeneratedConversation({
+    type: "professional",
+    participant: pro.name,
+    verified: Boolean(pro.verified),
+    preview: mode === "book" ? `Booking request sent to ${pro.name}` : `New conversation with ${pro.name}`,
+    contextKind: mode === "book" ? "booking" : "quote",
+    contextTitle: t(pro.categoryKey),
+    contextMeta: `${pro.price} · ${pro.availability} · ${pro.distance}`,
+    userMessage: mode === "book" ? `Hi ${pro.name}, I’d like to book your service.` : `Hi ${pro.name}, I’d like to ask about your service.`,
+    firstMessage: `Thanks — send your preferred time, location, and any details here.`
+  });
+}
+
+function startBusinessConversation(businessId) {
+  const item = businesses.find((business) => String(business.id) === String(businessId)) || importedBusinesses.find((business) => String(business.id) === String(businessId));
+  if (!item) return;
+  openGeneratedConversation({
+    type: "business",
+    participant: item.name,
+    verified: Boolean(item.verified || item.verificationStatus === "Verified"),
+    preview: `New conversation with ${item.name}`,
+    contextKind: "booking",
+    contextTitle: item.name,
+    contextMeta: joinNonEmpty([businessCategoryLabel(item.category || item.type), item.area || item.neighbourhood || city.name]),
+    userMessage: `Hi, I’d like to ask about ${item.name}.`,
+    firstMessage: `Thanks for contacting us. Tell us what you need and we’ll help from here.`
+  });
+}
+
 /* Swipe-to-act wrapper shared by notification cards and conversation
    rows — two action glyphs sit behind the card, revealed by dragging
    the foreground surface; bindSwipeRows() in bindEvents() does the
@@ -6667,7 +6897,11 @@ function renderSwipeRow(type, id, leftGlyph, rightGlyph, innerHtml) {
 
 function renderNotificationCard(item) {
   const meta = NOTIFICATION_TYPE_META[item.type] || NOTIFICATION_TYPE_META.system;
-  const primaryAttrs = item.primaryActionSheet ? `data-sheet="${item.primaryActionSheet}"` : `data-view="${item.primaryActionView || "notifications"}"`;
+  const primaryAttrs = item.primaryActionSheet
+    ? `data-sheet="${item.primaryActionSheet}"`
+    : `data-view="${item.primaryActionView || "notifications"}" ${item.conversationId ? `data-conversation-id="${item.conversationId}"` : ""}`;
+  const title = item.titleKey ? t(item.titleKey) : escapeHtml(item.title || "");
+  const summary = item.summaryKey ? t(item.summaryKey) : escapeHtml(item.summary || "");
   return `
     <article class="notification-card priority-${item.priority} ${item.unread ? "is-unread" : ""}">
       <span class="notification-card-icon" aria-hidden="true">${meta.emoji}</span>
@@ -6678,8 +6912,8 @@ function renderNotificationCard(item) {
           ${item.priority === "urgent" && !item.completed ? `<span class="notification-urgent-badge">${t("notification.urgentLabel")}</span>` : ""}
           <span class="notification-card-time">${t(item.timeKey)}</span>
         </div>
-        <h3>${t(item.titleKey)}</h3>
-        <p>${t(item.summaryKey)}</p>
+        <h3>${title}</h3>
+        <p>${summary}</p>
         ${item.completed
           ? `<span class="notification-completed-badge">${icon("check")}${t("notification.completedLabel")}</span>`
           : `
@@ -6704,11 +6938,14 @@ function renderNeedsActionSummary(items) {
       <div class="needs-action-strip">
         ${items.map((item) => {
           const meta = NOTIFICATION_TYPE_META[item.type] || NOTIFICATION_TYPE_META.system;
-          const primaryAttrs = item.primaryActionSheet ? `data-sheet="${item.primaryActionSheet}"` : `data-view="${item.primaryActionView || "notifications"}"`;
+          const primaryAttrs = item.primaryActionSheet
+            ? `data-sheet="${item.primaryActionSheet}"`
+            : `data-view="${item.primaryActionView || "notifications"}" ${item.conversationId ? `data-conversation-id="${item.conversationId}"` : ""}`;
+          const title = item.titleKey ? t(item.titleKey) : escapeHtml(item.title || "");
           return `
             <button type="button" class="needs-action-card priority-${item.priority}" data-action="notification-primary" data-id="${item.id}" ${primaryAttrs}>
               <span aria-hidden="true">${meta.emoji}</span>
-              <span>${t(item.titleKey)}</span>
+              <span>${title}</span>
             </button>
           `;
         }).join("")}
@@ -6844,7 +7081,7 @@ function renderNotificationsHub() {
             ${(() => {
               const items = sortedNotifications(notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high"))).slice(0, 4);
               if (!items.length) return `<p class="notification-rail-empty">${t("notification.needsActionEmpty")}</p>`;
-              return `<ul class="notification-rail-list">${items.map((item) => `<li>${t(item.titleKey)}</li>`).join("")}</ul>`;
+              return `<ul class="notification-rail-list">${items.map((item) => `<li>${item.titleKey ? t(item.titleKey) : escapeHtml(item.title || "")}</li>`).join("")}</ul>`;
             })()}
           </div>
           <div class="notification-rail-card">
@@ -6882,8 +7119,8 @@ function renderConversationDetail() {
       ${thread.context ? `
         <div class="conversation-context-card">
           <span class="conversation-context-kind">${t(CONVERSATION_CONTEXT_LABEL_KEY[thread.context.kind] || "messages.contextPlan")}</span>
-          <h3>${t(thread.context.titleKey)}</h3>
-          <p>${t(thread.context.metaKey)}</p>
+          <h3>${thread.context.titleKey ? t(thread.context.titleKey) : escapeHtml(thread.context.title || "")}</h3>
+          <p>${thread.context.metaKey ? t(thread.context.metaKey) : escapeHtml(thread.context.meta || "")}</p>
         </div>
       ` : ""}
       ${renderTransactionSafetyNotice()}
@@ -7782,6 +8019,72 @@ function deriveRealActivity() {
     .map((item) => ({ title: item.title, date: item.created_at ? formatDate(item.created_at, { day: "numeric", month: "short" }) : "" }));
 }
 
+function identityVerificationStateLabel() {
+  const status = state.identityVerification?.status || IDENTITY_VERIFICATION_STATES.NOT_STARTED;
+  if (status === IDENTITY_VERIFICATION_STATES.READY) return t("profile.trust.personaReadyStatus");
+  if (status === IDENTITY_VERIFICATION_STATES.PENDING_PROVIDER) return t("profile.trust.personaPendingStatus");
+  if (status === IDENTITY_VERIFICATION_STATES.VERIFIED) return t("profile.identity.identityVerified");
+  if (status === IDENTITY_VERIFICATION_STATES.REJECTED) return t("profile.trust.personaRejectedStatus");
+  return t("profile.trust.personaNotStartedStatus");
+}
+
+function preparePersonaVerification() {
+  if (state.auth.status !== "signedIn" || !state.auth.user) return;
+  state.identityVerification = createPersonaPlaceholderSession({
+    userId: state.auth.user.id,
+    email: state.auth.user.email,
+    city: state.auth.user.publicProfile?.city || city.name
+  });
+  trackEvent("identity_verification_prepared", { provider: PERSONA_INTEGRATION_PLACEHOLDER.provider });
+  render();
+}
+
+function renderIdentityVerificationPlan(user, badges) {
+  const hasEmail = Boolean(user.emailVerified);
+  const hasPhone = Boolean(user.phoneVerified);
+  const personaReady = state.identityVerification?.status === IDENTITY_VERIFICATION_STATES.READY;
+  const steps = [
+    { labelKey: "profile.trust.stepEmail", detailKey: "profile.trust.stepEmailDetail", done: hasEmail },
+    { labelKey: "profile.trust.stepPhone", detailKey: "profile.trust.stepPhoneDetail", done: hasPhone },
+    { labelKey: "profile.trust.stepPersona", detailKey: "profile.trust.stepPersonaDetail", done: personaReady || user.publicProfile?.verification_status === "verified" },
+    { labelKey: "profile.trust.stepProvider", detailKey: "profile.trust.stepProviderDetail", done: ownedBusinesses().length > 0 || state.myListings.some((item) => item.metadata?.offerorStatus === "trader") }
+  ];
+
+  return `
+    <div class="identity-verification-plan">
+      <div class="identity-verification-header">
+        <div>
+          <p class="eyebrow">${t("profile.trust.verificationPathEyebrow")}</p>
+          <h3>${t("profile.trust.verificationPathTitle")}</h3>
+          <p>${t("profile.trust.verificationPathHint")}</p>
+        </div>
+        <span class="verification-provider-pill">${t("profile.trust.personaProviderLabel")}</span>
+      </div>
+
+      <div class="identity-verification-steps">
+        ${steps.map((step, index) => `
+          <article class="${step.done ? "is-complete" : ""}">
+            <span>${step.done ? icon("check") : index + 1}</span>
+            <div>
+              <strong>${t(step.labelKey)}</strong>
+              <p>${t(step.detailKey)}</p>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+
+      <div class="identity-verification-action">
+        <div>
+          <strong>${identityVerificationStateLabel()}</strong>
+          <p>${personaReady ? t("profile.trust.personaPreparedHint") : t("profile.trust.personaFutureHint")}</p>
+          ${badges.length ? `<div class="quote-list identity-badges">${badges.map((badge) => `<span class="verified-chip">${icon(badge.icon)}${t(badge.labelKey)}</span>`).join("")}</div>` : ""}
+        </div>
+        <button type="button" class="auth-primary-button" data-identity-prepare-persona="true">${personaReady ? t("profile.trust.personaPreparedCta") : t("profile.trust.personaPrepareCta")}</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderPublicProfile() {
   const person = state.publicProfile;
   if (!person) return renderProfileSignedOut();
@@ -7919,11 +8222,8 @@ function renderProfile() {
       <div class="settings-section trust-section">
         <div class="section-title"><div><h2>${t("profile.trust.title")}</h2><p>${t("profile.trust.hint")}</p></div></div>
         <p class="trust-headline">${t("profile.trust.buildingTrust")}</p>
-        ${
-          badges.length
-            ? `<div class="quote-list identity-badges">${badges.map((badge) => `<span class="verified-chip">${icon(badge.icon)}${t(badge.labelKey)}</span>`).join("")}</div>`
-            : `<p class="settings-section-hint">${t("profile.trust.noVerificationYet")}</p>`
-        }
+        ${renderIdentityVerificationPlan(user, badges)}
+        ${badges.length ? "" : `<p class="settings-section-hint">${t("profile.trust.noVerificationYet")}</p>`}
         <details class="trust-details">
           <summary>${t("profile.trust.howCalculated")}</summary>
           <ul>
@@ -8105,6 +8405,20 @@ function renderOps() {
       <div class="integration-list">
         ${integrations.map((item) => `<article><strong>${t(item.titleKey)}</strong><p>${item.description}</p></article>`).join("")}
       </div>
+    </section>
+  `;
+}
+
+function renderBusinessCreate() {
+  return `
+    <section class="section-shell business-create-shell">
+      <button type="button" class="back-button" data-view="create">${icon("arrow")}${t("common.back")}</button>
+      <div class="screen-heading">
+        <p class="eyebrow">${t("common.addBusiness")}</p>
+        <h1>${t("alwen.alwenBusinessTitle")}</h1>
+        <p>${t("alwen.alwenBusinessHint")}</p>
+      </div>
+      ${renderAlwenBusinessCreator()}
     </section>
   `;
 }
@@ -9049,6 +9363,48 @@ function bindEvents() {
   document.querySelectorAll('[data-action="alwen-quick-prompt"]').forEach((button) => {
     button.addEventListener("click", () => {
       submitAlwenChat(t(button.dataset.promptKey));
+    });
+  });
+
+  document.querySelectorAll('[data-action="alwen-listing-suggestion"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = button.dataset.suggestionGroup;
+      const value = button.dataset.suggestionValue;
+      if (!group || !value) return;
+      state.alwenListingSelections = { ...state.alwenListingSelections, [group]: value };
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-listing-conversation"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startListingConversation(button.dataset.listingId);
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-opportunity-conversation"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startOpportunityConversation(button.dataset.opportunityId);
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-pro-conversation"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startProfessionalConversation(button.dataset.proId, button.dataset.conversationMode || "contact");
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-business-conversation"]').forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startBusinessConversation(button.dataset.businessId);
     });
   });
 
@@ -10022,6 +10378,7 @@ function bindSettingsEvents() {
   document.querySelector('[data-settings-signout="true"]')?.addEventListener("click", () => signOut("local"));
   document.querySelector('[data-settings-signout-everywhere="true"]')?.addEventListener("click", () => signOut("global"));
   document.querySelector('[data-profile-signout="true"]')?.addEventListener("click", signOut);
+  document.querySelector('[data-identity-prepare-persona="true"]')?.addEventListener("click", preparePersonaVerification);
 
   const notifyBindings = [
     ["settings-notify-messages", "notifyMessages"],

@@ -837,6 +837,37 @@ body.has-open-sheet {
   color: rgba(255, 255, 255, 0.72);
 }
 
+.city-selection-sheet {
+  width: min(100%, 760px);
+}
+
+.city-option-grid {
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  padding: 2px 3px 6px;
+  overscroll-behavior: contain;
+}
+
+.city-option-grid button {
+  min-height: 68px;
+}
+
+@media (max-width: 520px) {
+  .city-selection-sheet {
+    max-height: 86vh;
+  }
+
+  .city-option-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 58vh;
+  }
+
+  .city-option-grid button {
+    padding: 12px;
+  }
+}
+
 /* Premium language picker — flag, native name + English subtitle, and a
    checkmark that animates in on the active row. Shared by the language
    sheet, Settings, and onboarding so switching languages feels like one
@@ -1234,6 +1265,33 @@ body.has-open-sheet {
 .ops-actions button span {
   font-weight: 600;
   opacity: 0.82;
+}
+
+.ops-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.ops-list article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.ops-list article strong {
+  font-size: clamp(1.35rem, 2vw, 1.9rem);
+  line-height: 1;
+}
+
+.ops-list article span,
+.ops-list article em {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 780;
 }
 
 .need-help-wide {
@@ -4325,7 +4383,15 @@ select:focus-visible,
    it stays readable on this always-light card regardless of theme. */
 :root[data-theme="dark"] .alwen-create-copy h3,
 :root[data-theme="dark"] .alwen-create-copy p,
+:root[data-theme="dark"] .alwen-listing-summary span,
+:root[data-theme="dark"] .alwen-workspace-head span,
+:root[data-theme="dark"] .alwen-workspace-head p,
+:root[data-theme="dark"] .alwen-suggestion-group > div:first-child span,
+:root[data-theme="dark"] .alwen-smart-dropzone > div:first-child span,
+:root[data-theme="dark"] .alwen-generated-grid span,
+:root[data-theme="dark"] .alwen-listing-metrics span,
 :root[data-theme="dark"] .alwen-listing-studio .alwen-prompt p,
+:root[data-theme="dark"] .alwen-listing-studio .alwen-prompt strong,
 :root[data-theme="dark"] .alwen-listing-studio .draft-list strong,
 :root[data-theme="dark"] .alwen-listing-studio .draft-list p {
   color: #151515 !important;
@@ -4333,15 +4399,15 @@ select:focus-visible,
 
 .alwen-create-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.12fr) minmax(300px, 0.88fr);
+  gap: 24px;
   align-items: stretch;
 }
 
 .alwen-create-copy {
   display: grid;
-  gap: 14px;
-  align-content: center;
+  gap: 16px;
+  align-content: start;
 }
 
 .alwen-create-copy h3 {
@@ -4353,6 +4419,286 @@ select:focus-visible,
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.alwen-listing-studio .section-title {
+  margin-bottom: var(--space-2);
+}
+
+.alwen-speed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 850;
+  white-space: nowrap;
+  box-shadow: 0 14px 34px rgba(17, 17, 17, 0.18);
+}
+
+.alwen-prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.alwen-prompt .icon {
+  margin-top: 2px;
+  color: #111;
+}
+
+.alwen-prompt strong,
+.alwen-listing-summary span,
+.alwen-generated-grid span,
+.alwen-listing-metrics span,
+.alwen-preview-next span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.alwen-listing-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.alwen-workspace-head {
+  display: grid;
+  gap: 8px;
+}
+
+.alwen-workspace-head span,
+.alwen-listing-summary span {
+  width: fit-content;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #e8f7ef;
+  color: #087044;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.alwen-workspace-head h3 {
+  max-width: 760px;
+}
+
+.alwen-workspace-head p {
+  max-width: 680px;
+}
+
+.alwen-listing-metrics,
+.alwen-generated-grid,
+.alwen-listing-panels {
+  display: grid;
+  gap: 10px;
+}
+
+.alwen-listing-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.alwen-listing-metrics article,
+.alwen-generated-grid article,
+.alwen-listing-panels article,
+.alwen-preview-next {
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 12px 30px rgba(28, 25, 20, 0.06);
+}
+
+.alwen-listing-metrics article {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.alwen-listing-metrics strong {
+  font-size: 1.08rem;
+}
+
+.alwen-generated-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.alwen-generated-grid article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px 14px;
+}
+
+.alwen-generated-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.alwen-suggestion-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.alwen-suggestion-group {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 14px 34px rgba(28, 25, 20, 0.06);
+}
+
+.alwen-suggestion-group > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.alwen-suggestion-group > div:first-child span,
+.alwen-smart-dropzone > div:first-child span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.alwen-option-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.alwen-option-stack button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  align-items: center;
+  min-height: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 16px;
+  background: rgba(247, 246, 243, 0.86);
+  color: #151515;
+  text-align: left;
+  box-shadow: none;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.alwen-option-stack button:hover,
+.alwen-option-stack button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(17, 17, 17, 0.18);
+  background: #fff;
+  box-shadow: 0 14px 28px rgba(28, 25, 20, 0.08);
+}
+
+.alwen-option-stack button.is-selected {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  border-color: rgba(8, 112, 68, 0.22);
+  background: #e8f7ef;
+  box-shadow: inset 0 0 0 1px rgba(8, 112, 68, 0.1);
+}
+
+.alwen-option-stack button.is-selected::before {
+  content: "✓";
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #087044;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.alwen-option-stack button span {
+  grid-column: 1;
+  color: #151515;
+  font-weight: 850;
+}
+
+.alwen-option-stack button strong {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  color: #151515;
+}
+
+.alwen-option-stack button em {
+  grid-column: 1 / -1;
+  color: #6e6a63;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 720;
+}
+
+.alwen-option-stack button.is-selected span {
+  grid-column: 2;
+}
+
+.alwen-option-stack button.is-selected strong {
+  grid-column: 3;
+}
+
+.alwen-option-stack button.is-selected em {
+  grid-column: 2 / -1;
+}
+
+.alwen-smart-dropzone {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed rgba(17, 17, 17, 0.18);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.alwen-smart-dropzone > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.alwen-listing-panels {
+  grid-template-columns: 1fr 1fr;
+}
+
+.alwen-listing-panels article {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.alwen-photo-plan,
+.alwen-readiness-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.alwen-photo-plan span,
+.alwen-readiness-list span {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: #555;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.alwen-readiness-list span.is-done {
+  background: #e8f7ef;
+  color: #087044;
 }
 
 .editable-chip-row {
@@ -4374,6 +4720,18 @@ select:focus-visible,
 .alwen-preview-card {
   max-width: 420px;
   justify-self: end;
+  align-self: start;
+}
+
+.alwen-preview-card .market-photo {
+  min-height: 360px;
+}
+
+.alwen-preview-next {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
 }
 
 .create-grid {
@@ -4523,6 +4881,21 @@ select:focus-visible,
   .alwen-preview-card {
     max-width: none;
     justify-self: stretch;
+  }
+
+  .alwen-listing-metrics,
+  .alwen-generated-grid,
+  .alwen-listing-panels,
+  .alwen-suggestion-board {
+    grid-template-columns: 1fr;
+  }
+
+  .alwen-smart-dropzone > div:first-child {
+    display: grid;
+  }
+
+  .alwen-preview-card .market-photo {
+    min-height: 240px;
   }
 
   .create-grid {
@@ -9459,6 +9832,129 @@ body {
   font-weight: 800;
 }
 
+.identity-verification-plan {
+  display: grid;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 22px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 242, 235, 0.72));
+}
+
+.identity-verification-header,
+.identity-verification-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.identity-verification-header h3,
+.identity-verification-action strong,
+.identity-verification-header p,
+.identity-verification-action p {
+  margin: 0;
+}
+
+.identity-verification-header h3 {
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.identity-verification-header p,
+.identity-verification-action p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.verification-provider-pill {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.identity-verification-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.identity-verification-steps article {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 16px);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.identity-verification-steps article > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.identity-verification-steps article.is-complete > span {
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--emerald-text);
+}
+
+.identity-verification-steps strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.88rem;
+}
+
+.identity-verification-steps p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.identity-verification-action {
+  align-items: center;
+  padding-top: 2px;
+}
+
+.identity-verification-action .auth-primary-button {
+  width: auto;
+  min-width: 160px;
+}
+
+:root[data-theme="dark"] .identity-verification-plan {
+  background: linear-gradient(135deg, rgba(31, 33, 34, 0.94), rgba(23, 24, 25, 0.82));
+}
+
+:root[data-theme="dark"] .identity-verification-steps article {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 640px) {
+  .identity-verification-header,
+  .identity-verification-action {
+    display: grid;
+  }
+
+  .identity-verification-action .auth-primary-button {
+    width: 100%;
+  }
+}
+
 .trust-details {
   margin-top: 10px;
   color: var(--muted);
@@ -11744,6 +12240,20 @@ strong:has(> .verified-check) {
 .alwen-quick-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-card);
+}
+
+.alwen-quick-card.is-featured {
+  grid-column: 1 / -1;
+  border-color: rgba(8, 112, 68, 0.22);
+  background:
+    linear-gradient(135deg, rgba(232, 247, 239, 0.96), rgba(255, 255, 255, 0.9)),
+    radial-gradient(circle at 100% 0%, rgba(52, 211, 153, 0.18), transparent 12rem);
+  box-shadow: 0 18px 40px rgba(8, 112, 68, 0.12);
+}
+
+.alwen-quick-card.is-featured .alwen-quick-emoji {
+  background: #087044;
+  color: #fff;
 }
 
 .alwen-quick-emoji {
