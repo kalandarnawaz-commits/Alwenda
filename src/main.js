@@ -7748,10 +7748,13 @@ async function startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLab
         state.translateVoiceError = null;
         render();
         await translateCapturedVoiceText();
-      } catch {
+      } catch (error) {
         state.translateRecording = false;
         state.translateVoiceNotice = null;
-        state.translateVoiceError = t("translate.voiceRecognitionError");
+        // Surface the real reason (sign-in required, service not configured,
+        // no audio captured, etc.) instead of a single generic message that
+        // told every failure mode apart from "we understood nothing".
+        state.translateVoiceError = error?.message || t("translate.voiceRecognitionError");
         render();
       }
     }, { once: true });
@@ -7768,6 +7771,20 @@ async function startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLab
     render();
   }
 }
+
+/* No browser's on-device Web Speech API recognizer has ever shipped a
+   Lithuanian language model — not Apple's (Safari, and every iOS browser,
+   which is required by Apple to use the same WebKit engine underneath) and
+   not Chrome's. Passing "lt-LT"/"lt" as recognition.lang doesn't reliably
+   surface as a catchable error either: it's been tried repeatedly (see
+   TRANSLATE_LANGUAGE_RECOGNITION_LOCALES's locale-retry loop and the
+   error-code fallback list below) and it still silently mis-recognizes or
+   returns "no-speech" instead of "language-not-supported" — so reacting to
+   error codes can never reliably catch this case. Lithuanian is therefore
+   routed straight to the server-side Whisper transcription fallback
+   (startAudioTranscriptionFallback, which does support Lithuanian) before
+   native recognition is ever attempted, instead of waiting for it to fail. */
+const VOICE_INPUT_UNSUPPORTED_LANGUAGES = new Set(["translate.language.langLithuanian"]);
 
 /** One-touch voice input: real speech-to-text via the browser's Web Speech
  * API (Chrome/Safari support it; Firefox doesn't — feature-detected, no
@@ -7786,7 +7803,7 @@ function startVoiceInput() {
   const sourceLanguage = state.translateFromLanguage;
   const sourceLanguageLabel = t(sourceLanguage);
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Ctor) {
+  if (!Ctor || VOICE_INPUT_UNSUPPORTED_LANGUAGES.has(sourceLanguage)) {
     startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLabel);
     return;
   }
