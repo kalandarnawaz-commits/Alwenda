@@ -8003,6 +8003,7 @@ async function speakText(text, bcp47, button, panel) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.voice = voice;
   utterance.lang = voice.lang;
+  utterance.volume = 1;
   utterance.onstart = () => button?.classList.add("is-speaking");
   utterance.onend = () => button?.classList.remove("is-speaking");
   utterance.onerror = () => button?.classList.remove("is-speaking");
@@ -8100,7 +8101,7 @@ async function startAudioTranscriptionFallback(sourceLanguage, sourceLanguageLab
 
       try {
         if (!audioBlob.size) throw new Error("EMPTY_RECORDING");
-        state.translateVoiceNotice = { panel: "from", message: t("translate.processingVoice") };
+        state.translateVoiceNotice = null;
         render();
         state.translateInputText = await transcribeTranslationAudio({
           audioBlob,
