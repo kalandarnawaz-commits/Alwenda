@@ -1377,7 +1377,6 @@
     "stopListening": "Stop listening",
     "listening": "Listening…",
     "listeningInLanguage": "Listening in {language}…",
-    "processingVoice": "Understanding your voice…",
     "voiceNotSupported": "Voice input isn't supported in this browser.",
     "voiceMicDenied": "Microphone access was not granted. In Safari or Chrome, allow microphone access for alwenda.com, then tap the mic again.",
     "voiceNoSpeech": "Didn't catch that. Please try again.",

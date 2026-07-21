@@ -78,6 +78,9 @@ async function readErrorPayload(response) {
 
 function playAudioElement(audio, onStateChange) {
   return new Promise((resolve, reject) => {
+    audio.preload = "auto";
+    audio.muted = false;
+    audio.volume = 1;
     const finish = () => {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);

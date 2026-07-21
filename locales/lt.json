@@ -1377,7 +1377,6 @@
     "stopListening": "Sustabdyti klausymąsi",
     "listening": "Klausoma…",
     "listeningInLanguage": "Klausoma kalba: {language}…",
-    "processingVoice": "Atpažįstamas jūsų balsas…",
     "voiceNotSupported": "Šioje naršyklėje balso įvestis nepalaikoma.",
     "voiceMicDenied": "Mikrofono prieiga nesuteikta. Safari arba Chrome nustatymuose leiskite mikrofoną alwenda.com ir dar kartą palieskite mikrofoną.",
     "voiceNoSpeech": "Nepavyko išgirsti. Bandykite dar kartą.",

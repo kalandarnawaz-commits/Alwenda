@@ -59,6 +59,8 @@ test("frontend voice service calls the configured Supabase function with transla
   assert.match(source, /contentType\.toLowerCase\(\)\.startsWith\("audio\/"\)/);
   assert.match(source, /URL\.createObjectURL\(blob\)/);
   assert.match(source, /URL\.revokeObjectURL\(activeObjectUrl\)/);
+  assert.match(source, /audio\.volume = 1/);
+  assert.match(source, /audio\.muted = false/);
   assert.match(source, /activeRequest/);
   assert.match(source, /stopTranslationSpeech/);
 });
@@ -72,6 +74,7 @@ test("translation UI sends the successful translated result to cloud speech", as
   assert.match(source, /translationSpeechTooLong/);
   assert.match(source, /translate\.generatingSpeech/);
   assert.match(source, /stopTranslationSpeech\(\)/);
+  assert.match(source, /utterance\.volume = 1/);
 });
 
 test("translation voice input follows the selected source language in every translator surface", async () => {
@@ -100,7 +103,7 @@ test("translation voice input falls back to secure audio transcription when brow
   assert.match(mainSource, /TRANSLATION_AUDIO_RECORDING_MS = 7000/);
   assert.match(mainSource, /"not-allowed"/);
   assert.match(mainSource, /"language-not-supported"/);
-  assert.match(mainSource, /translate\.processingVoice/);
+  assert.doesNotMatch(mainSource, /translate\.processingVoice/);
 
   assert.match(clientSource, /TRANSLATE_TRANSCRIBE_FUNCTION_SLUG/);
   assert.match(clientSource, /getSupabaseAccessToken\(\)/);
