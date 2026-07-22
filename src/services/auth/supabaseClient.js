@@ -805,6 +805,84 @@ export async function createPrivacyRequest(requestType) {
   return data;
 }
 
+/* ---- Alwen 2.0 — persistence for the unified conversation (Phase 11).
+   The alwen-chat edge function already writes chat/translation turns
+   itself (it runs with the user's own JWT, same RLS as here) — these
+   functions cover what the edge function never sees: place/professional
+   search turns, which are deterministic and local and never reach it,
+   plus loading history back on screen open/refresh. RLS on both tables
+   is already owner-scoped (see 202607150001_production_foundation.sql). ---- */
+
+export async function createAlwenConversation({ title = null, mode = "chat" } = {}) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase
+    .from("alwen_conversations")
+    .insert({ user_id: user.id, title, mode })
+    .select("id, title, mode, created_at")
+    .single();
+  if (error) throwIfError(error, "createAlwenConversation");
+  return data;
+}
+
+/** This app models one continuing Alwen conversation per user, not a
+ * conversation list — so "the" conversation is simply the most recent
+ * one, matching how resetAlwenConversation() in main.js starts a fresh
+ * one (there is no separate history/browse-past-conversations UI). */
+export async function fetchAlwenConversation() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("alwen_conversations")
+    .select("id, title, mode, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throwIfError(error, "fetchAlwenConversation");
+  return data || null;
+}
+
+export async function fetchAlwenMessages(conversationId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("alwen_messages")
+    .select("id, conversation_id, role, content, message_type, detected_language, original_text, translated_text, result_type, result_payload, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) throwIfError(error, "fetchAlwenMessages");
+  return data || [];
+}
+
+export async function createAlwenMessage({ conversationId, role, content, messageType = "text", resultType = null, resultPayload = null }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase
+    .from("alwen_messages")
+    .insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+      role,
+      content,
+      message_type: messageType,
+      ...(resultType ? { result_type: resultType } : {}),
+      ...(resultPayload ? { result_payload: resultPayload } : {})
+    })
+    .select("id, created_at")
+    .single();
+  if (error) throwIfError(error, "createAlwenMessage");
+  return data;
+}
+
+export async function updateAlwenConversationMode(conversationId, mode) {
+  const supabase = await getClient();
+  const { error } = await supabase.from("alwen_conversations").update({ mode }).eq("id", conversationId);
+  if (error) throwIfError(error, "updateAlwenConversationMode");
+}
+
 /** For a public profile's "Active listings" section — anyone's published
  * listings are readable by RLS regardless of who's asking, so no auth
  * check is needed here (unlike fetchMyListings, which is about the

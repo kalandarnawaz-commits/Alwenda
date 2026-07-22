@@ -45,7 +45,17 @@ export const ANALYTICS_EVENTS = Object.freeze({
   PROFILE_SHARED: "profile_shared",
   CALL_CLICKED: "call_clicked",
   DIRECTIONS_CLICKED: "directions_clicked",
-  WEBSITE_CLICKED: "website_clicked"
+  WEBSITE_CLICKED: "website_clicked",
+  // Alwen 2.0 — the unified conversation experience. Payloads are
+  // deliberately minimal (ids/types/counts only) — never message text,
+  // transcript text, translated text, or search query content.
+  ALWEN_CONVERSATION_STARTED: "alwen_conversation_started",
+  ALWEN_MESSAGE_SUBMITTED: "alwen_message_submitted",
+  ALWEN_VOICE_INPUT_USED: "alwen_voice_input_used",
+  ALWEN_TRANSLATION_COMPLETED: "alwen_translation_completed",
+  ALWEN_STRUCTURED_RESULT_OPENED: "alwen_structured_result_opened",
+  ALWEN_CONTEXTUAL_ACTION_SELECTED: "alwen_contextual_action_selected",
+  ALWEN_FAILURE_SHOWN: "alwen_failure_shown"
 });
 
 const SCHEMA = {
@@ -78,7 +88,14 @@ const SCHEMA = {
   [ANALYTICS_EVENTS.PROFILE_SHARED]: {},
   [ANALYTICS_EVENTS.CALL_CLICKED]: { businessId: "string" },
   [ANALYTICS_EVENTS.DIRECTIONS_CLICKED]: { businessId: "string" },
-  [ANALYTICS_EVENTS.WEBSITE_CLICKED]: { businessId: "string" }
+  [ANALYTICS_EVENTS.WEBSITE_CLICKED]: { businessId: "string" },
+  [ANALYTICS_EVENTS.ALWEN_CONVERSATION_STARTED]: { mode: "string?" },
+  [ANALYTICS_EVENTS.ALWEN_MESSAGE_SUBMITTED]: { messageType: "string", intentType: "string?", hasConversation: "boolean" },
+  [ANALYTICS_EVENTS.ALWEN_VOICE_INPUT_USED]: { messageType: "string" },
+  [ANALYTICS_EVENTS.ALWEN_TRANSLATION_COMPLETED]: { fromLanguage: "string", toLanguage: "string" },
+  [ANALYTICS_EVENTS.ALWEN_STRUCTURED_RESULT_OPENED]: { resultType: "string", resultCount: "number" },
+  [ANALYTICS_EVENTS.ALWEN_CONTEXTUAL_ACTION_SELECTED]: { actionType: "string", resultType: "string?" },
+  [ANALYTICS_EVENTS.ALWEN_FAILURE_SHOWN]: { errorCategory: "string" }
 };
 
 export class AnalyticsSchemaError extends Error {

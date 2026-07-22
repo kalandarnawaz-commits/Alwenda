@@ -37,6 +37,24 @@ test("every known event validates with its correct payload shape", () => {
   assert.equal(validateEventPayload(ANALYTICS_EVENTS.TRANSLATION_COMPLETED, { from: "en", to: "lt", length: 12, chunkCount: 1 }).ok, true);
 });
 
+test("all 7 Alwen 2.0 events validate with their real call-site payload shapes", () => {
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_CONVERSATION_STARTED, { mode: "chat" }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_CONVERSATION_STARTED, {}).ok, true, "mode is optional");
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_MESSAGE_SUBMITTED, { messageType: "text", intentType: "place_search", hasConversation: true }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_VOICE_INPUT_USED, { messageType: "voice" }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_TRANSLATION_COMPLETED, { fromLanguage: "en", toLanguage: "lt" }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_STRUCTURED_RESULT_OPENED, { resultType: "place", resultCount: 3 }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_CONTEXTUAL_ACTION_SELECTED, { actionType: "directions", resultType: "place" }).ok, true);
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_CONTEXTUAL_ACTION_SELECTED, { actionType: "play" }).ok, true, "resultType is optional");
+  assert.equal(validateEventPayload(ANALYTICS_EVENTS.ALWEN_FAILURE_SHOWN, { errorCategory: "rate_limited" }).ok, true);
+});
+
+test("Alwen 2.0 events reject message/translation/query content passed as an undeclared field", () => {
+  const result = validateEventPayload(ANALYTICS_EVENTS.ALWEN_MESSAGE_SUBMITTED, { messageType: "text", intentType: "general_conversation", hasConversation: true, text: "I need a plumber" });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /undeclared field/);
+});
+
 test("rejects an unknown event name", () => {
   const result = validateEventPayload("totally_made_up_event", {});
   assert.equal(result.ok, false);
