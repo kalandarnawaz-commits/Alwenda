@@ -85,8 +85,9 @@ import {
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
+  recordAnalyticsEvent,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=legal-compliance-1";
+} from "./services/auth/supabaseClient.js?v=pilot-readiness-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import {
   MAX_TRANSLATION_SPEECH_CHARACTERS,
@@ -101,6 +102,9 @@ import {
 } from "./services/identity/personaVerification.js?v=persona-placeholder-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
+import { SENTRY_DSN, APP_ENV, APP_RELEASE_VERSION } from "./config.js?v=pilot-readiness-1";
+import { bindGlobalErrorObservers, configureErrorSink, createSentrySink } from "./services/observability.js?v=pilot-readiness-1";
+import { validateEventPayload, buildAnalyticsEventRecord, AnalyticsSchemaError } from "./services/analytics.js?v=pilot-readiness-1";
 
 const CITY_CENTER = { lat: 54.6872, lng: 25.2797 }; // Vilnius, Cathedral Square — stand-in for real geolocation
 
@@ -250,8 +254,6 @@ const state = {
   myListings: [],
   myHelpRequests: [],
   identityVerification: null,
-  bookingDraft: { dateIndex: null, time: null },
-  bookingConfirmed: null,
   directionsOptions: null,
   cityImportRun: {
     source: "overpass",
@@ -305,6 +307,7 @@ const PENDING_LEGAL_ACCEPTANCE_KEY = "alwenda:pending-legal-acceptance";
 const MODERATION_RECORDS_KEY = "alwenda:moderation-records";
 const LEGAL_POLICY_VERSION = "ALWENDA_LEGAL_POLICIES_EN-2026-07-18";
 const ANALYTICS_MAX_EVENTS = 300;
+const LAST_SESSION_STARTED_DATE_KEY = "alwenda:last-session-started-date";
 const BUSINESS_OVERRIDES_KEY = "alwenda:businessOverrides";
 
 /**
@@ -520,10 +523,17 @@ function toggleBusinessBoost(businessId) {
 }
 
 /**
- * Local-only analytics scaffold — no backend/pipeline exists yet, so
- * events are appended to a bounded ring buffer in localStorage as a
- * stand-in sink. Swap the body of this function for a real analytics
- * SDK call later; every call site elsewhere in the app can stay as-is.
+ * Every call site elsewhere in the app stays exactly as-is (same name,
+ * same signature) — this function does two things per event:
+ * 1. Appends to the same bounded on-device ring buffer as before, so
+ *    businessStats() (the business dashboard's real, own-device view/
+ *    contact/save counts) keeps working unchanged.
+ * 2. Validates the payload against the typed schema in
+ *    src/services/analytics.js and ships it to the real Supabase
+ *    analytics_events table — the actual "real destination" this was
+ *    missing. Best-effort: a network failure or schema mismatch is
+ *    logged (schema mismatches loudly in dev/test, quietly in
+ *    production) but never breaks the calling UI code.
  * Payloads are restricted to ids/categories/counts — never names, emails,
  * phone numbers, or free-text the user typed.
  */
@@ -538,15 +548,33 @@ function trackEvent(name, props = {}) {
   } catch {
     /* analytics must never break the app */
   }
+
+  const validation = validateEventPayload(name, props);
+  if (!validation.ok) {
+    const message = `[analytics] ${validation.reason}`;
+    if (APP_ENV === "development" || APP_ENV === "test") throw new AnalyticsSchemaError(message);
+    console.warn(message);
+    return;
+  }
+  const record = buildAnalyticsEventRecord(name, props, {
+    userId: state.auth?.user?.isSupabaseAccount ? state.auth.user.id : null,
+    appEnv: APP_ENV,
+    appRelease: APP_RELEASE_VERSION
+  });
+  recordAnalyticsEvent(record).catch(() => {
+    /* analytics must never break the app — already logged to observability inside recordAnalyticsEvent */
+  });
 }
 
-function bindErrorTracking() {
-  window.addEventListener("error", (event) => {
-    trackEvent("client_error", { message: String(event.message || "").slice(0, 200), source: event.filename || "" });
-  });
-  window.addEventListener("unhandledrejection", (event) => {
-    trackEvent("client_error", { message: String(event.reason?.message || event.reason || "").slice(0, 200), source: "promise" });
-  });
+/** Fires once per calendar day per device — the minimum signal needed to
+ * compute week-2/week-N retention cohorts server-side (see the example
+ * queries in the analytics_events migration). Not once per app open,
+ * since that would just measure tab-switching, not genuine return visits. */
+function trackSessionStartedOncePerDay() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (readLocalStorage(LAST_SESSION_STARTED_DATE_KEY) === today) return;
+  writeLocalStorage(LAST_SESSION_STARTED_DATE_KEY, today);
+  trackEvent("session_started", {});
 }
 
 function readLocalStorage(key) {
@@ -1963,10 +1991,6 @@ function renderSheet() {
 
   if (state.activeSheet === "place") {
     return renderPlaceDetailSheet(importedBusinesses.find((business) => business.id === state.selectedPlaceId));
-  }
-
-  if (state.activeSheet === "booking") {
-    return renderBookingSheet();
   }
 
   if (state.activeSheet === "directions") {
@@ -5985,7 +6009,7 @@ function renderNeedHelp() {
       <div class="connection-flow">
         <article><strong>1</strong><span>${t("common.describeNeed")}</span></article>
         <article><strong>2</strong><span>${t("common.prosRespond")}</span></article>
-        <article><strong>3</strong><span>${t("common.bookPay")}</span></article>
+        <article><strong>3</strong><span>${t("common.chatAndArrange")}</span></article>
       </div>
       <div class="section-title">
         <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
@@ -7243,6 +7267,7 @@ function startBusinessConversation(businessId) {
     userMessage: `Hi, I’d like to ask about ${item.name}.`,
     firstMessage: `Thanks for contacting us. Tell us what you need and we’ll help from here.`
   });
+  trackEvent("business_contacted", { businessId: String(item.id) });
 }
 
 /* Swipe-to-act wrapper shared by notification cards and conversation
@@ -8373,122 +8398,6 @@ function renderTranslation() {
   `;
 }
 
-const BOOKING_SLOT_TIMES = ["09:00", "11:00", "13:00", "15:00", "17:00", "19:00"];
-const BOOKING_DAY_COUNT = 6;
-
-/** Real slot logic, not decorative: for "today" only future slots are
- * offered (an hour of lead time), and each of the next few days gets a
- * fixed daily template — no different from how a real per-professional
- * calendar would be summarised before a backend exists to drive it. */
-function bookingSlotsForDay(dayOffset) {
-  if (dayOffset > 0) return BOOKING_SLOT_TIMES;
-  const cutoffHour = new Date().getHours() + 1;
-  return BOOKING_SLOT_TIMES.filter((time) => Number.parseInt(time.split(":")[0], 10) >= cutoffHour);
-}
-
-function bookingDayLabel(dayOffset) {
-  if (dayOffset === "flexible") return t("booking.anytimeFlexible");
-  if (dayOffset === 0) return t("common.today");
-  if (dayOffset === 1) return t("common.tomorrow");
-  const date = new Date();
-  date.setDate(date.getDate() + dayOffset);
-  return formatDate(date, { weekday: "short", day: "numeric", month: "short" });
-}
-
-function renderBookingSheet() {
-  const person = state.publicProfile;
-  if (!person) return "";
-
-  if (state.bookingConfirmed) {
-    const booking = state.bookingConfirmed;
-    return `
-      <div class="sheet-backdrop" data-sheet-close="true">
-        <section class="selection-sheet booking-sheet" aria-label="${t("booking.bookingConfirmedTitle")}">
-          <div class="sheet-handle"></div>
-          <div class="post-request-success">
-            <span class="post-request-success-icon">${icon("verify")}</span>
-            <h2>${t("booking.bookingConfirmedTitle")}</h2>
-            <p>${t("booking.bookingConfirmedHint").replace("{name}", escapeHtml(person.name))}</p>
-            <blockquote>${escapeHtml(booking.date)}</blockquote>
-            <button type="button" class="auth-primary-button" data-role="close-booking-sheet">${t("common.close")}</button>
-            <button type="button" class="auth-link" data-role="view-my-bookings">${t("booking.viewMyBookings")}</button>
-          </div>
-        </section>
-      </div>
-    `;
-  }
-
-  const draft = state.bookingDraft;
-  const isFlexible = draft.dateIndex === "flexible";
-  const hasSpecificDay = draft.dateIndex !== null && !isFlexible;
-  const slots = hasSpecificDay ? bookingSlotsForDay(draft.dateIndex) : [];
-  const canConfirm = isFlexible || (hasSpecificDay && Boolean(draft.time));
-
-  return `
-    <div class="sheet-backdrop" data-sheet-close="true">
-      <section class="selection-sheet booking-sheet" aria-label="${t("booking.bookingSheetTitle").replace("{name}", person.name)}">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">
-          <div>
-            <h2>${t("booking.bookingSheetTitle").replace("{name}", escapeHtml(person.name))}</h2>
-            <p>${t("booking.bookingSheetHint")}</p>
-          </div>
-          <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
-        </div>
-
-        <p class="booking-section-label">${t("booking.chooseDate")}</p>
-        <div class="chip-row booking-day-row">
-          ${Array.from({ length: BOOKING_DAY_COUNT }, (_, dayOffset) => `
-            <button type="button" class="chip ${draft.dateIndex === dayOffset ? "is-active" : ""}" data-booking-day="${dayOffset}">${bookingDayLabel(dayOffset)}</button>
-          `).join("")}
-          <button type="button" class="chip booking-flexible-chip ${isFlexible ? "is-active" : ""}" data-booking-day="flexible">${icon("calendar")}${t("booking.anytimeFlexible")}</button>
-        </div>
-
-        ${isFlexible ? `<p class="booking-flexible-hint">${t("booking.anytimeFlexibleHint")}</p>` : ""}
-
-        ${hasSpecificDay ? `
-          <p class="booking-section-label">${t("booking.chooseTime")}</p>
-          ${slots.length ? `
-            <div class="chip-row booking-time-row">
-              ${slots.map((time) => `<button type="button" class="chip ${draft.time === time ? "is-active" : ""}" data-booking-time="${time}">${time}</button>`).join("")}
-            </div>
-          ` : `<p class="booking-no-slots">${t("booking.noSlotsToday")}</p>`}
-        ` : ""}
-
-        <button type="button" class="auth-primary-button booking-confirm-button" data-role="confirm-booking" ${canConfirm ? "" : "disabled"}>${t("booking.confirmBooking")}</button>
-      </section>
-    </div>
-  `;
-}
-
-function submitBooking() {
-  const person = state.publicProfile;
-  const draft = state.bookingDraft;
-  const isFlexible = draft.dateIndex === "flexible";
-  if (!person || draft.dateIndex === null || (!isFlexible && !draft.time)) return;
-
-  const booking = {
-    id: Date.now(),
-    target: person.name,
-    type: person.category || t("entity.professional"),
-    date: isFlexible ? bookingDayLabel("flexible") : `${bookingDayLabel(draft.dateIndex)} · ${draft.time}`,
-    status: "Confirmed",
-    party: person.price || ""
-  };
-
-  reservations.unshift(booking);
-  trackEvent("booking_confirmed", { professional: person.name, dayOffset: draft.dateIndex, time: draft.time || "flexible" });
-  state.bookingConfirmed = booking;
-  render();
-}
-
-function resetBookingDraft() {
-  state.bookingDraft = { dateIndex: null, time: null };
-  state.bookingConfirmed = null;
-  state.activeSheet = null;
-  render();
-}
-
 const PUBLIC_PROFILE_CONTEXT_HINT = {
   community: "profile.public.publicProfileContextCommunity",
   marketplace: "profile.public.publicProfileContextMarketplace",
@@ -8663,7 +8572,7 @@ function renderPublicProfile() {
       ${contextKey ? `<p class="public-profile-context-hint">${t(contextKey)}</p>` : ""}
 
       <div class="public-profile-primary-actions">
-        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="book">${t("common.bookNow")}</button>` : ""}
+        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="request-booking">${t("nav.book")}</button>` : ""}
         <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
@@ -10451,34 +10360,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-booking-day]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const value = button.dataset.bookingDay;
-      state.bookingDraft.dateIndex = value === "flexible" ? "flexible" : Number.parseInt(value, 10);
-      state.bookingDraft.time = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-booking-time]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.bookingDraft.time = button.dataset.bookingTime;
-      render();
-    });
-  });
-
-  document.querySelector('[data-role="confirm-booking"]')?.addEventListener("click", submitBooking);
-  document.querySelectorAll('[data-role="close-booking-sheet"]').forEach((button) => {
-    button.addEventListener("click", resetBookingDraft);
-  });
-  document.querySelector('[data-role="view-my-bookings"]')?.addEventListener("click", () => {
-    state.bookingDraft = { dateIndex: null, time: null };
-    state.bookingConfirmed = null;
-    state.activeSheet = null;
-    state.activeView = "reservations";
-    render();
-  });
-
   document.querySelectorAll("[data-area-option]").forEach((button) => {
     button.addEventListener("click", () => {
       state.area = button.dataset.areaOption;
@@ -11069,11 +10950,9 @@ function bindPublicProfileEvents() {
     }
   });
 
-  document.querySelector('[data-person-action="book"]')?.addEventListener("click", () => {
-    state.bookingDraft = { dateIndex: null, time: null };
-    state.bookingConfirmed = null;
-    state.activeSheet = "booking";
-    render();
+  document.querySelector('[data-person-action="request-booking"]')?.addEventListener("click", () => {
+    const personId = state.publicProfile?.id || "";
+    startProfessionalConversation(personId.replace(/^pro-/, ""), "book");
   });
 
   document.querySelector('[data-person-action="message"]')?.addEventListener("click", () => {
@@ -11399,6 +11278,12 @@ function bindPhotoZoom() {
   }, { capture: true });
 }
 
+// Wired first, before anything else in boot, so every uncaught exception
+// and unhandled rejection from here on reaches Sentry — falls back to
+// console (unchanged default behavior) when SENTRY_DSN isn't configured.
+configureErrorSink(createSentrySink({ dsn: SENTRY_DSN, release: APP_RELEASE_VERSION, environment: APP_ENV }));
+bindGlobalErrorObservers();
+
 approvedLegalPolicyMarkdown = await fetch("/src/legal/ALWENDA_LEGAL_POLICIES_EN.md").then((response) => {
   if (!response.ok) throw new Error(`Legal policy source unavailable (${response.status})`);
   return response.text();
@@ -11449,9 +11334,9 @@ render();
 bindAiSearchPlaceholderRotation();
 registerServiceWorker();
 bindInstallPrompt();
-bindErrorTracking();
 bindPhotoZoom();
 refreshLocalWeather();
+trackSessionStartedOncePerDay();
 
 /* Keep the greeting synchronized if Home stays open across noon/evening,
    and refresh current conditions periodically without a page reload. */

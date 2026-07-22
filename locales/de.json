@@ -153,7 +153,7 @@
     "sendToPros": "An verifizierte Profis senden",
     "describeNeed": "Beschreibe die Aufgabe in einfachen Worten",
     "prosRespond": "Verifizierte Profis antworten mit Angeboten",
-    "bookPay": "Buchen, chatten, verfolgen und sicher bezahlen",
+    "chatAndArrange": "Schreibt euch direkt und regelt die Bezahlung untereinander",
     "verifiedPros": "Verifizierte lokale Fachkräfte",
     "verifiedProsHint": "Klempnerei, Reinigung, Elektrik, Nachhilfe, Kinderbetreuung, Fotografie, Umzug, Recht, Buchhaltung, IT und mehr.",
     "matchingPros": "Passende Fachkräfte",
@@ -1553,19 +1553,6 @@
     "photosLabel": "Fotos (optional)",
     "addPhotosCta": "Fotos hinzufügen"
   },
-  "booking": {
-    "bookingSheetTitle": "{name} buchen",
-    "bookingSheetHint": "Wähle einen Tag und eine Uhrzeit, die dir passt.",
-    "chooseDate": "Tag wählen",
-    "chooseTime": "Uhrzeit wählen",
-    "noSlotsToday": "Heute keine freien Zeiten mehr — wähle einen anderen Tag.",
-    "confirmBooking": "Buchung bestätigen",
-    "bookingConfirmedTitle": "Buchung angefragt",
-    "bookingConfirmedHint": "{name} bestätigt in Kürze. Du findest sie unter „Deine Anfragen“.",
-    "viewMyBookings": "Meine Buchungen ansehen",
-    "anytimeFlexible": "Jederzeit, ich bin flexibel",
-    "anytimeFlexibleHint": "Wir ordnen dir den nächsten freien Termin bei dieser Fachkraft zu."
-  },
   "entity": {
     "professional": "Fachkraft",
     "helpRequest": "Hilfeanfrage",
@@ -1606,7 +1593,7 @@
     "dessert": "Desserts"
   },
   "hire": {
-    "hireHint": "Lokale Profis buchen",
+    "hireHint": "Lokale Profis finden und kontaktieren",
     "hireEyebrow": "Vertrauenswürdige lokale Hilfe",
     "hireTitle": "Jemanden in der Nähe beauftragen."
   },

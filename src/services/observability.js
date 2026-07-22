@@ -48,14 +48,86 @@ export function createLogEvent(type, details = {}, severity = "info") {
   };
 }
 
+let activeSink = null;
+
+/** Set once at boot (see main.js) so every logPilotEvent() call across the
+ * app reaches Sentry without every call site having to pass its own sink.
+ * Left null when SENTRY_DSN isn't configured — logPilotEvent then falls
+ * back to console, unchanged from before this integration existed. */
+export function configureErrorSink(sink) {
+  activeSink = typeof sink === "function" ? sink : null;
+}
+
 export function logPilotEvent(type, details = {}, options = {}) {
   const event = createLogEvent(type, details, options.severity || "info");
-  if (typeof options.sink === "function") return options.sink(event);
+  const sink = options.sink || activeSink;
+  if (typeof sink === "function") {
+    Promise.resolve(sink(event)).catch(() => {
+      /* the error sink must never itself crash the app or create a report loop */
+    });
+    return event;
+  }
   if (typeof console !== "undefined") {
     const method = event.severity === "error" ? "error" : event.severity === "warn" ? "warn" : "debug";
     console[method]("[Alwenda]", event);
   }
   return event;
+}
+
+/**
+ * A minimal Sentry ingestion client using plain fetch — no SDK dependency,
+ * matching this repo's zero-npm-runtime-dependency convention (see
+ * googlePlacesApiClient.js, translateSpeechClient.js). Implements Sentry's
+ * documented envelope endpoint directly: https://develop.sentry.dev/sdk/data-model/envelopes/
+ *
+ * `dsn` is the standard `https://<publicKey>@<host>/<projectId>` string —
+ * safe to expose client-side by Sentry's own design (same trust tier as a
+ * Supabase publishable key), so it's read from env.js like SUPABASE_URL,
+ * never treated as a server-only secret.
+ */
+/** @param {{dsn?: string|null, fetchImpl?: typeof fetch, release?: string, environment?: string}} [options] */
+export function createSentrySink({ dsn, fetchImpl = typeof fetch === "function" ? fetch : undefined, release, environment } = {}) {
+  if (!dsn) return null;
+  let parsed;
+  try {
+    const url = new URL(dsn);
+    const projectId = url.pathname.replace(/^\//, "");
+    if (!url.username || !projectId) throw new Error("malformed DSN");
+    parsed = { publicKey: url.username, host: url.host, projectId };
+  } catch {
+    console.warn("[Alwenda] SENTRY_DSN is set but not a valid Sentry DSN — error events will only log to console.");
+    return null;
+  }
+
+  const ingestUrl = `https://${parsed.host}/api/${parsed.projectId}/envelope/?sentry_key=${parsed.publicKey}&sentry_version=7`;
+
+  return async function sentrySink(event) {
+    if (!fetchImpl) return;
+    const eventId = (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, "");
+    const sentAt = new Date().toISOString();
+    const sentryEvent = {
+      event_id: eventId,
+      timestamp: Math.floor(Date.now() / 1000),
+      platform: "javascript",
+      level: event.severity === "error" ? "error" : event.severity === "warn" ? "warning" : "info",
+      environment: environment || event.environment,
+      release: release || event.releaseVersion,
+      logger: "alwenda.observability",
+      message: { formatted: event.type },
+      extra: { details: event.details, app: event.app, occurredAt: event.occurredAt }
+    };
+    const body = [
+      JSON.stringify({ event_id: eventId, sent_at: sentAt }),
+      JSON.stringify({ type: "event" }),
+      JSON.stringify(sentryEvent)
+    ].join("\n");
+
+    try {
+      await fetchImpl(ingestUrl, { method: "POST", headers: { "Content-Type": "application/x-sentry-envelope" }, body });
+    } catch {
+      /* a failed error report must never itself throw */
+    }
+  };
 }
 
 export function bindGlobalErrorObservers(logger = logPilotEvent) {

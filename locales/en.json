@@ -153,7 +153,7 @@
     "sendToPros": "Send to verified pros",
     "describeNeed": "Describe the task in plain language",
     "prosRespond": "Verified pros respond with quotes",
-    "bookPay": "Book, chat, track, and pay securely",
+    "chatAndArrange": "Message them directly and arrange payment yourselves",
     "verifiedPros": "Verified local professionals",
     "verifiedProsHint": "Plumbing, cleaning, electrical, tutoring, childcare, photography, moving, legal, accounting, IT, and more.",
     "matchingPros": "Matching professionals",
@@ -1553,19 +1553,6 @@
     "photosLabel": "Photos (optional)",
     "addPhotosCta": "Add photos"
   },
-  "booking": {
-    "bookingSheetTitle": "Book {name}",
-    "bookingSheetHint": "Pick a day and time that works for you.",
-    "chooseDate": "Choose a day",
-    "chooseTime": "Choose a time",
-    "noSlotsToday": "No more slots today — pick another day.",
-    "confirmBooking": "Confirm booking",
-    "bookingConfirmedTitle": "Booking requested",
-    "bookingConfirmedHint": "{name} will confirm shortly. You'll find this in Your requests.",
-    "viewMyBookings": "View my bookings",
-    "anytimeFlexible": "Anytime, I'm flexible",
-    "anytimeFlexibleHint": "We'll match you to the next available slot with this professional."
-  },
   "entity": {
     "professional": "Professional",
     "helpRequest": "Help request",
@@ -1606,7 +1593,7 @@
     "dessert": "Desserts"
   },
   "hire": {
-    "hireHint": "Book local pros",
+    "hireHint": "Find and message local pros",
     "hireEyebrow": "Trusted local help",
     "hireTitle": "Hire someone nearby."
   },

@@ -4,6 +4,44 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const MAX_MESSAGE_LENGTH = 2000;
+
+// Per-user throttling beyond Supabase's own platform-level Edge Function
+// limits — both configurable via Edge Function secrets so they can be
+// tuned without a redeploy of the function's logic.
+const RATE_LIMIT_PER_MINUTE = Number(Deno.env.get("ALWEN_CHAT_RATE_LIMIT_PER_MINUTE")) || 8;
+const DAILY_COST_CAP_USD = Number(Deno.env.get("ALWEN_CHAT_DAILY_COST_CAP_USD")) || 2;
+
+// gpt-4.1-mini pricing verified against OpenAI's published rates on
+// 2026-04-18: $0.40 / 1M input tokens, $1.60 / 1M output tokens. Re-verify
+// against the OpenAI dashboard before relying on this for real budgeting —
+// token pricing changes over time and this is not fetched live.
+const INPUT_TOKEN_USD_PER_MILLION = 0.40;
+const OUTPUT_TOKEN_USD_PER_MILLION = 1.60;
+
+function estimateCostUsd(inputTokens: number, outputTokens: number): number {
+  return (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_MILLION + (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_MILLION;
+}
+
+// A basic, explicitly-not-a-guarantee heuristic screen for the clearest
+// prompt-injection attempts, run on the raw user message before it ever
+// reaches OpenAI. High-confidence matches are rejected outright rather
+// than silently stripped, so the user gets a clear "please rephrase"
+// instead of a subtly-altered request.
+const PROMPT_INJECTION_PATTERNS = [
+  /ignore\s+(all\s+|previous\s+|prior\s+)?instructions/i,
+  /disregard\s+(all\s+|the\s+)?(rules|instructions|guidelines)/i,
+  /reveal\s+(your\s+|the\s+)?(system\s+prompt|instructions)/i,
+  /you\s+are\s+(now|no\s+longer)\s+/i,
+  /act\s+as\s+(if\s+you\s+(are|were)|a)\s+/i,
+  /\bdan\s+mode\b/i,
+  /developer\s+mode/i,
+  /\bjailbreak\b/i
+];
+
+function looksLikePromptInjection(message: string): boolean {
+  return PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(message));
+}
+
 const HELP_REQUEST_URGENCIES = ["today", "thisWeek", "flexible"];
 const LISTING_CATEGORIES = ["buy_sell", "rentals", "jobs", "local_services", "vehicles", "property"];
 const LISTING_PRICE_PERIODS = ["one_time", "hour", "day", "month", "quote"];
@@ -221,6 +259,44 @@ Deno.serve(async (req) => {
   if (!message) return safeError("A message is required.", 400);
   if (message.length > MAX_MESSAGE_LENGTH) return safeError(`Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`, 400);
 
+  // A basic heuristic, not a guarantee — high-confidence matches are
+  // rejected before any OpenAI call is made (and before any quota is
+  // spent), and logged to alwen_chat_usage with flagged_injection=true
+  // for later review.
+  if (looksLikePromptInjection(message)) {
+    await supabase.from("alwen_chat_usage").insert({ user_id: authData.user.id, conversation_id: conversationId, flagged_injection: true }).then(() => {}, () => {});
+    return safeError("Alwen couldn't process that message. Please rephrase what you need help with.", 400);
+  }
+
+  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentRequestCount } = await supabase
+    .from("alwen_chat_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", authData.user.id)
+    .gte("created_at", oneMinuteAgo);
+  if ((recentRequestCount || 0) >= RATE_LIMIT_PER_MINUTE) {
+    return safeError("You're sending messages faster than Alwen can keep up. Please wait a moment and try again.", 429);
+  }
+
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { data: todaysUsage } = await supabase
+    .from("alwen_chat_usage")
+    .select("estimated_cost_usd")
+    .eq("user_id", authData.user.id)
+    .gte("created_at", todayStart.toISOString());
+  const spentTodayUsd = (todaysUsage || []).reduce((sum, row) => sum + (Number(row.estimated_cost_usd) || 0), 0);
+  if (spentTodayUsd >= DAILY_COST_CAP_USD) {
+    return safeError("You've reached today's usage limit for Alwen. Please try again tomorrow.", 429);
+  }
+
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  const trackUsage = (payload: { usage?: { input_tokens?: number; output_tokens?: number } }) => {
+    totalInputTokens += payload.usage?.input_tokens || 0;
+    totalOutputTokens += payload.usage?.output_tokens || 0;
+  };
+
   try {
     // These two reads don't depend on each other (a brand-new conversation
     // just has no prior messages yet either way), so running them together
@@ -253,6 +329,7 @@ Deno.serve(async (req) => {
     ]);
 
     let payload = await callResponses(input);
+    trackUsage(payload);
     await persistUserTurn;
     const functionCall = (payload.output || []).find((item: { type?: string }) => item.type === "function_call") as
       | { type: string; call_id: string; name: string; arguments: string }
@@ -307,6 +384,7 @@ Deno.serve(async (req) => {
         { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
       ];
       payload = await callResponses(followUpInput);
+      trackUsage(payload);
     } else if (functionCall?.name === "create_marketplace_listing") {
       let args: Record<string, unknown> = {};
       try {
@@ -378,12 +456,22 @@ Deno.serve(async (req) => {
         { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
       ];
       payload = await callResponses(followUpInput);
+      trackUsage(payload);
     }
 
     const answer = extractAnswerText(payload);
     if (!answer) return safeError("Alwen returned an empty answer. Please try again.", 502);
 
     await supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "assistant", content: answer });
+    await supabase.from("alwen_chat_usage").insert({
+      user_id: authData.user.id,
+      conversation_id: conversationId,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalInputTokens + totalOutputTokens,
+      estimated_cost_usd: estimateCostUsd(totalInputTokens, totalOutputTokens),
+      model: "gpt-4.1-mini"
+    });
 
     return jsonResponse({
       answer,
@@ -392,6 +480,21 @@ Deno.serve(async (req) => {
       ...(createdListing ? { createdListing } : {})
     });
   } catch (error) {
+    // Log whatever OpenAI usage was actually incurred before the failure —
+    // a request that spent real tokens on one call and then failed on a
+    // later step must still count against the cost ceiling, or a user
+    // could repeatedly trigger partial failures to spend past it unlogged.
+    if (totalInputTokens || totalOutputTokens) {
+      await supabase.from("alwen_chat_usage").insert({
+        user_id: authData.user.id,
+        conversation_id: conversationId,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        total_tokens: totalInputTokens + totalOutputTokens,
+        estimated_cost_usd: estimateCostUsd(totalInputTokens, totalOutputTokens),
+        model: "gpt-4.1-mini"
+      }).then(() => {}, () => {});
+    }
     if (error instanceof Error && error.message === "OPENAI_REQUEST_FAILED") {
       return safeError("Alwen could not answer right now. Please try again.", 502);
     }

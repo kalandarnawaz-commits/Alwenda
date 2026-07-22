@@ -125,3 +125,51 @@ test("the manual Need Help form posts a real help request instead of only updati
   assert.match(source, /await createHelpRequest\(/);
   assert.doesNotMatch(source, /function submitHelpRequest\(\) \{[\s\S]{0,200}id: Date\.now\(\)/);
 });
+
+test("Alwen Edge Function enforces a per-user rate limit and daily cost ceiling before calling OpenAI", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /ALWEN_CHAT_RATE_LIMIT_PER_MINUTE/);
+  assert.match(source, /ALWEN_CHAT_DAILY_COST_CAP_USD/);
+
+  const rateLimitIdx = source.indexOf("recentRequestCount");
+  const costCeilingIdx = source.indexOf("spentTodayUsd");
+  const firstCallResponsesIdx = source.indexOf("let payload = await callResponses(input)");
+  assert.ok(rateLimitIdx > -1 && rateLimitIdx < firstCallResponsesIdx, "rate limit must be checked before the first OpenAI call");
+  assert.ok(costCeilingIdx > -1 && costCeilingIdx < firstCallResponsesIdx, "cost ceiling must be checked before the first OpenAI call");
+  assert.match(source, /recentRequestCount \|\| 0\) >= RATE_LIMIT_PER_MINUTE/);
+  assert.match(source, /spentTodayUsd >= DAILY_COST_CAP_USD/);
+});
+
+test("Alwen Edge Function screens for prompt injection before any OpenAI call, and logs flagged attempts", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /function looksLikePromptInjection/);
+  assert.match(source, /ignore\\s\+\(all\\s\+\|previous\\s\+\|prior\\s\+\)\?instructions/);
+  const injectionCheckIdx = source.indexOf("looksLikePromptInjection(message)");
+  const firstCallResponsesIdx = source.indexOf("let payload = await callResponses(input)");
+  assert.ok(injectionCheckIdx > -1 && injectionCheckIdx < firstCallResponsesIdx, "the injection screen must run before any OpenAI call");
+  assert.match(source, /flagged_injection: true/);
+});
+
+test("Alwen Edge Function logs real per-request token usage and cost using verified gpt-4.1-mini pricing", async () => {
+  const source = await readRepoFile("supabase/functions/alwen-chat/index.ts");
+  assert.match(source, /function estimateCostUsd/);
+  assert.match(source, /INPUT_TOKEN_USD_PER_MILLION = 0\.40/);
+  assert.match(source, /OUTPUT_TOKEN_USD_PER_MILLION = 1\.60/);
+  assert.match(source, /trackUsage\(payload\)/);
+  assert.match(source, /payload\.usage\?\.input_tokens/);
+  assert.match(source, /from\("alwen_chat_usage"\)\.insert/);
+  // Usage must be tracked after every callResponses() call, not just the first.
+  const trackUsageCalls = source.match(/trackUsage\(payload\);/g) || [];
+  const callResponsesCalls = source.match(/await callResponses\(/g) || [];
+  assert.equal(trackUsageCalls.length, callResponsesCalls.length, "every callResponses() call must be followed by trackUsage()");
+});
+
+test("alwen_chat_usage migration exists with RLS scoped to the requesting user", async () => {
+  const source = await readRepoFile("supabase/migrations/202607220002_alwen_chat_usage.sql");
+  assert.match(source, /create table if not exists public\.alwen_chat_usage/);
+  assert.match(source, /enable row level security/);
+  assert.match(source, /user_id = auth\.uid\(\)/);
+  assert.match(source, /flagged_injection boolean not null default false/);
+  assert.match(source, /-- Rollback approach:/i);
+  assert.doesNotMatch(source, /drop table|drop schema|truncate|delete from/i);
+});

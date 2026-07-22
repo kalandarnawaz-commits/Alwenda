@@ -1,6 +1,7 @@
 import { SUPABASE_URL, isSupabaseConfigured } from "../config.js";
 import { getSupabaseAccessToken } from "./auth/supabaseClient.js";
 import { AlwendaDataError, DATA_ERROR_CODES, toDataError } from "./dataErrors.js";
+import { logPilotEvent, OBSERVABILITY_EVENTS } from "./observability.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
 // The confirm-then-create flow can make two OpenAI calls server-side (each
@@ -95,6 +96,7 @@ export async function sendAlwenMessage({ message, language = "en", city = "Vilni
       createdListing: payload.createdListing || null
     };
   } catch (error) {
+    logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "sendAlwenMessage", error }, { severity: "error" });
     if (error instanceof AlwenChatError) throw error;
     throw toDataError(error, DATA_ERROR_CODES.SUPABASE_UNAVAILABLE);
   }

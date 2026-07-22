@@ -1,6 +1,7 @@
 import { ELEVENLABS_TTS_FUNCTION_SLUG, SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "../config.js";
 import { getSupabaseAccessToken } from "./auth/supabaseClient.js";
 import { AlwendaDataError, DATA_ERROR_CODES, toDataError } from "./dataErrors.js";
+import { logPilotEvent, OBSERVABILITY_EVENTS } from "./observability.js";
 
 export const MAX_TRANSLATION_SPEECH_CHARACTERS = 1000;
 const REQUEST_TIMEOUT_MS = 25000;
@@ -182,6 +183,7 @@ export async function speakTranslatedText(options = {}) {
   } catch (error) {
     activeRequest = null;
     activeController = null;
+    logPilotEvent(OBSERVABILITY_EVENTS.SUPABASE_FAILURE, { context: "speakTranslatedText", error }, { severity: "error" });
     if (error instanceof TranslationVoiceError) throw error;
     throw toDataError(error, DATA_ERROR_CODES.SUPABASE_UNAVAILABLE);
   }

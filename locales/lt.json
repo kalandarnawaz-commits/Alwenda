@@ -153,7 +153,7 @@
     "sendToPros": "Siųsti specialistams",
     "describeNeed": "Aprašykite užduotį paprastai",
     "prosRespond": "Patikrinti specialistai atsiunčia kainas",
-    "bookPay": "Užsakykite, kalbėkite, sekite ir mokėkite saugiai",
+    "chatAndArrange": "Susisiekite tiesiogiai ir patys susitarkite dėl apmokėjimo",
     "verifiedPros": "Patikrinti vietos specialistai",
     "verifiedProsHint": "Santechnika, valymas, elektra, korepetitoriai, vaikų priežiūra, fotografija, kraustymas, teisė, apskaita, IT ir daugiau.",
     "matchingPros": "Tinkami specialistai",
@@ -1552,19 +1552,6 @@
     "tagsPlaceholder": "pvz., dviratis, kalnų, trek",
     "photosLabel": "Nuotraukos (neprivaloma)",
     "addPhotosCta": "Pridėti nuotraukų"
-  },
-  "booking": {
-    "bookingSheetTitle": "Rezervuoti: {name}",
-    "bookingSheetHint": "Pasirinkite jums tinkamą dieną ir laiką.",
-    "chooseDate": "Pasirinkite dieną",
-    "chooseTime": "Pasirinkite laiką",
-    "noSlotsToday": "Šiandien laisvų laikų nebeliko — pasirinkite kitą dieną.",
-    "confirmBooking": "Patvirtinti rezervaciją",
-    "bookingConfirmedTitle": "Rezervacija pateikta",
-    "bookingConfirmedHint": "{name} netrukus patvirtins. Ją rasite skiltyje „Jūsų užklausos“.",
-    "viewMyBookings": "Žiūrėti mano rezervacijas",
-    "anytimeFlexible": "Bet kada, esu lankstus",
-    "anytimeFlexibleHint": "Suderinsime jus su artimiausiu šio specialisto laisvu laiku."
   },
   "entity": {
     "professional": "Specialistas",
