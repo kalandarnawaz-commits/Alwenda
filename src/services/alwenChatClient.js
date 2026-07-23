@@ -27,7 +27,7 @@ export function validateAlwenMessage(message) {
   return trimmed;
 }
 
-export async function sendAlwenMessage({ message, language = "en", city = "Vilnius", conversationId = null }) {
+export async function sendAlwenMessage({ message, language = "en", city = "Vilnius", conversationId = null, mode = "chat", toLanguage = "auto" }) {
   try {
     const trimmed = validateAlwenMessage(message);
     if (!isSupabaseConfigured()) {
@@ -49,7 +49,7 @@ export async function sendAlwenMessage({ message, language = "en", city = "Vilni
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ message: trimmed, language, city, conversationId }),
+        body: JSON.stringify({ message: trimmed, language, city, conversationId, mode, toLanguage }),
         signal: controller.signal
       });
     } catch (error) {
@@ -83,6 +83,20 @@ export async function sendAlwenMessage({ message, language = "en", city = "Vilni
                 ? DATA_ERROR_CODES.SUPABASE_UNAVAILABLE
                 : DATA_ERROR_CODES.INVALID_INPUT;
       throw new AlwenChatError(errorCode, payload?.error || "Alwen could not answer right now.", { status: response.status });
+    }
+
+    if (payload?.type === "translation") {
+      if (!payload.original || !payload.translated || !payload.detectedLanguage || !payload.targetLanguage) {
+        throw new AlwenChatError(DATA_ERROR_CODES.SUPABASE_UNAVAILABLE, "Alwen returned an incomplete translation.", { status: 502 });
+      }
+      return {
+        type: "translation",
+        original: payload.original,
+        translated: payload.translated,
+        detectedLanguage: payload.detectedLanguage,
+        targetLanguage: payload.targetLanguage,
+        conversationId: payload.conversationId || conversationId || null
+      };
     }
 
     if (!payload?.answer) {

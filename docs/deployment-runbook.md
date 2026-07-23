@@ -2,6 +2,17 @@
 
 Alwenda is a zero-build static app (`dist/` is just `index.html` + `src/` + a few static folders, copied verbatim by `npm run build` — see `package.json`) plus a set of Supabase Edge Functions. As of this writing **no frontend hosting is configured anywhere in this repository** — no `netlify.toml`, `vercel.json`, GitHub Pages workflow, or `Dockerfile` exists, and the README only documents Edge Function deployment. The frontend section below is therefore a **recommendation**, not a description of existing practice — adapt it to whatever static host you actually pick, and update this doc once it's real.
 
+## ⚠️ There is currently only one Supabase project
+
+`supabase projects list` returns exactly one linked project (`syfahecoodziijlsasum`). There is **no separate staging and production Supabase project** — every migration push, Edge Function deploy, and "staging" test in this repo's docs (including `docs/alwen-2.0-staging-e2e-checklist.md`) runs against this single shared project, which also backs whatever real usage the app currently has.
+
+Practical consequences until a real staging project is provisioned:
+
+- Any `supabase db push` or `supabase functions deploy` against "staging" is a **real deploy to the only environment that exists** — treat every such action with the same care as a production deploy.
+- Test accounts created for E2E validation live in the same `auth.users` table as any real users — don't assume a clean, disposable database.
+- OpenAI usage from manual testing counts against the real `alwen_chat_usage` daily cost ceiling (`ALWEN_CHAT_DAILY_COST_CAP_USD`, default $2/day) — **do not intentionally exhaust it** (e.g. scripted request floods to trigger the cap) and don't run destructive testing (bulk deletes, schema changes outside reviewed migrations, load testing) against this project.
+- Provisioning an actual separate staging project (and updating this doc, `env.js`, and the deploy workflow's `SUPABASE_PROJECT_ID` secret to point at it) should happen before this app has real production traffic to protect.
+
 ## Frontend deployment (recommended — not yet in place)
 
 1. Build: `npm run build` — produces `dist/`, deterministic from a given git commit, no environment-specific values baked in (`env.js` is copied as-is if present locally, but production `env.js` should be supplied by the host, never committed — see `env.example.js`).

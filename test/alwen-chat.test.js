@@ -158,8 +158,10 @@ test("Alwen Edge Function logs real per-request token usage and cost using verif
   assert.match(source, /trackUsage\(payload\)/);
   assert.match(source, /payload\.usage\?\.input_tokens/);
   assert.match(source, /from\("alwen_chat_usage"\)\.insert/);
-  // Usage must be tracked after every callResponses() call, not just the first.
-  const trackUsageCalls = source.match(/trackUsage\(payload\);/g) || [];
+  // Usage must be tracked after every callResponses() call, not just the first
+  // — translate mode's own call uses its own `translatePayload` variable
+  // rather than the chat-mode `payload`, so match either.
+  const trackUsageCalls = source.match(/trackUsage\(\w*[Pp]ayload\);/g) || [];
   const callResponsesCalls = source.match(/await callResponses\(/g) || [];
   assert.equal(trackUsageCalls.length, callResponsesCalls.length, "every callResponses() call must be followed by trackUsage()");
 });
