@@ -270,6 +270,22 @@ function createFallbackClient() {
           : { phone };
         return apiJson("/auth/v1/otp", { method: "POST", body });
       },
+      async signInWithPassword({ email, password }) {
+        const result = await apiJson("/auth/v1/token?grant_type=password", { method: "POST", body: { email, password } });
+        if (result.data?.access_token) storeSession(result.data);
+        return { data: result.data ? { session: result.data, user: result.data.user || null } : null, error: result.error };
+      },
+      async signUp({ email, password, options = /** @type {any} */ ({}) }) {
+        const result = await apiJson("/auth/v1/signup", { method: "POST", body: { email, password, redirect_to: options.emailRedirectTo || authRedirectUrl() } });
+        // GoTrue returns a full session (access_token present) only when
+        // email confirmation is disabled project-side — otherwise it
+        // returns just the created user, and the user must confirm by
+        // email before a session exists, same as the magic-link flow.
+        if (result.data?.access_token) storeSession(result.data);
+        const session = result.data?.access_token ? result.data : null;
+        const user = result.data?.user || (result.data && !result.data.access_token ? result.data : null);
+        return { data: result.data ? { session, user } : null, error: result.error };
+      },
       async resetPasswordForEmail(email, options = {}) {
         return apiJson("/auth/v1/recover", { method: "POST", body: { email, redirect_to: options.redirectTo || authRedirectUrl() } });
       },
@@ -397,6 +413,32 @@ export async function signInWithEmailOtp(email) {
 
 export const signUpWithEmail = signInWithEmailOtp;
 export const signInWithEmail = ({ email }) => signInWithEmailOtp(email);
+
+/** Real password sign-in via supabase.auth.signInWithPassword() — the
+ * email/password counterpart to signInWithEmail() (magic link) above.
+ * Returns { session, user } so callers can apply the session immediately
+ * (there's no redirect to wait for, unlike magic link/OAuth). */
+export async function signInWithPassword({ email, password }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throwIfError(error, "signInWithPassword");
+  return data;
+}
+
+/** Real password sign-up via supabase.auth.signUp(). If the project has
+ * email confirmations enabled (the default), `data.session` comes back
+ * null — the user must confirm by email first, exactly like the
+ * magic-link sign-up flow's "check your email" step. */
+export async function signUpWithPassword({ email, password }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: authRedirectUrl() }
+  });
+  if (error) throwIfError(error, "signUpWithPassword");
+  return data;
+}
 
 export async function resetPasswordForEmail(email) {
   const supabase = await getClient();

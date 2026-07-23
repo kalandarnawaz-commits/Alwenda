@@ -401,6 +401,8 @@
     "verifyCodeTitle": "Check your {method}",
     "verifyCodeHint": "Enter the 6-digit code we sent to {target}.",
     "authMagicLinkHint": "We’ll email you a secure sign-in link. No password needed.",
+    "authMagicLinkMethod": "Magic link",
+    "authPasswordMethod": "Password",
     "authSendSignInLink": "Send sign-in link",
     "authCheckingSession": "Checking your session",
     "authCheckingSessionHint": "One moment while Alwenda restores your secure sign-in.",

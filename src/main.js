@@ -54,6 +54,8 @@ import {
   isSupabaseConfigured,
   signInWithOAuthProvider,
   signInWithEmail,
+  signInWithPassword,
+  signUpWithPassword,
   resetPasswordForEmail,
   updatePassword,
   signInWithPhoneOtp,
@@ -941,8 +943,10 @@ function resetAuthDrafts() {
   state.auth.authError = null;
   state.auth.authNotice = null;
   state.auth.loginMode = "email";
-  state.auth.loginDraft = { email: "", phone: "" };
-  state.auth.registerDraft = { name: "", email: "", phone: "", agreeTerms: false, marketingConsent: false };
+  state.auth.loginMethod = "magicLink"; // "magicLink" | "password" — only applies when loginMode === "email"
+  state.auth.loginDraft = { email: "", phone: "", password: "" };
+  state.auth.registerMethod = "magicLink"; // "magicLink" | "password"
+  state.auth.registerDraft = { name: "", email: "", phone: "", password: "", confirmPassword: "", agreeTerms: false, marketingConsent: false };
   state.auth.forgotDraft = { email: "" };
   state.auth.verifyDraft = { code: "" };
   state.auth.resetDraft = { password: "", confirmPassword: "" };
@@ -993,6 +997,47 @@ async function submitRegister() {
   }
 }
 
+async function submitRegisterPassword() {
+  const draft = state.auth.registerDraft;
+  if (!isValidEmail(draft.email)) { state.auth.authError = t("auth.authErrorEmail"); render(); return; }
+  if (!draft.agreeTerms) { state.auth.authError = t("auth.authErrorTerms"); render(); return; }
+  if (!isValidPassword(draft.password)) { state.auth.authError = t("auth.authErrorPassword"); render(); return; }
+  if (draft.password !== draft.confirmPassword) { state.auth.authError = t("auth.authErrorPasswordMatch"); render(); return; }
+  writeLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY, {
+    policyVersion: LEGAL_POLICY_VERSION,
+    acceptedAt: new Date().toISOString(),
+    email: draft.email.trim().toLowerCase(),
+    marketingConsent: Boolean(draft.marketingConsent)
+  });
+
+  const rateLimit = enforceRateLimit("register-password", draft.email, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
+  if (!rateLimit.allowed) { applyRateLimitError(rateLimit); render(); return; }
+
+  if (!isSupabaseConfigured()) { state.auth.authError = t("auth.authErrorProviderNotConfigured"); render(); return; }
+
+  try {
+    const data = await signUpWithPassword({ email: draft.email.trim(), password: draft.password });
+    trackEvent("sign_up_started", { provider: "email_password" });
+    if (data.session) {
+      // Auto-confirmed (email confirmations disabled project-side) — sign
+      // the new account straight in, same as an already-verified return.
+      await applySupabaseSession(data.session, "SIGNED_IN");
+      state.auth.authError = null;
+      trackEvent("sign_in", { method: "email_password" });
+      render();
+    } else {
+      // Email confirmation required — same "check your email" pattern the
+      // magic-link sign-up already uses.
+      state.auth.authError = null;
+      state.auth.authNotice = t("auth.authCheckEmailToConfirm");
+      goToAuthView("login");
+    }
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorEmailTaken");
+    render();
+  }
+}
+
 async function submitLoginEmail() {
   const draft = state.auth.loginDraft;
   if (!isValidEmail(draft.email)) return void (state.auth.authError = t("auth.authErrorEmail"));
@@ -1007,6 +1052,33 @@ async function submitLoginEmail() {
     state.auth.authError = null;
     state.auth.authNotice = t("auth.authCheckEmailForSignIn");
     trackEvent("sign_in_started", { provider: "email" });
+    render();
+  } catch (error) {
+    state.auth.authError = error?.message || t("auth.authErrorNoAccount");
+    render();
+  }
+}
+
+/** Password sign-in resolves synchronously (no redirect to wait for, like
+ * magic link/OAuth) — so, matching submitVerifyCode()'s pattern for the
+ * same reason, the returned session is applied directly here rather than
+ * relying on the passive auth-state listener (which the REST fallback
+ * client only ever fires once, at subscribe time). */
+async function submitLoginPassword() {
+  const draft = state.auth.loginDraft;
+  if (!isValidEmail(draft.email)) { state.auth.authError = t("auth.authErrorEmail"); render(); return; }
+  if (!draft.password) { state.auth.authError = t("auth.authErrorPasswordRequired"); render(); return; }
+
+  const rateLimit = enforceRateLimit("login-password", draft.email, { maxAttempts: 5, windowMs: 5 * 60 * 1000 });
+  if (!rateLimit.allowed) { applyRateLimitError(rateLimit); render(); return; }
+
+  if (!isSupabaseConfigured()) { state.auth.authError = t("auth.authErrorProviderNotConfigured"); render(); return; }
+
+  try {
+    const data = await signInWithPassword({ email: draft.email.trim(), password: draft.password });
+    await applySupabaseSession(data.session, "SIGNED_IN");
+    state.auth.authError = null;
+    trackEvent("sign_in", { method: "email_password" });
     render();
   } catch (error) {
     state.auth.authError = error?.message || t("auth.authErrorNoAccount");
@@ -2602,25 +2674,43 @@ function renderOAuthButtons() {
 function renderLogin() {
   const draft = state.auth.loginDraft;
   const mode = state.auth.loginMode || "email";
+  const loginMethod = state.auth.loginMethod || "magicLink";
   const body = `
     ${renderOAuthButtons()}
     <div class="auth-tab-row">
       <button type="button" class="${mode === "email" ? "is-active" : ""}" data-auth-login-mode="email">${t("common.emailLabel")}</button>
       <button type="button" class="${mode === "phone" ? "is-active" : ""}" data-auth-login-mode="phone">${t("common.phoneLabel")}</button>
     </div>
-    <form class="auth-form" data-auth-form="login-${mode}">
-      ${mode === "email"
-        ? `
-          ${authField({ id: "login-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
-          <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
-          <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
-          <button type="button" class="auth-link" data-auth-view="forgotPassword">${t("common.forgotPasswordLink")}</button>
-        `
-        : `
+    ${mode === "email"
+      ? `
+        <div class="auth-tab-row auth-method-toggle">
+          <button type="button" class="${loginMethod === "magicLink" ? "is-active" : ""}" data-auth-login-method="magicLink">${t("auth.authMagicLinkMethod")}</button>
+          <button type="button" class="${loginMethod === "password" ? "is-active" : ""}" data-auth-login-method="password">${t("auth.authPasswordMethod")}</button>
+        </div>
+        ${loginMethod === "password"
+          ? `
+            <form class="auth-form" data-auth-form="login-password">
+              ${authField({ id: "login-password-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
+              ${authField({ id: "login-password", label: t("common.passwordLabel"), type: "password", value: draft.password, placeholder: t("common.passwordPlaceholder") })}
+              <button type="submit" class="auth-primary-button">${t("common.signIn")}</button>
+              <button type="button" class="auth-link" data-auth-view="forgotPassword">${t("common.forgotPasswordLink")}</button>
+            </form>
+          `
+          : `
+            <form class="auth-form" data-auth-form="login-email">
+              ${authField({ id: "login-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
+              <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
+              <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
+              <button type="button" class="auth-link" data-auth-view="forgotPassword">${t("common.forgotPasswordLink")}</button>
+            </form>
+          `}
+      `
+      : `
+        <form class="auth-form" data-auth-form="login-phone">
           ${authField({ id: "login-phone", label: t("common.phoneLabel"), type: "tel", value: draft.phone, placeholder: t("common.phonePlaceholder") })}
           <button type="submit" class="auth-primary-button">${t("common.sendCodeCta")}</button>
-        `}
-    </form>
+        </form>
+      `}
     <p class="auth-footer-line">${t("common.dontHaveAccount")} <button type="button" class="auth-link" data-auth-view="register">${t("common.signUp")}</button></p>
     <button type="button" class="auth-link" data-view="home">${t("common.continueAsGuest")}</button>
   `;
@@ -2629,21 +2719,41 @@ function renderLogin() {
 
 function renderRegister() {
   const draft = state.auth.registerDraft;
+  const registerMethod = state.auth.registerMethod || "magicLink";
+  const termsAndMarketing = `
+    <label class="auth-checkbox-row">
+      <input id="register-terms" type="checkbox" ${draft.agreeTerms ? "checked" : ""} />
+      <span>I have read and agree to the Alwenda <button type="button" class="legal-inline-link" data-view="legalTerms">Terms and Conditions</button>. I understand that Alwenda is a listing and matching platform, does not process transaction payments and is not a party to agreements between users.</span>
+    </label>
+    <label class="auth-checkbox-row">
+      <input id="register-marketing" type="checkbox" ${draft.marketingConsent ? "checked" : ""} />
+      <span>I agree to receive Alwenda news and offers by email. I can withdraw my consent at any time.</span>
+    </label>
+  `;
   const body = `
     ${renderOAuthButtons()}
-    <form class="auth-form" data-auth-form="register">
-      ${authField({ id: "register-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
-      <label class="auth-checkbox-row">
-        <input id="register-terms" type="checkbox" ${draft.agreeTerms ? "checked" : ""} />
-        <span>I have read and agree to the Alwenda <button type="button" class="legal-inline-link" data-view="legalTerms">Terms and Conditions</button>. I understand that Alwenda is a listing and matching platform, does not process transaction payments and is not a party to agreements between users.</span>
-      </label>
-      <label class="auth-checkbox-row">
-        <input id="register-marketing" type="checkbox" ${draft.marketingConsent ? "checked" : ""} />
-        <span>I agree to receive Alwenda news and offers by email. I can withdraw my consent at any time.</span>
-      </label>
-      <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
-      <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
-    </form>
+    <div class="auth-tab-row auth-method-toggle">
+      <button type="button" class="${registerMethod === "magicLink" ? "is-active" : ""}" data-auth-register-method="magicLink">${t("auth.authMagicLinkMethod")}</button>
+      <button type="button" class="${registerMethod === "password" ? "is-active" : ""}" data-auth-register-method="password">${t("auth.authPasswordMethod")}</button>
+    </div>
+    ${registerMethod === "password"
+      ? `
+        <form class="auth-form" data-auth-form="register-password">
+          ${authField({ id: "register-password-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
+          ${authField({ id: "register-password", label: t("common.passwordLabel"), type: "password", value: draft.password, placeholder: t("common.passwordPlaceholder") })}
+          ${authField({ id: "register-confirm-password", label: t("common.confirmPasswordLabel"), type: "password", value: draft.confirmPassword, placeholder: t("common.confirmPasswordPlaceholder") })}
+          ${termsAndMarketing}
+          <button type="submit" class="auth-primary-button">${t("common.signUp")}</button>
+        </form>
+      `
+      : `
+        <form class="auth-form" data-auth-form="register">
+          ${authField({ id: "register-email", label: t("common.emailLabel"), type: "email", value: draft.email, placeholder: t("common.emailPlaceholder") })}
+          ${termsAndMarketing}
+          <p class="auth-hint">${t("auth.authMagicLinkHint")}</p>
+          <button type="submit" class="auth-primary-button">${t("auth.authSendSignInLink")}</button>
+        </form>
+      `}
     <p class="auth-footer-line">${t("common.alreadyHaveAccount")} <button type="button" class="auth-link" data-auth-view="login">${t("common.signIn")}</button></p>
   `;
   return renderAuthShell(t("common.appName"), t("auth.authCreateAccount"), t("auth.authCreateAccountHint"), body);
@@ -11135,6 +11245,30 @@ function bindAuthEvents() {
     });
   });
 
+  document.querySelectorAll("[data-auth-login-method]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.auth.loginMethod = button.dataset.authLoginMethod;
+      state.auth.authError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-auth-register-method]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.auth.registerMethod = button.dataset.authRegisterMethod;
+      state.auth.authError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.togglePassword;
+      state.auth.visiblePasswordFields[id] = !state.auth.visiblePasswordFields[id];
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-auth-provider]").forEach((button) => {
     button.addEventListener("click", () => {
       if (state.auth.authView === "register") {
@@ -11159,7 +11293,12 @@ function bindAuthEvents() {
 
   bindLiveField("login-email", (value) => (state.auth.loginDraft.email = value));
   bindLiveField("login-phone", (value) => (state.auth.loginDraft.phone = value));
+  bindLiveField("login-password-email", (value) => (state.auth.loginDraft.email = value));
+  bindLiveField("login-password", (value) => (state.auth.loginDraft.password = value));
   bindLiveField("register-email", (value) => (state.auth.registerDraft.email = value));
+  bindLiveField("register-password-email", (value) => (state.auth.registerDraft.email = value));
+  bindLiveField("register-password", (value) => (state.auth.registerDraft.password = value));
+  bindLiveField("register-confirm-password", (value) => (state.auth.registerDraft.confirmPassword = value));
   bindLiveField("register-terms", (value) => (state.auth.registerDraft.agreeTerms = value));
   bindLiveField("register-marketing", (value) => (state.auth.registerDraft.marketingConsent = value));
   bindLiveField("forgot-email", (value) => (state.auth.forgotDraft.email = value));
@@ -11175,8 +11314,10 @@ function bindAuthEvents() {
     event.preventDefault();
     const kind = form.dataset.authForm;
     if (kind === "login-email") submitLoginEmail();
+    else if (kind === "login-password") submitLoginPassword();
     else if (kind === "login-phone") submitLoginPhone();
     else if (kind === "register") submitRegister();
+    else if (kind === "register-password") submitRegisterPassword();
     else if (kind === "forgotPassword") submitForgotPassword();
     else if (kind === "verifyCode") submitVerifyCode();
     else if (kind === "resetPassword") submitResetPassword();

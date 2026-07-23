@@ -401,6 +401,8 @@
     "verifyCodeTitle": "Überprüfe dein {method}",
     "verifyCodeHint": "Gib den 6-stelligen Code ein, den wir an {target} gesendet haben.",
     "authMagicLinkHint": "Wir senden dir einen sicheren Anmeldelink per E-Mail. Kein Passwort nötig.",
+    "authMagicLinkMethod": "Anmeldelink",
+    "authPasswordMethod": "Passwort",
     "authSendSignInLink": "Anmeldelink senden",
     "authCheckingSession": "Sitzung wird geprüft",
     "authCheckingSessionHint": "Einen Moment, während Alwenda deine sichere Anmeldung wiederherstellt.",
