@@ -14,13 +14,45 @@ test("runtime config exposes public diagnostics without secrets", async () => {
   const diagnostics = getRuntimeConfigDiagnostics();
   const validation = validatePublicRuntimeConfig();
 
-  assert.equal(diagnostics.appEnv, "development");
+  // No window.__ALWENDA_ENV__ and no process.env.APP_ENV are set in this
+  // process, so this is exactly the "missing environment" case — it must
+  // resolve to the production-safe default, not silently to "development".
+  assert.equal(diagnostics.appEnv, "production");
+  assert.equal(diagnostics.appEnvWasExplicit, false);
+  assert.equal(diagnostics.fixturesAllowed, false);
   assert.equal(diagnostics.releaseVersion, "local-dev");
   assert.equal(diagnostics.supabaseConfigured, false);
   assert.deepEqual(PUBLIC_FEATURE_FLAGS, {});
   assert.equal(validation.ok, false);
   assert.ok(validation.warnings.some((warning) => warning.includes("SUPABASE_URL")));
+  assert.ok(validation.warnings.some((warning) => warning.includes("APP_ENV was not explicitly set")));
   assert.ok(!JSON.stringify(diagnostics).toLowerCase().includes("service_role"));
+});
+
+test("resolveAppEnv: an unknown or missing environment always fails safe to production", async () => {
+  const { resolveAppEnv } = await import("../src/config.js");
+  assert.equal(resolveAppEnv(undefined, undefined), "production");
+  assert.equal(resolveAppEnv(null, null), "production");
+  assert.equal(resolveAppEnv("", ""), "production");
+  assert.equal(resolveAppEnv("banana", undefined), "production");
+  assert.equal(resolveAppEnv("staging", undefined), "staging");
+  assert.equal(resolveAppEnv("development", undefined), "development");
+  assert.equal(resolveAppEnv("test", undefined), "test");
+  // A recognised Node-side value is honoured only when the browser-side
+  // value (env.js) did not already supply a recognised one.
+  assert.equal(resolveAppEnv(undefined, "test"), "test");
+  assert.equal(resolveAppEnv("production", "development"), "production");
+});
+
+test("computeIsFixturesAllowed: only development and test permit fixtures, everything else — including unrecognised values — does not", async () => {
+  const { computeIsFixturesAllowed } = await import("../src/config.js");
+  assert.equal(computeIsFixturesAllowed("development"), true);
+  assert.equal(computeIsFixturesAllowed("test"), true);
+  assert.equal(computeIsFixturesAllowed("production"), false);
+  assert.equal(computeIsFixturesAllowed("staging"), false);
+  assert.equal(computeIsFixturesAllowed(undefined), false);
+  assert.equal(computeIsFixturesAllowed(""), false);
+  assert.equal(computeIsFixturesAllowed("banana"), false);
 });
 
 test("profile bootstrap preserves user-edited values and fills only missing provider data", async () => {

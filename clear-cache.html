@@ -74,7 +74,7 @@
   <body>
     <main>
       <h1>Refreshing Alwenda</h1>
-      <p id="status">Clearing old local app files so the latest task-detail navigation can load.</p>
+      <p id="status">Clearing old local app files so the latest Alwenda build can load.</p>
       <button id="retry" type="button">Refresh now</button>
       <small>If this page does not move automatically, tap Refresh now.</small>
     </main>
@@ -91,7 +91,7 @@
             await Promise.all(keys.map((key) => caches.delete(key)));
           }
           status.textContent = "Done. Opening the fresh Alwenda build now.";
-          window.location.replace(`./?v=live-opportunity-detail-2-cleared-${Date.now()}`);
+          window.location.replace(`./?v=cache-cleared-${Date.now()}`);
         } catch (error) {
           status.textContent = "Could not clear automatically. Please close this tab and hard refresh Alwenda.";
         }

@@ -213,6 +213,7 @@
     "reservationHeroSubtitle": "Restaurants, Unterkünfte und vertrauenswürdige Dienstleistungen — eine Anfrage, echte Antworten.",
     "newRequestTitle": "Neue Anfrage",
     "myRequestsTitle": "Deine Anfragen",
+    "reservationsEmptyTitle": "Du hast noch keine Buchungen vorgenommen",
     "popularToBookTitle": "Beliebt zum Buchen",
     "popularToBookHint": "Bestbewertete Orte in der Nähe, bereit für eine Anfrage mit einem Klick.",
     "requestPlaceholder": "Restaurant, Wohnung, Hotel, Klinik, Dienstleistung...",
@@ -1114,7 +1115,7 @@
     "futureAiConversations": "Zukünftige Gespräche",
     "futureAiConversationsHint": "Alwen-Gespräche werden Text, Sprache, Bilder, Dateien, Lesebestätigungen, Zusammenfassungen und Workflow-Freigaben unterstützen.",
     "emptyTitle": "Noch keine Unterhaltungen.",
-    "emptyHint": "Nachrichten von Personen, Unternehmen und Alwen erscheinen hier.",
+    "emptyHint": "Kontaktiere ein Unternehmen oder eine andere Person, um ein Gespräch zu beginnen.",
     "conversationTypeProfessional": "Fachkraft",
     "conversationTypeBusiness": "Unternehmen",
     "conversationTypeMarketplace": "Marktplatz",
@@ -1180,6 +1181,10 @@
     },
     "sourceLabel": "Quelle",
     "updatedLabel": "Aktualisiert",
+    "emptyTitle": "Noch keine Unternehmen",
+    "emptyHint": "Echte lokale Unternehmen erscheinen hier, sobald Inhaber ihre Profile beanspruchen und verifizieren. In der Umgebung gibt es bereits echte Orte in der Nähe.",
+    "emptyCta": "Umgebung erkunden",
+    "emptyReviews": "Noch keine Bewertungen",
     "verify": {
       "verifyBusinessEmailDomain": "Geschäftliche E-Mail-Domain",
       "verifyPhone": "Telefonverifizierung",
@@ -1437,6 +1442,9 @@
     "marketplaceTitle": "Alles, was deine Stadt für dich tun kann.",
     "marketplaceHeroTitle": "Marktplatz",
     "marketplaceHeroSubtitle": "Kaufen. Verkaufen. Entdecken. Beauftragen. Reservieren.",
+    "emptyTitle": "Noch keine Anzeigen",
+    "emptyHint": "Seien Sie die erste Person in Ihrer Umgebung, die verkauft, vermietet oder eine Dienstleistung anbietet.",
+    "emptyCta": "Anzeige erstellen",
     "hub": {
       "listingsCount": "{count} Angebote",
       "noListingsYet": "Neu hier",
@@ -1725,7 +1733,9 @@
     "adminListings": "Anzeigen",
     "adminBusinesses": "Unternehmen",
     "adminReservations": "Reservierungen",
-    "adminTranslations": "Übersetzungen"
+    "adminTranslations": "Übersetzungen",
+    "unauthorizedTitle": "Nicht verfügbar",
+    "unauthorizedHint": "Dieses Tool steht nur autorisierten Teammitgliedern zur Verfügung."
   },
   "mock": {
     "live": {

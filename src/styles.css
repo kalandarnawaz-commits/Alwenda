@@ -2978,6 +2978,22 @@ body.has-open-sheet {
   line-height: 1.5;
 }
 
+.empty-state-action h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.empty-state-action button {
+  margin-top: 6px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent, #1a1a1a);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Discover local places — up to three tiles per row on wide screens
    instead of one full-bleed card per screen. Pairs with the compact
    .imported-card tile redesign below (photo-overlay badges, tighter

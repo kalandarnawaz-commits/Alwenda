@@ -108,7 +108,7 @@ import {
 } from "./services/identity/personaVerification.js?v=persona-placeholder-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
-import { SENTRY_DSN, APP_ENV, APP_RELEASE_VERSION } from "./config.js?v=pilot-readiness-1";
+import { SENTRY_DSN, APP_ENV, APP_RELEASE_VERSION, isFixturesAllowed } from "./config.js?v=pilot-readiness-1";
 import { bindGlobalErrorObservers, configureErrorSink, createSentrySink, logPilotEvent, OBSERVABILITY_EVENTS } from "./services/observability.js?v=pilot-readiness-1";
 import { validateEventPayload, buildAnalyticsEventRecord, AnalyticsSchemaError } from "./services/analytics.js?v=pilot-readiness-1";
 
@@ -817,6 +817,27 @@ const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDet
    turns them into a visible/shareable link (syncUrlToState only writes
    views that are in DEEP_LINK_VIEWS). */
 const INTERNAL_URL_VIEWS = new Set(["ops", "cityImport"]);
+// Same set, named for what renderView()'s authorization check actually
+// cares about — not being unlinked, but requiring a real admin role.
+const OPS_VIEWS = INTERNAL_URL_VIEWS;
+
+/** Real authorization, not frontend hiding: app_metadata is only ever set
+ * server-side (a signed-in user cannot write their own role), so this is
+ * the same tamper-proof signal the trader-review queue already gates on
+ * (see the traderReview button in renderSettings()). ops/cityImport run
+ * real city-import jobs and expose real business-claim review — they must
+ * never render for a user without this role, direct URL or not. */
+function isOpsAuthorized(user) {
+  return Boolean(user) && (user.traderPermissions?.includes("verification_view") || ["admin", "service"].includes(user.appRole));
+}
+
+function renderOpsUnauthorized() {
+  return `
+    <section class="section-shell">
+      ${renderEmptyStateAction(t("admin.unauthorizedTitle"), t("admin.unauthorizedHint"), t("common.back"), "home", "ops")}
+    </section>
+  `;
+}
 
 let suppressNextUrlPush = false;
 let lastPushedUrlKey = null;
@@ -1799,6 +1820,22 @@ function renderEmptyState(message, iconName = "search") {
     <div class="empty-state">
       <span class="empty-state-icon">${icon(iconName)}</span>
       <p>${message}</p>
+    </div>
+  `;
+}
+
+/** Same honest-empty-state family as renderEmptyState(), for the handful
+ * of screens that need a real title, supporting copy, and a primary
+ * action — e.g. "No listings yet — be the first to sell/rent/offer a
+ * service — Create listing" rather than a bare message. Never used to
+ * paper over a real error; only for "no real records exist yet." */
+function renderEmptyStateAction(title, hint, ctaLabel, ctaView, iconName = "search") {
+  return `
+    <div class="empty-state empty-state-action">
+      <span class="empty-state-icon">${icon(iconName)}</span>
+      <h3>${title}</h3>
+      <p>${hint}</p>
+      ${ctaLabel ? `<button type="button" data-view="${ctaView}">${ctaLabel}</button>` : ""}
     </div>
   `;
 }
@@ -3221,6 +3258,15 @@ function renderView() {
     state.auth.authView = "login";
     state.activeView = "auth";
     return renderAuthFlow();
+  }
+  // ops/cityImport run real city-import jobs and review real business
+  // claims — reachable only by direct URL (INTERNAL_URL_VIEWS, not linked
+  // anywhere in the UI), which is not real access control on its own.
+  // isOpsAuthorized() checks the same server-issued app_metadata.role the
+  // trader-review queue already gates on (not client-writable), so this is
+  // real authorization, not just hiding a link.
+  if (OPS_VIEWS.has(state.activeView) && !isOpsAuthorized(state.auth.user)) {
+    return renderOpsUnauthorized();
   }
   const views = {
     alwen: renderAlwenConversationScreen,
@@ -5601,7 +5647,7 @@ function renderMarketplace() {
         <div><h2>${t("home.rail.allListings")}</h2><p>${t("home.rail.allListingsHint")}</p></div>
       </div>
       <div class="market-grid">
-        ${items.map(renderMarketplaceListing).join("")}
+        ${items.length ? items.map(renderMarketplaceListing).join("") : renderEmptyStateAction(t("marketplace.emptyTitle"), t("marketplace.emptyHint"), t("marketplace.emptyCta"), "createListing", "tag")}
       </div>
       <div class="section-title">
         <div><h2>${t("common.verifiedPros")}</h2><p>${t("common.verifiedProsHint")}</p></div>
@@ -6004,6 +6050,12 @@ function renderCreateListingForm() {
 }
 
 function renderAlwenListingCreator() {
+  // This is a static, illustrative "here's what Alwen could draft for
+  // you" example — not a real generated draft tied to anything the
+  // signed-in user actually typed. It carries a fabricated "verified
+  // seller" identity (reputationProfile) and invented demand numbers, so
+  // it must never appear in production, only as a fixture-gated preview.
+  if (!isFixturesAllowed()) return "";
   const selections = state.alwenListingSelections || {};
   const suggestionGroups = [
     {
@@ -6367,7 +6419,10 @@ function renderNeedHelp() {
   `;
 }
 
-const LIVE_OPPORTUNITIES = [
+// Fabricated paid-task listings (invented "Verified traveller"/trust-score
+// requesters, stock photos) with no real backing store — same fixture-only
+// treatment as mockData.js's demo arrays, gated the same way.
+const LIVE_OPPORTUNITIES = isFixturesAllowed() ? [
   { id: "airport-pickup", title: "Airport pickup", category: "Transport", price: 25, priceLabel: "€25", distance: 2, time: "Starts in 30 min", requester: "Verified traveller", trust: 4.9, urgent: true, today: true, description: "Pick up one traveller at Vilnius Airport and drive them to the Old Town.", tags: ["Car required", "1 passenger"], action: "Accept", image: "https://images.unsplash.com/photo-1515569067071-ec3b51335dd0?auto=format&fit=crop&w=1200&q=82" },
   { id: "babysitter", title: "Need babysitter", category: "Childcare", price: 40, priceLabel: "€40/hr", distance: 1.4, time: "Tonight · 19:00", requester: "Verified family", trust: 4.8, urgent: true, today: true, description: "Help with two children for three hours while their parents attend an event.", tags: ["Experience required", "3 hours"], action: "Apply", image: "https://images.unsplash.com/photo-1602030028438-4cf153cbae9e?auto=format&fit=crop&w=1200&q=82" },
   { id: "deliver-package", title: "Deliver package", category: "Delivery", price: 15, priceLabel: "€15", distance: 0.9, time: "45 min", requester: "Verified neighbour", trust: 4.7, urgent: true, today: true, description: "Pick up a prepaid parcel near Old Town and deliver it along your route.", tags: ["On your route", "Light parcel"], action: "Accept", image: "https://images.unsplash.com/photo-1580674285054-bed31e145f59?auto=format&fit=crop&w=1200&q=82" },
@@ -6380,7 +6435,7 @@ const LIVE_OPPORTUNITIES = [
   { id: "grocery-delivery", title: "Grocery delivery", category: "Delivery", price: 22, priceLabel: "€22", distance: 1.1, time: "Within 1 hour", requester: "Verified resident", trust: 4.6, urgent: true, today: true, description: "Collect a prepaid grocery order and deliver it to a nearby apartment.", tags: ["Quick task", "No stairs"], action: "Accept", image: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=82" },
   { id: "language-help", title: "Lithuanian conversation practice", category: "Tutoring", price: 30, priceLabel: "€30/hr", distance: 2.7, time: "Tomorrow · 17:00", requester: "Verified learner", trust: 4.8, urgent: false, today: false, description: "Friendly conversation practice for an English speaker learning Lithuanian.", tags: ["Lithuanian", "Beginner"], action: "View details", image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=82" },
   { id: "moving-boxes", title: "Help moving boxes", category: "Moving", price: 75, priceLabel: "€75", distance: 3.6, time: "Today · 15:00", requester: "Verified homeowner", trust: 4.9, urgent: true, today: true, description: "Move packed boxes from a second-floor flat into a waiting van.", tags: ["Physical task", "2 hours"], action: "Accept", image: "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1200&q=82" }
-];
+] : [];
 
 const HOME_LIVE_OPPORTUNITY_IDS = ["airport-pickup", "babysitter", "photo-event", "language-help"];
 const HOME_EARN_OPPORTUNITY_IDS = ["deliver-package", "help-move-sofa", "translate-document", "dog-walk", "teach-english", "furniture"];
@@ -6404,8 +6459,8 @@ function liveOpportunityHref(id) {
 }
 
 function openLiveOpportunityDetail(id) {
-  const item = findOpportunityById(id) || LIVE_OPPORTUNITIES[0];
-  state.selectedOpportunityId = item.id;
+  const item = findOpportunityById(id);
+  state.selectedOpportunityId = item ? item.id : null;
   state.activeView = "liveOpportunityDetail";
   state.activeSheet = null;
   state.quickTranslateOpen = false;
@@ -6452,7 +6507,15 @@ function renderOpportunityCard(item) {
 }
 
 function renderLiveOpportunityDetail() {
-  const item = findOpportunityById(state.selectedOpportunityId) || LIVE_OPPORTUNITIES[0];
+  const item = findOpportunityById(state.selectedOpportunityId);
+  if (!item) {
+    return `
+      <section class="section-shell opportunity-detail-shell">
+        <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+        ${renderEmptyState(t("common.noOpportunitiesMatch"))}
+      </section>
+    `;
+  }
   state.selectedOpportunityId = item.id;
   const title = opportunityText(item, "title");
   const category = opportunityText(item, "category");
@@ -7305,15 +7368,16 @@ function renderBusinesses() {
       </section>
       ${renderAiSearchResults(6, "businesses")}
       <div class="visual-business-grid">
-        ${items
-          .map(
-            (item) => `
+        ${items.length
+          ? items
+              .map(
+                (item) => `
             <article class="business-card visual-business-card">
               <div class="business-photo" style="background-image: url('${item.image}')">
                 <span>${item.hours}</span>
               </div>
               <div>
-                <h3>${item.name}${verifiedCheck(t("status.verified"))}</h3>
+                <h3>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h3>
                 <p>${item.area} · ${item.distance} · ★ ${item.rating}</p>
                 <div class="tag-row">${item.tagKeys.map((tagKey) => `<span>${t(tagKey)}</span>`).join("")}</div>
                 <div class="ai-price-pill">${icon("spark")}<span>${t(item.aiInsightKey)}</span></div>
@@ -7324,8 +7388,9 @@ function renderBusinesses() {
                 <button data-view="reservations">${t("common.reserve")}</button>
               </div>
             </article>`
-          )
-          .join("")}
+              )
+              .join("")
+          : renderEmptyStateAction(t("business.emptyTitle"), t("business.emptyHint"), t("business.emptyCta"), "explore")}
       </div>
     </section>
   `;
@@ -7363,6 +7428,14 @@ function openingHoursDayLabel(days) {
 
 function renderBusinessProfile() {
   const item = businesses.find((business) => business.id === state.selectedBusinessId) || businesses[0];
+  if (!item) {
+    return `
+      <section class="section-shell business-profile-shell">
+        <button class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
+        ${renderEmptyStateAction(t("business.emptyTitle"), t("business.emptyHint"), t("business.emptyCta"), "explore")}
+      </section>
+    `;
+  }
   const gallery = [item.image, ...(item.gallery || [])];
 
   return `
@@ -7408,7 +7481,8 @@ function renderBusinessProfile() {
       }
       <div class="section-title"><h2>${t("common.reviews")}</h2></div>
       <div class="review-grid">
-        ${profileReviews.map((review) => `
+        ${profileReviews.length
+          ? profileReviews.map((review) => `
           <article>
             <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
               <img src="${review.avatar}" alt="" />
@@ -7416,7 +7490,8 @@ function renderBusinessProfile() {
             </div>
             <p>${t(review.textKey)}</p>
           </article>
-        `).join("")}
+        `).join("")
+          : renderEmptyState(t("business.emptyReviews"), "star")}
       </div>
     </section>
   `;
@@ -7972,7 +8047,7 @@ function renderReservations() {
         <div><h2>${t("common.myRequestsTitle")}</h2></div>
       </div>
       <div class="reservation-list">
-        ${reservations.map(renderReservationCard).join("")}
+        ${reservations.length ? reservations.map(renderReservationCard).join("") : renderEmptyState(t("common.reservationsEmptyTitle"), "calendar")}
       </div>
 
       ${suggestions.length ? `
@@ -9215,6 +9290,10 @@ function renderBusinessCreate() {
 }
 
 function renderAlwenBusinessCreator() {
+  // Same fixture-only illustrative preview as renderAlwenListingCreator()
+  // — a static fake "New Italian Restaurant" draft, not a real Alwen
+  // generation, must never appear in production.
+  if (!isFixturesAllowed()) return "";
   const draftRows = [
     ["field.name", alwenBusinessDraft.name],
     ["field.cuisine", alwenBusinessDraft.cuisine],
@@ -9970,8 +10049,6 @@ function renderClaimFlow() {
         <span class="claim-step-label">${t("business.claim.claimStep4")}</span>
         <button type="submit">${t("common.submitClaim")}</button>
       </div>
-
-      ${place ? "" : `<div class="request-list">${businessClaims.map((claim) => `<article class="request-card"><span class="badge">${escapeHtml(claim.status)}</span><h3>${escapeHtml(claim.ownerName)}</h3><p>${escapeHtml(claim.role)} · ${escapeHtml(claim.verificationMethod)} · ${escapeHtml(claim.documentUpload)}</p></article>`).join("")}</div>`}
     </form>
   `;
 }

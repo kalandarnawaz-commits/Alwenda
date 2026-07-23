@@ -47,7 +47,11 @@ test("earn today cards route to their exact task detail records", () => {
 test("live opportunity detail is deep-linkable and opens through one helper", () => {
   const helper = extractFunction(main, "openLiveOpportunityDetail");
   assert.match(helper, /findOpportunityById\(id\)/);
-  assert.match(helper, /state\.selectedOpportunityId = item\.id/);
+  // Never falls back to LIVE_OPPORTUNITIES[0] — that array is empty in
+  // production, so a not-found id must resolve to null, not crash on
+  // undefined.id or silently open an unrelated opportunity.
+  assert.match(helper, /state\.selectedOpportunityId = item \? item\.id : null/);
+  assert.doesNotMatch(helper, /LIVE_OPPORTUNITIES\[0\]/);
   assert.match(helper, /state\.activeView = "liveOpportunityDetail"/);
   assert.match(helper, /render\(\)/);
 

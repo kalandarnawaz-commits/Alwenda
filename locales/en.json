@@ -213,6 +213,7 @@
     "reservationHeroSubtitle": "Restaurants, stays, and trusted services — one request, real replies.",
     "newRequestTitle": "New request",
     "myRequestsTitle": "Your requests",
+    "reservationsEmptyTitle": "You haven't made any bookings yet",
     "popularToBookTitle": "Popular to book",
     "popularToBookHint": "Highly rated places nearby, ready to request in one tap.",
     "requestPlaceholder": "Restaurant, apartment, hotel, clinic, service...",
@@ -1114,7 +1115,7 @@
     "futureAiConversations": "Future conversations",
     "futureAiConversationsHint": "Alwen conversations will support text, voice, images, files, read receipts, summaries, and workflow approvals.",
     "emptyTitle": "No conversations yet.",
-    "emptyHint": "Messages from people, businesses, and Alwen will show up here.",
+    "emptyHint": "Contact a business or another user to start a conversation.",
     "conversationTypeProfessional": "Professional",
     "conversationTypeBusiness": "Business",
     "conversationTypeMarketplace": "Marketplace",
@@ -1180,6 +1181,10 @@
     },
     "sourceLabel": "Source",
     "updatedLabel": "Updated",
+    "emptyTitle": "No businesses yet",
+    "emptyHint": "Real local businesses will appear here as owners claim and verify their profiles. Explore already has real places nearby.",
+    "emptyCta": "Explore nearby",
+    "emptyReviews": "No reviews yet",
     "verify": {
       "verifyBusinessEmailDomain": "Business email domain",
       "verifyPhone": "Phone verification",
@@ -1437,6 +1442,9 @@
     "marketplaceTitle": "Everything your city can do for you.",
     "marketplaceHeroTitle": "Marketplace",
     "marketplaceHeroSubtitle": "Buy. Sell. Discover. Hire. Reserve.",
+    "emptyTitle": "No listings yet",
+    "emptyHint": "Be the first person in your area to sell, rent, or offer a service.",
+    "emptyCta": "Create listing",
     "hub": {
       "listingsCount": "{count} listings",
       "noListingsYet": "New here",
@@ -1725,7 +1733,9 @@
     "adminListings": "Listings",
     "adminBusinesses": "Businesses",
     "adminReservations": "Reservations",
-    "adminTranslations": "Translations"
+    "adminTranslations": "Translations",
+    "unauthorizedTitle": "Not available",
+    "unauthorizedHint": "This tool is only available to authorized team members."
   },
   "mock": {
     "live": {
