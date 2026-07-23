@@ -3955,6 +3955,22 @@ function stopAlwenComposerRecording() {
   activeAlwenRecorderChunks = [];
 }
 
+/** Whisper's language hint forces decoding into that language's phoneme
+ * model — it is not a soft suggestion. Live two-way translation alternates
+ * speakers between English and Lithuanian, so hinting the static app UI
+ * language (as chat/voice-message mode correctly does) would force every
+ * other turn to be decoded in the wrong language, producing a transcript
+ * that never matches what was actually said. Use the conversation's own
+ * tracked "who's expected to speak next" language instead — the same
+ * languagePair.from the auto-direction-switch in submitAlwenTranslationTurn
+ * already maintains — and only fall back to the UI language before the
+ * pair has ever been established (languagePair.from === "auto", i.e. no
+ * turn has happened yet this session). */
+function alwenComposerTranscriptionLanguage(convo) {
+  if (convo.mode === "liveTranslate" && convo.languagePair.from !== "auto") return convo.languagePair.from;
+  return getCurrentLanguage();
+}
+
 async function startAlwenComposerRecording() {
   const convo = state.alwenConversation;
   if (!canUseAudioTranscriptionFallback()) {
@@ -3994,7 +4010,7 @@ async function startAlwenComposerRecording() {
         if (!audioBlob.size) throw new Error("EMPTY_RECORDING");
         convo.status = "transcribing";
         render();
-        const transcript = await transcribeTranslationAudio({ audioBlob, language: getCurrentLanguage() });
+        const transcript = await transcribeTranslationAudio({ audioBlob, language: alwenComposerTranscriptionLanguage(convo) });
         convo.status = "idle";
         convo.partialTranscript = "";
         if (transcript.trim()) {
