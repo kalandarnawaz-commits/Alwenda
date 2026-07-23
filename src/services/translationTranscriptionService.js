@@ -1,6 +1,7 @@
 import { SUPABASE_ANON_KEY, SUPABASE_URL, TRANSLATE_TRANSCRIBE_FUNCTION_SLUG, isSupabaseConfigured } from "../config.js";
 import { getSupabaseAccessToken } from "./auth/supabaseClient.js";
 import { AlwendaDataError, DATA_ERROR_CODES, toDataError } from "./dataErrors.js";
+import { logPilotEvent, OBSERVABILITY_EVENTS } from "./observability.js";
 
 export const MAX_TRANSLATION_AUDIO_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -114,6 +115,7 @@ export async function transcribeTranslationAudio(options = {}) {
     }
     return text;
   } catch (error) {
+    logPilotEvent(OBSERVABILITY_EVENTS.SUPABASE_FAILURE, { context: "transcribeTranslationAudio", error }, { severity: "error" });
     if (error instanceof TranslationTranscriptionError) throw error;
     throw toDataError(error, DATA_ERROR_CODES.SUPABASE_UNAVAILABLE);
   }

@@ -13,6 +13,13 @@ export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
 export const APP_ENV = env.APP_ENV || "development";
 export const APP_RELEASE_VERSION = env.APP_RELEASE_VERSION || "local-dev";
 export const PUBLIC_FEATURE_FLAGS = Object.freeze(env.PUBLIC_FEATURE_FLAGS || {});
+// A Sentry DSN is safe to expose client-side by Sentry's own design (the
+// public half of a project identifier, not a secret — see
+// https://docs.sentry.io/product/sentry-basics/dsn-explainer/), so it lives
+// here alongside SUPABASE_URL rather than being treated as a server-only
+// secret the way Edge-Function-only API keys are. Left null disables error
+// reporting entirely.
+export const SENTRY_DSN = env.SENTRY_DSN || null;
 export const ELEVENLABS_TTS_FUNCTION_SLUG = env.ELEVENLABS_TTS_FUNCTION_SLUG || env.ALWENDA_TTS_FUNCTION_SLUG || "elevenlabs-tts";
 export const TRANSLATE_TRANSCRIBE_FUNCTION_SLUG =
   env.TRANSLATE_TRANSCRIBE_FUNCTION_SLUG || env.ALWENDA_TRANSLATE_TRANSCRIBE_FUNCTION_SLUG || "translate-transcribe";
@@ -28,6 +35,7 @@ export function getRuntimeConfigDiagnostics() {
     supabaseConfigured: isSupabaseConfigured(),
     hasSupabaseUrl: Boolean(SUPABASE_URL),
     hasSupabasePublishableKey: Boolean(SUPABASE_PUBLISHABLE_KEY),
+    sentryConfigured: Boolean(SENTRY_DSN),
     elevenLabsTtsFunctionSlug: ELEVENLABS_TTS_FUNCTION_SLUG,
     translateTranscribeFunctionSlug: TRANSLATE_TRANSCRIBE_FUNCTION_SLUG,
     featureFlags: Object.keys(PUBLIC_FEATURE_FLAGS)

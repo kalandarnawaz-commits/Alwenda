@@ -13762,3 +13762,469 @@ strong:has(> .verified-check) {
     min-height: 360px;
   }
 }
+
+/* ==========================================================================
+   Alwen 2.0 — unified conversation experience (composer, message timeline,
+   structured results, translation turns). Reuses existing design tokens
+   (--bg/--surface/--ink/--muted/--line/--emerald-*) so this adapts to dark
+   mode automatically like everything else in this file — no new tokens.
+   ========================================================================== */
+
+.alwen-conversation-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 220px);
+  padding-bottom: 132px;
+}
+
+.alwen-conversation-header {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px 14px;
+  background: linear-gradient(to bottom, var(--bg) 70%, transparent);
+}
+
+.alwen-conversation-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.alwen-conversation-heading strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.alwen-mode-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--emerald-glow);
+  color: var(--emerald-900, var(--ink));
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.alwen-conversation-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.alwen-live-translate-toggle,
+.alwen-conversation-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.alwen-live-translate-toggle.is-active {
+  background: var(--emerald-600);
+  border-color: var(--emerald-600);
+  color: var(--ink-inverse, #fff);
+}
+
+.alwen-conversation-reset:disabled {
+  opacity: 0.4;
+}
+
+.alwen-language-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.alwen-conversation-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 0 16px;
+  flex: 1;
+}
+
+.alwen-conversation-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 32px 4px 12px;
+}
+
+.alwen-empty-greeting {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.alwen-conversation-empty h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.alwen-empty-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 46ch;
+}
+
+.alwen-example-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.alwen-example-row button {
+  padding: 9px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+/* ---- Message shells — visual hierarchy distinguishes user input,
+   Alwen explanations, direct translations, and structured results.
+   Restrained: no bubble-tail decorations, no nested-card overload. ---- */
+.alwen-message {
+  max-width: 88%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.alwen-message p {
+  margin: 0;
+}
+
+.alwen-message-user {
+  align-self: flex-end;
+  background: var(--emerald-600);
+  color: var(--ink-inverse, #fff);
+  border-bottom-right-radius: 6px;
+}
+
+.alwen-message-assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 6px;
+}
+
+.alwen-message-assistant.is-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.alwen-message-failure {
+  border-color: rgba(224, 92, 66, 0.4);
+  background: rgba(224, 92, 66, 0.08);
+}
+
+.alwen-message-failure-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.alwen-message-failure-actions button {
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.alwen-message-system {
+  align-self: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  max-width: 100%;
+}
+
+/* Structured results — max width so real cards (PlaceCard/Professional)
+   render at their normal size, not squeezed into a chat-bubble width. */
+.alwen-message-structured {
+  align-self: stretch;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.alwen-structured-intro {
+  padding: 0 2px 10px;
+  color: var(--ink);
+}
+
+.alwen-structured-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alwen-message-empty {
+  align-self: stretch;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px dashed var(--line);
+}
+
+/* Translation turns — the translated text is visually dominant, the
+   original stays present but secondary, per the visual-hierarchy spec. */
+.alwen-message-translation {
+  align-self: stretch;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.alwen-translation-original {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 6px !important;
+}
+
+.alwen-translation-translated {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.alwen-translation-meta {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.alwen-translation-playback-error {
+  margin-top: 8px;
+  color: #c0442c;
+  font-size: 0.8rem;
+}
+
+.alwen-translation-fullscreen-close {
+  display: none;
+}
+
+.alwen-message-translation.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  max-width: 100%;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px;
+}
+
+.alwen-message-translation.is-fullscreen .alwen-translation-translated {
+  font-size: 2rem;
+}
+
+.alwen-message-translation.is-fullscreen .alwen-translation-fullscreen-close {
+  display: block;
+  align-self: flex-end;
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.alwen-contextual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.alwen-contextual-actions button,
+.alwen-contextual-action {
+  padding: 8px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+/* ---- Composer — persistent, fixed above the bottom-nav + safe area
+   (the bottom-nav sits at z-index 70, height 64px, bottom: max(10px,
+   safe-area-inset-bottom) — this stacks directly above it). ---- */
+.alwen-composer {
+  position: fixed;
+  left: max(10px, calc((100vw - 1200px) / 2 + 10px));
+  right: max(10px, calc((100vw - 1200px) / 2 + 10px));
+  bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 10px);
+  z-index: 72;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alwen-composer-error,
+.alwen-composer-recording,
+.alwen-composer-transcribing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  box-shadow: var(--shadow);
+}
+
+.alwen-composer-error {
+  color: #c0442c;
+}
+
+.alwen-composer-recording {
+  color: var(--emerald-700, var(--ink));
+}
+
+.alwen-recording-dot,
+.alwen-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.alwen-recording-dot {
+  animation: alwen-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alwen-recording-dot {
+    animation: none;
+  }
+}
+
+@keyframes alwen-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+.alwen-composer-recording button,
+.alwen-composer-transcribing + .alwen-composer-form {
+  margin-left: auto;
+}
+
+.alwen-composer-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.alwen-composer-form textarea {
+  flex: 1;
+  min-height: 24px;
+  max-height: 120px;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  padding: 8px 0;
+}
+
+.alwen-composer-form textarea:focus {
+  outline: none;
+}
+
+.alwen-composer-form textarea::placeholder {
+  color: var(--muted);
+}
+
+.alwen-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.alwen-composer-mic,
+.alwen-composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+}
+
+.alwen-composer-mic {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.alwen-composer-mic.is-recording {
+  background: #c0442c;
+  color: #fff;
+}
+
+.alwen-composer-send {
+  background: var(--emerald-600);
+  color: var(--ink-inverse, #fff);
+}
+
+.alwen-composer-send:disabled,
+.alwen-composer-mic:disabled {
+  opacity: 0.4;
+}
+
+@media (max-width: 480px) {
+  .alwen-composer {
+    left: 10px;
+    right: 10px;
+  }
+
+  .alwen-message {
+    max-width: 92%;
+  }
+}

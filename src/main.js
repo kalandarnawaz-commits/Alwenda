@@ -1,8 +1,6 @@
 import {
   adminStats,
-  alwenActions,
   alwenBusinessDraft,
-  alwenCapabilities,
   alwenListingDraft,
   alwenRecommendations,
   businesses,
@@ -85,9 +83,16 @@ import {
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
+  recordAnalyticsEvent,
+  createAlwenConversation,
+  fetchAlwenConversation,
+  fetchAlwenMessages,
+  createAlwenMessage,
+  updateAlwenConversationMode,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=legal-compliance-1";
+} from "./services/auth/supabaseClient.js?v=pilot-readiness-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
+import { ALWEN_INTENTS, classifyAlwenIntent, wantsOpenNowOnly } from "./services/alwen/intentRouter.js?v=alwen-2-0-1";
 import {
   MAX_TRANSLATION_SPEECH_CHARACTERS,
   speakTranslatedText,
@@ -101,6 +106,9 @@ import {
 } from "./services/identity/personaVerification.js?v=persona-placeholder-1";
 import { isValidEmail, isValidPassword } from "./utils/validators.js?v=production-sprint-1";
 import { checkRateLimit } from "./utils/rateLimit.js?v=production-sprint-1";
+import { SENTRY_DSN, APP_ENV, APP_RELEASE_VERSION } from "./config.js?v=pilot-readiness-1";
+import { bindGlobalErrorObservers, configureErrorSink, createSentrySink, logPilotEvent, OBSERVABILITY_EVENTS } from "./services/observability.js?v=pilot-readiness-1";
+import { validateEventPayload, buildAnalyticsEventRecord, AnalyticsSchemaError } from "./services/analytics.js?v=pilot-readiness-1";
 
 const CITY_CENTER = { lat: 54.6872, lng: 25.2797 }; // Vilnius, Cathedral Square — stand-in for real geolocation
 
@@ -149,18 +157,25 @@ const state = {
   opportunityCategory: "all",
   opportunityDistance: "all",
   headerSolid: false,
-  alwenOpen: false,
   quickTranslateOpen: false,
   localWeather: null,
-  alwenChat: {
-    input: "",
-    lastMessage: "",
-    answer: "",
-    conversationId: null,
-    status: "idle",
+  /* The one and only Alwen surface (Alwen 2.0) — both the Home prompt and
+     the floating dock launcher route into this same conversation state.
+     There is no separate single-turn chat model anymore. */
+  alwenConversation: {
+    id: null,
+    mode: "chat", // "chat" | "liveTranslate"
+    status: "idle", // idle | sending | recording | transcribing | error
+    messages: [],
     error: null,
-    createdHelpRequest: null,
-    createdListing: null
+    draft: "",
+    partialTranscript: "",
+    languagePair: { from: "auto", to: "lt" },
+    autoPlayTranslation: true,
+    loaded: false,
+    speechStatus: "idle",
+    speechMessageId: null,
+    fullScreenTranslationId: null
   },
   alwenListingSelections: {
     price: "€860",
@@ -250,8 +265,6 @@ const state = {
   myListings: [],
   myHelpRequests: [],
   identityVerification: null,
-  bookingDraft: { dateIndex: null, time: null },
-  bookingConfirmed: null,
   directionsOptions: null,
   cityImportRun: {
     source: "overpass",
@@ -305,6 +318,7 @@ const PENDING_LEGAL_ACCEPTANCE_KEY = "alwenda:pending-legal-acceptance";
 const MODERATION_RECORDS_KEY = "alwenda:moderation-records";
 const LEGAL_POLICY_VERSION = "ALWENDA_LEGAL_POLICIES_EN-2026-07-18";
 const ANALYTICS_MAX_EVENTS = 300;
+const LAST_SESSION_STARTED_DATE_KEY = "alwenda:last-session-started-date";
 const BUSINESS_OVERRIDES_KEY = "alwenda:businessOverrides";
 
 /**
@@ -520,10 +534,17 @@ function toggleBusinessBoost(businessId) {
 }
 
 /**
- * Local-only analytics scaffold — no backend/pipeline exists yet, so
- * events are appended to a bounded ring buffer in localStorage as a
- * stand-in sink. Swap the body of this function for a real analytics
- * SDK call later; every call site elsewhere in the app can stay as-is.
+ * Every call site elsewhere in the app stays exactly as-is (same name,
+ * same signature) — this function does two things per event:
+ * 1. Appends to the same bounded on-device ring buffer as before, so
+ *    businessStats() (the business dashboard's real, own-device view/
+ *    contact/save counts) keeps working unchanged.
+ * 2. Validates the payload against the typed schema in
+ *    src/services/analytics.js and ships it to the real Supabase
+ *    analytics_events table — the actual "real destination" this was
+ *    missing. Best-effort: a network failure or schema mismatch is
+ *    logged (schema mismatches loudly in dev/test, quietly in
+ *    production) but never breaks the calling UI code.
  * Payloads are restricted to ids/categories/counts — never names, emails,
  * phone numbers, or free-text the user typed.
  */
@@ -538,15 +559,33 @@ function trackEvent(name, props = {}) {
   } catch {
     /* analytics must never break the app */
   }
+
+  const validation = validateEventPayload(name, props);
+  if (!validation.ok) {
+    const message = `[analytics] ${validation.reason}`;
+    if (APP_ENV === "development" || APP_ENV === "test") throw new AnalyticsSchemaError(message);
+    console.warn(message);
+    return;
+  }
+  const record = buildAnalyticsEventRecord(name, props, {
+    userId: state.auth?.user?.isSupabaseAccount ? state.auth.user.id : null,
+    appEnv: APP_ENV,
+    appRelease: APP_RELEASE_VERSION
+  });
+  recordAnalyticsEvent(record).catch(() => {
+    /* analytics must never break the app — already logged to observability inside recordAnalyticsEvent */
+  });
 }
 
-function bindErrorTracking() {
-  window.addEventListener("error", (event) => {
-    trackEvent("client_error", { message: String(event.message || "").slice(0, 200), source: event.filename || "" });
-  });
-  window.addEventListener("unhandledrejection", (event) => {
-    trackEvent("client_error", { message: String(event.reason?.message || event.reason || "").slice(0, 200), source: "promise" });
-  });
+/** Fires once per calendar day per device — the minimum signal needed to
+ * compute week-2/week-N retention cohorts server-side (see the example
+ * queries in the analytics_events migration). Not once per app open,
+ * since that would just measure tab-switching, not genuine return visits. */
+function trackSessionStartedOncePerDay() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (readLocalStorage(LAST_SESSION_STARTED_DATE_KEY) === today) return;
+  writeLocalStorage(LAST_SESSION_STARTED_DATE_KEY, today);
+  trackEvent("session_started", {});
 }
 
 function readLocalStorage(key) {
@@ -648,6 +687,7 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   refreshMyListings();
   refreshMyHelpRequests();
   refreshTraderAccountState();
+  loadAlwenConversation();
   const pendingAcceptance = readLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY);
   if (pendingAcceptance && (!pendingAcceptance.email || pendingAcceptance.email === String(session.user.email || "").toLowerCase())) {
     recordLegalAcceptance(pendingAcceptance).then(() => writeLocalStorage(PENDING_LEGAL_ACCEPTANCE_KEY, null)).catch((error) => console.warn("[legal] Acceptance record failed", error));
@@ -1965,10 +2005,6 @@ function renderSheet() {
     return renderPlaceDetailSheet(importedBusinesses.find((business) => business.id === state.selectedPlaceId));
   }
 
-  if (state.activeSheet === "booking") {
-    return renderBookingSheet();
-  }
-
   if (state.activeSheet === "directions") {
     return renderDirectionsSheet();
   }
@@ -2463,7 +2499,7 @@ function renderShell() {
   const headerTheme = isHome && !state.headerSolid ? "theme-dark-header header-dark header-transparent" : "theme-light-header header-light header-solid";
 
   return `
-    <div class="app-shell ${isHome ? "is-home-shell" : "is-standard-shell"} ${state.alwenOpen ? "has-alwen-open" : ""} ${headerTheme}">
+    <div class="app-shell ${isHome ? "is-home-shell" : "is-standard-shell"} ${headerTheme}">
       <header class="app-top ${headerTheme}">
         ${BrandHeader()}
         <div class="top-controls">
@@ -2481,12 +2517,11 @@ function renderShell() {
         <div class="bottom-nav-group">${navItems.slice(2).map(renderNavButton).join("")}</div>
       </nav>
       ${renderTytOrb()}
-      ${/* The Alwen workspace page IS the Alwen experience now (its own
-         hero has the real chat form) — showing the floating dock on top
-         of it would be two chat surfaces reading the same state.alwenChat
-         stacked on one screen, exactly the "repeated Alwen controls"
-         problem this redesign was asked to remove. Every other screen
-         keeps the dock unchanged as the one consistent entry point. */
+      ${/* The Alwen conversation screen IS the Alwen experience now — the
+         dock is only a launcher into that same screen, so showing it while
+         already there would just be a redundant button to open itself.
+         Every other screen keeps the dock as the one consistent entry
+         point into the single canonical Alwen conversation. */
         state.activeView !== "alwen" ? renderAlwenDock() : ""}
       ${/* Community deliberately drops this floating mic dock — with the
          Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
@@ -3078,7 +3113,7 @@ function renderView() {
     return renderAuthFlow();
   }
   const views = {
-    alwen: renderAlwenWorkspace,
+    alwen: renderAlwenConversationScreen,
     home: renderHome,
     explore: renderExplore,
     marketplace: renderMarketplace,
@@ -3142,392 +3177,720 @@ function alwenGreeting() {
   return t(key, { name: escapeHtml(state.auth.user.name.split(" ")[0]) });
 }
 
-/* The hero form reuses the exact same data-alwen-chat-form/name="message"
-   contract the floating dock's form already uses (bindEvents() binds it
-   generically), so this is a second render surface for the identical real
-   state.alwenChat/submitAlwenChat() — not a fork. renderAlwenDock() is
-   suppressed specifically on this view (see renderShell()) so there's only
-   ever one chat surface on screen at a time. */
-function renderAlwenHero() {
-  const chat = state.alwenChat;
-  const isLoading = chat.status === "loading";
+/* ==========================================================================
+   Alwen 2.0 — the unified conversation experience. state.alwenConversation
+   (multi-turn, real message history) drives this dedicated screen, and it
+   is the ONLY Alwen chat surface in the app: the Home prompt and the
+   floating dock are both just entry points that route in here (see the
+   ai-search-submit and data-alwen-toggle handlers in bindEvents()).
+   ========================================================================== */
+
+function alwenMessageId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/** place_search/hire_service never call OpenAI — they search real
+ * Explore/Hire data via the exact filters those screens already use.
+ * filteredImportedBusinesses()/filteredProfessionals() read global
+ * state.* and take no args, so the search state is saved and restored
+ * around the call — an Alwen search must never permanently change what
+ * the user sees when they later open Explore/Hire themselves. */
+function searchAlwenPlaces(rawQuery) {
+  const previousQuery = state.query;
+  const previousArea = state.area;
+  const previousCategory = state.exploreCategory;
+  const previousCuisine = state.exploreCuisine;
+  const previousStars = state.exploreStars;
+  const previousOpenNowOnly = state.exploreOpenNowOnly;
+  const previousVerifiedOnly = state.exploreVerifiedOnly;
+  const previousHasPhotoOnly = state.exploreHasPhotoOnly;
+  const previousSort = state.exploreSort;
+  try {
+    state.query = rawQuery;
+    state.exploreCategory = "All";
+    state.exploreCuisine = "All";
+    state.exploreStars = "All";
+    state.exploreOpenNowOnly = wantsOpenNowOnly(rawQuery);
+    state.exploreVerifiedOnly = false;
+    state.exploreHasPhotoOnly = false;
+    state.exploreSort = "nearest";
+    return filteredImportedBusinesses().slice(0, 5);
+  } finally {
+    state.query = previousQuery;
+    state.area = previousArea;
+    state.exploreCategory = previousCategory;
+    state.exploreCuisine = previousCuisine;
+    state.exploreStars = previousStars;
+    state.exploreOpenNowOnly = previousOpenNowOnly;
+    state.exploreVerifiedOnly = previousVerifiedOnly;
+    state.exploreHasPhotoOnly = previousHasPhotoOnly;
+    state.exploreSort = previousSort;
+  }
+}
+
+function searchAlwenProfessionals(rawQuery) {
+  const previousQuery = state.query;
+  const previousArea = state.area;
+  const previousCategory = state.hireCategory;
+  try {
+    state.query = rawQuery;
+    state.hireCategory = null;
+    return filteredProfessionals().slice(0, 5);
+  } finally {
+    state.query = previousQuery;
+    state.area = previousArea;
+    state.hireCategory = previousCategory;
+  }
+}
+
+function alwenLanguageLabel(code) {
+  if (!code) return "";
+  const key = code.toLowerCase().startsWith("lt") ? "translate.language.langLithuanian" : "translate.language.langEnglish";
+  return t(key);
+}
+
+/** The 3 example prompts shown before the user's first turn — each is a
+ * real capability this branch actually implements (translation, live
+ * conversation mode, real Explore search, real Hire search), never a
+ * placeholder for something unbuilt. */
+const ALWEN_CONVERSATION_EXAMPLES = ["alwen.examplePlace", "alwen.exampleHire", "alwen.exampleTranslate", "alwen.exampleLiveTranslate"];
+
+function renderAlwenConversationEmptyState() {
   return `
-    <div class="alwen-hero">
-      <p class="alwen-hero-greeting">${alwenGreeting()}</p>
+    <div class="alwen-conversation-empty">
+      <p class="alwen-empty-greeting">${alwenGreeting()}</p>
       <h1>${t("alwen.heroQuestion")}</h1>
-      <form class="alwen-hero-form" data-alwen-chat-form>
-        <textarea id="alwen-hero-input" name="message" maxlength="2000" rows="1" placeholder="${t("common.tellAlwen")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
-        <button type="submit" class="alwen-hero-send" aria-label="${t("alwen.heroSend")}" title="${t("alwen.heroSend")}" ${isLoading ? "disabled" : ""}>${isLoading ? `<span class="alwen-status-dot" aria-hidden="true"></span>` : icon("arrow")}</button>
-      </form>
-      ${renderAlwenResponseCard()}
+      <p class="alwen-empty-hint">${t("alwen.emptyStateHint")}</p>
+      <div class="alwen-example-row">
+        ${ALWEN_CONVERSATION_EXAMPLES.map((key) => `<button type="button" data-alwen-example-prompt="${key}">${t(key)}</button>`).join("")}
+      </div>
     </div>
   `;
 }
 
-/* A single premium card, not a chat bubble. When the backend's real tool
-   calls actually created something (createdHelpRequest/createdListing —
-   genuine structured data from the Edge Function, not parsed out of free
-   text), a small generated-UI card links straight to it instead of the
-   user having to go find what Alwen just did. */
-function renderAlwenResponseCard() {
-  const chat = state.alwenChat;
-  if (chat.status === "idle") return "";
-  const canRetry = chat.status === "error" && chat.lastMessage;
+function renderAlwenLanguagePairControl() {
+  const pair = state.alwenConversation.languagePair;
   return `
-    <div class="alwen-response-card is-${chat.status}" role="status">
-      ${chat.status === "loading" ? `
-        <div class="alwen-response-loading">
+    <button type="button" class="alwen-language-pair" data-alwen-swap-language-pair title="${t("alwen.swapLanguages")}">
+      <span>${pair.from === "auto" ? t("alwen.autoDetect") : alwenLanguageLabel(pair.from)}</span>
+      ${icon("swap")}
+      <span>${alwenLanguageLabel(pair.to)}</span>
+    </button>
+  `;
+}
+
+function renderAlwenUserMessage(message) {
+  return `<div class="alwen-message alwen-message-user"><p>${escapeHtml(message.text || "")}</p></div>`;
+}
+
+function renderAlwenFailureMessage(message) {
+  const retryable = message.error?.retryable !== false;
+  return `
+    <div class="alwen-message alwen-message-assistant alwen-message-failure" role="alert">
+      <p>${escapeHtml(message.text || t("alwen.alwenChatGenericError"))}</p>
+      <div class="alwen-message-failure-actions">
+        ${retryable ? `<button type="button" data-alwen-retry-message="${message.id}">${t("alwen.composerRetry")}</button>` : ""}
+        ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderAlwenAssistantTextMessage(message) {
+  if (message.status === "sending") {
+    return `
+      <div class="alwen-message alwen-message-assistant is-loading" role="status">
+        <span class="alwen-status-dot" aria-hidden="true"></span>
+        <span>${t("alwen.alwenChatLooking")}</span>
+      </div>
+    `;
+  }
+  if (message.status === "error") return renderAlwenFailureMessage(message);
+  return `<div class="alwen-message alwen-message-assistant"><p>${escapeHtml(message.text || "")}</p></div>`;
+}
+
+function renderAlwenSystemMessage(message) {
+  return `<div class="alwen-message alwen-message-system"><p>${escapeHtml(message.text || "")}</p></div>`;
+}
+
+/** Every field shown must actually exist on the record — no invented
+ * hours/availability/reviews. resultType selects which existing card
+ * component renders each item (never a bespoke duplicate). */
+function renderAlwenStructuredResultMessage(message) {
+  const items = message.results || [];
+  if (message.status === "sending") {
+    return `
+      <div class="alwen-message alwen-message-structured is-loading" role="status">
+        <span class="alwen-status-dot" aria-hidden="true"></span>
+        <span>${t("alwen.alwenChatLooking")}</span>
+      </div>
+    `;
+  }
+  if (message.status === "error") return renderAlwenFailureMessage(message);
+  if (!items.length) {
+    return `
+      <div class="alwen-message alwen-message-structured alwen-message-empty">
+        <p>${escapeHtml(message.text || t("alwen.noResultsFound"))}</p>
+        ${renderAlwenContextualActions(message)}
+      </div>
+    `;
+  }
+  const cards =
+    message.resultType === "place"
+      ? items.map(renderPlaceCardCompact).join("")
+      : message.resultType === "professional"
+        ? items.map(renderProfessional).join("")
+        : "";
+  return `
+    <div class="alwen-message alwen-message-structured">
+      ${message.text ? `<p class="alwen-structured-intro">${escapeHtml(message.text)}</p>` : ""}
+      <div class="alwen-structured-results">${cards}</div>
+      ${renderAlwenContextualActions(message)}
+    </div>
+  `;
+}
+
+/** Original text stays visible for context; the translation is visually
+ * dominant. Never a separate page — everything inline in the timeline. */
+function renderAlwenTranslationMessage(message) {
+  if (message.status === "sending") {
+    return `
+      <div class="alwen-message alwen-message-translation is-loading" role="status">
+        <span class="alwen-status-dot" aria-hidden="true"></span>
+        <span>${t("alwen.alwenChatLooking")}</span>
+      </div>
+    `;
+  }
+  if (message.status === "error") return renderAlwenFailureMessage(message);
+  return `
+    <div class="alwen-message alwen-message-translation ${message.id === state.alwenConversation.fullScreenTranslationId ? "is-fullscreen" : ""}" data-alwen-message-id="${message.id}">
+      <p class="alwen-translation-original">${escapeHtml(message.originalText || "")}</p>
+      <p class="alwen-translation-translated">${escapeHtml(message.translatedText || "")}</p>
+      <div class="alwen-translation-meta">
+        <span>${alwenLanguageLabel(message.detectedLanguage)} → ${alwenLanguageLabel(message.targetLanguage)}</span>
+      </div>
+      ${state.alwenConversation.speechMessageId === message.id && state.alwenConversation.speechStatus === "error" ? `<p class="alwen-translation-playback-error" role="alert">${t("translate.speechError")}</p>` : ""}
+      ${renderAlwenContextualActions(message)}
+      <button type="button" class="alwen-translation-fullscreen-close" data-alwen-translation-fullscreen="${message.id}">${t("common.close")}</button>
+    </div>
+  `;
+}
+
+function renderAlwenMessage(message) {
+  if (message.role === "user") return renderAlwenUserMessage(message);
+  if (message.messageType === "translation") return renderAlwenTranslationMessage(message);
+  if (message.messageType === "structured_result") return renderAlwenStructuredResultMessage(message);
+  if (message.messageType === "system") return renderAlwenSystemMessage(message);
+  return renderAlwenAssistantTextMessage(message);
+}
+
+/** Fixed lookup table, max 3 actions, every action reuses an existing,
+ * already-honest handler — never a promotional or unimplementable action. */
+function renderAlwenContextualActions(message) {
+  if (message.messageType === "translation" && message.status !== "error") {
+    return `
+      <div class="alwen-contextual-actions">
+        <button type="button" data-alwen-translation-play="${message.id}" data-alwen-contextual-action="play">${t("alwen.playAudio")}</button>
+        <button type="button" data-alwen-translation-fullscreen="${message.id}" data-alwen-contextual-action="fullscreen">${t("alwen.fullScreen")}</button>
+        <button type="button" data-alwen-translation-copy="${message.id}" data-alwen-contextual-action="copy">${t("common.copyResult")}</button>
+      </div>
+    `;
+  }
+  if (message.messageType === "structured_result" && message.resultType === "place") {
+    const item = (message.results || [])[0];
+    if (!item) return `<div class="alwen-contextual-actions"><button type="button" data-view="explore" data-alwen-contextual-action="seeMoreInExplore" data-alwen-contextual-result-type="place">${t("alwen.seeMoreInExplore")}</button></div>`;
+    return `
+      <div class="alwen-contextual-actions">
+        <a class="alwen-contextual-action" href="${directionsUrl(item)}" target="_blank" rel="noopener noreferrer" data-alwen-contextual-action="directions" data-alwen-contextual-result-type="place">${t("common.directions")}</a>
+        ${item.phone ? `<a class="alwen-contextual-action" href="tel:${item.phone}" data-alwen-contextual-action="call" data-alwen-contextual-result-type="place">${t("common.call")}</a>` : ""}
+        <button type="button" data-view="explore" data-alwen-contextual-action="seeMoreInExplore" data-alwen-contextual-result-type="place">${t("alwen.seeMoreInExplore")}</button>
+      </div>
+    `;
+  }
+  if (message.messageType === "structured_result" && message.resultType === "professional") {
+    const item = (message.results || [])[0];
+    if (!item) return `<div class="alwen-contextual-actions"><button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button></div>`;
+    const profileAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire" });
+    return `
+      <div class="alwen-contextual-actions">
+        <button type="button" ${profileAttrs} data-alwen-contextual-action="viewProfile" data-alwen-contextual-result-type="professional">${t("common.viewProfile")}</button>
+        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact" data-alwen-contextual-action="message" data-alwen-contextual-result-type="professional">${t("common.message")}</button>
+        <button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button>
+      </div>
+    `;
+  }
+  return "";
+}
+
+function renderAlwenComposer({ context = "conversation", placeholder = t("alwen.composerPlaceholder") } = {}) {
+  const convo = state.alwenConversation;
+  const isRecording = convo.status === "recording";
+  const isTranscribing = convo.status === "transcribing";
+  const isSending = convo.status === "sending";
+  const disabled = isRecording || isTranscribing || isSending;
+  return `
+    <div class="alwen-composer" data-alwen-composer-context="${context}">
+      ${convo.error ? `
+        <div class="alwen-composer-error" role="alert">
+          <p>${escapeHtml(convo.error)}</p>
+        </div>
+      ` : ""}
+      ${isRecording ? `
+        <div class="alwen-composer-recording" role="status">
+          <span class="alwen-recording-dot" aria-hidden="true"></span>
+          <span>${t("alwen.composerListening")}</span>
+          <button type="button" data-alwen-stop-recording>${t("alwen.composerStopRecording")}</button>
+        </div>
+      ` : ""}
+      ${isTranscribing ? `
+        <div class="alwen-composer-transcribing" role="status">
           <span class="alwen-status-dot" aria-hidden="true"></span>
-          <span>${t("alwen.alwenChatLooking")}</span>
+          <span>${convo.partialTranscript ? escapeHtml(convo.partialTranscript) : t("alwen.composerTranscribing")}</span>
         </div>
       ` : ""}
-      ${chat.status === "success" ? `
-        <div class="alwen-response-body">
-          <span class="alwen-response-label">${t("alwen.responseLabel")}</span>
-          <p>${escapeHtml(chat.answer)}</p>
+      <form class="alwen-composer-form" data-alwen-conversation-form>
+        <textarea id="alwen-composer-input" name="message" rows="1" maxlength="2000" placeholder="${escapeHtml(placeholder)}" ${disabled ? "disabled" : ""}>${escapeHtml(convo.draft)}</textarea>
+        <div class="alwen-composer-actions">
+          <button type="button" class="alwen-composer-mic ${isRecording ? "is-recording" : ""}" data-alwen-mic-toggle aria-label="${t("alwen.composerMicLabel")}" title="${t("alwen.composerMicLabel")}" ${isSending || isTranscribing ? "disabled" : ""}>${icon("mic")}</button>
+          <button type="submit" class="alwen-composer-send" aria-label="${t("alwen.composerSend")}" title="${t("alwen.composerSend")}" ${disabled ? "disabled" : ""}>${isSending ? `<span class="alwen-status-dot" aria-hidden="true"></span>` : icon("arrow")}</button>
         </div>
-        ${chat.createdHelpRequest ? `
-          <div class="alwen-response-generated">
-            <span>${t("alwen.responseCreatedRequestTitle")}</span>
-            <strong>${escapeHtml(chat.createdHelpRequest.description || "")}</strong>
-            <button type="button" data-view="needHelp">${t("alwen.responseCreatedRequestCta")}</button>
-          </div>
-        ` : ""}
-        ${chat.createdListing ? `
-          <div class="alwen-response-generated">
-            <span>${t("alwen.responseCreatedListingTitle")}</span>
-            <strong>${escapeHtml(chat.createdListing.title || "")}</strong>
-            <button type="button" data-view="listingDetail" data-listing-id="${chat.createdListing.id}">${t("alwen.responseCreatedListingCta")}</button>
-          </div>
-        ` : ""}
-      ` : ""}
-      ${chat.status === "error" ? `
-        <div class="alwen-response-error">
-          <p>${escapeHtml(chat.error || t("alwen.alwenChatGenericError"))}</p>
-          <div>
-            ${canRetry ? `<button type="button" data-alwen-retry>${t("alwen.alwenChatRetry")}</button>` : ""}
-            ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
-          </div>
+      </form>
+    </div>
+  `;
+}
+
+function renderAlwenConversationScreen() {
+  const convo = state.alwenConversation;
+  return `
+    <section class="alwen-conversation-screen">
+      <header class="alwen-conversation-header">
+        <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.back")}</button>
+        <div class="alwen-conversation-heading">
+          <strong>${t("nav.alwen")}</strong>
+          ${convo.mode === "liveTranslate" ? `<span class="alwen-mode-pill">${t("alwen.modeLiveTranslate")}</span>` : ""}
         </div>
-      ` : ""}
-    </div>
-  `;
-}
+        <div class="alwen-conversation-header-actions">
+          <button type="button" class="alwen-live-translate-toggle ${convo.mode === "liveTranslate" ? "is-active" : ""}" data-alwen-toggle-live-translate title="${convo.mode === "liveTranslate" ? t("alwen.liveTranslateToggleOff") : t("alwen.liveTranslateToggleOn")}">${icon("translate")}</button>
+          ${convo.mode === "liveTranslate" ? renderAlwenLanguagePairControl() : ""}
+          <button type="button" class="alwen-conversation-reset" data-alwen-conversation-reset title="${t("alwen.newConversation")}" ${convo.messages.length ? "" : "disabled"}>${icon("plus")}</button>
+        </div>
+      </header>
 
-/* "Living" suggestion cards, not prompt chips — each sends its example
-   straight into the real chat (submitAlwenChat), the same as if the user
-   had typed it themselves. */
-const ALWEN_QUICK_ACTIONS = [
-  { emoji: "🏪", labelKey: "alwen.quickAction.business", view: "businessCreate", featured: true },
-  ["🏠", "alwen.quickAction.apartments"],
-  ["💊", "alwen.quickAction.translate"],
-  ["🚲", "alwen.quickAction.sell"],
-  ["👨‍👩‍👧", "alwen.quickAction.family"],
-  ["🪪", "alwen.quickAction.residence"],
-  ["📶", "alwen.quickAction.internet"]
-];
-
-function renderAlwenQuickActions() {
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.quickActionsTitle")}</h2>
-      <div class="alwen-quick-grid">
-        ${ALWEN_QUICK_ACTIONS.map((action) => {
-          const { emoji, labelKey, view, featured } = Array.isArray(action)
-            ? { emoji: action[0], labelKey: action[1], view: null, featured: false }
-            : action;
-          return `
-          <button type="button" class="alwen-quick-card ${featured ? "is-featured" : ""}" ${view ? `data-view="${view}"` : `data-action="alwen-quick-prompt" data-prompt-key="${labelKey}"`}>
-            <span class="alwen-quick-emoji" aria-hidden="true">${emoji}</span>
-            <span>${t(labelKey)}</span>
-          </button>
-        `;
-        }).join("")}
+      <div class="alwen-conversation-timeline" data-alwen-timeline>
+        ${convo.messages.length ? convo.messages.map(renderAlwenMessage).join("") : renderAlwenConversationEmptyState()}
       </div>
-    </div>
-  `;
-}
 
-/* Real ongoing work — the user's own help requests (open, waiting on
-   quotes from professionals) and marketplace listings (live, waiting on
-   buyers) straight from state.myHelpRequests/myListings. Nothing here is
-   a fabricated progress percentage; the pulsing dot signals "in progress
-   in the background", not a fake completion number. */
-function alwenRunningTasks() {
-  if (state.auth.status !== "signedIn") return [];
-  const helpTasks = state.myHelpRequests.map((item) => ({
-    title: item.description,
-    status: t("alwen.runningTaskHelpStatus"),
-    view: "needHelp"
-  }));
-  const listingTasks = state.myListings.map((item) => ({
-    title: item.title,
-    status: t("alwen.runningTaskListingStatus"),
-    view: "listingDetail",
-    listingId: item.id
-  }));
-  return [...helpTasks, ...listingTasks];
-}
-
-function renderAlwenRunningTasks() {
-  const tasks = alwenRunningTasks();
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwenWorkspace.runningTasks")}</h2>
-      <p class="alwen-section-hint">${t("alwenWorkspace.runningTasksHint")}</p>
-      ${tasks.length
-        ? `
-          <div class="alwen-task-list">
-            ${tasks
-              .map(
-                (task) => `
-                  <button type="button" class="alwen-task-row" data-view="${task.view}" ${task.listingId ? `data-listing-id="${task.listingId}"` : ""}>
-                    <span class="alwen-task-pulse" aria-hidden="true"></span>
-                    <span class="alwen-task-copy"><strong>${escapeHtml(task.title)}</strong><small>${task.status}</small></span>
-                    ${icon("arrow")}
-                  </button>
-                `
-              )
-              .join("")}
-          </div>
-        `
-        : `<p class="alwen-section-empty">${t("alwen.runningTasksEmpty")}</p>`}
-    </div>
-  `;
-}
-
-/* The only reliable "needs your input" signal in the real data today is a
-   business claim still pending verification — everything else that looked
-   like a quote/booking queue in the old mock panels had no real
-   accept/confirm mechanism behind it, so it isn't reproduced here rather
-   than faking a working button. */
-function alwenWaitingForYouItems() {
-  if (state.auth.status !== "signedIn") return [];
-  return ownedBusinesses()
-    .filter((business) => business.verificationStatus === "Pending")
-    .slice(0, 4)
-    .map((business) => ({ title: business.name, detail: t("alwen.businessVerificationPending"), placeId: business.id }));
-}
-
-function renderAlwenWaitingForYou() {
-  const items = alwenWaitingForYouItems();
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.waitingForYouTitle")}</h2>
-      <p class="alwen-section-hint">${t("alwen.waitingForYouHint")}</p>
-      ${items.length
-        ? `
-          <div class="alwen-waiting-list">
-            ${items
-              .map(
-                (item) => `
-                  <div class="alwen-waiting-row">
-                    <span class="alwen-waiting-copy"><strong>${escapeHtml(item.title)}</strong><small>${item.detail}</small></span>
-                    <button type="button" data-view="businessClaim" data-place-id="${item.placeId}">${t("alwen.uploadEvidenceCta")}</button>
-                  </div>
-                `
-              )
-              .join("")}
-          </div>
-        `
-        : `<p class="alwen-section-empty">${t("alwen.waitingForYouEmpty")}</p>`}
-    </div>
-  `;
-}
-
-/* Each suggestion names the real signal it's based on — a saved listing,
-   today's weather (the same mock signal already shown on Home, not a new
-   fabrication), or an incomplete profile — rather than a generic "you
-   might like" list. */
-function alwenSuggestions() {
-  const suggestions = [];
-  if (state.auth.status === "signedIn" && state.savedListingIds.length > 0) {
-    suggestions.push({ context: t("alwen.suggestionSavedListing"), detail: t("alwen.suggestionSavedListingDetail"), cta: t("alwen.suggestionViewCta"), view: "profile" });
-  }
-  const weather = currentLivingCitySignals()[0];
-  if (weather) {
-    suggestions.push({ context: t("alwen.suggestionWeather"), detail: weather.detail || t(weather.detailKey), cta: t("alwen.suggestionViewCta"), view: "explore" });
-  }
-  if (state.auth.status === "signedIn" && !state.auth.user.profileComplete) {
-    suggestions.push({ context: t("alwen.suggestionIncompleteProfile"), detail: t("alwen.suggestionIncompleteProfileDetail"), cta: t("alwen.suggestionCompleteCta"), view: "profile" });
-  }
-  return suggestions.slice(0, 4);
-}
-
-function renderAlwenSuggestions() {
-  const suggestions = alwenSuggestions();
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.alwenRecommendations")}</h2>
-      <p class="alwen-section-hint">${t("alwenWorkspace.recommendationsHint")}</p>
-      ${suggestions.length
-        ? `
-          <div class="alwen-suggestion-list">
-            ${suggestions
-              .map(
-                (item) => `
-                  <div class="alwen-suggestion-row">
-                    <div>
-                      <span class="alwen-suggestion-context">${item.context}</span>
-                      <p>${item.detail}</p>
-                    </div>
-                    <button type="button" data-view="${item.view}">${item.cta}</button>
-                  </div>
-                `
-              )
-              .join("")}
-          </div>
-        `
-        : `<p class="alwen-section-empty">${t("alwen.suggestionsEmpty")}</p>`}
-    </div>
-  `;
-}
-
-/* Only fields the app actually has and can genuinely edit — language
-   (real, via the language sheet), neighbourhood (real, via the city
-   sheet), profession (real, via profile edit), verification (real,
-   read-only). No fabricated budget/cuisine/interests fields — those
-   don't exist anywhere in the real profile schema. */
-function alwenCityMemoryItems() {
-  const items = [
-    { label: t("alwen.memoryLanguage"), value: SUPPORTED_LANGUAGES.find((lang) => lang.code === state.language)?.nativeName || state.language, sheet: "language" },
-    { label: t("alwen.memoryNeighbourhood"), value: currentAreaLabel(), sheet: "city" }
-  ];
-  if (state.auth.status === "signedIn") {
-    items.push({ label: t("alwen.memoryProfession"), value: state.auth.user.role || t("common.optionalSuffix"), view: "profile" });
-    items.push({ label: t("alwen.memoryVerification"), value: state.auth.user.emailVerified ? t("status.verified") : t("status.pending"), view: "profile" });
-  }
-  return items;
-}
-
-function renderAlwenCityMemory() {
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.memoryTitle")}</h2>
-      <p class="alwen-section-hint">${t("alwen.memoryHint")}</p>
-      <div class="alwen-memory-grid">
-        ${alwenCityMemoryItems()
-          .map(
-            (item) => `
-              <button type="button" class="alwen-memory-card" ${item.sheet ? `data-sheet="${item.sheet}"` : `data-view="${item.view}"`}>
-                <span>${item.label}</span>
-                <strong>${escapeHtml(item.value)}</strong>
-                <small>${t("alwen.memoryEdit")}</small>
-              </button>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-}
-
-/* alwenCapabilities (mockData.js) is now rewritten to only list what the
-   Edge Function's real tool calls actually do — see the comment there. */
-function renderAlwenSkills() {
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.skillsTitle")}</h2>
-      <p class="alwen-section-hint">${t("alwen.skillsHint")}</p>
-      <div class="alwen-skill-grid">
-        ${alwenCapabilities
-          .map(
-            (skill) => `
-              <div class="alwen-skill-card">
-                <span class="alwen-skill-emoji" aria-hidden="true">${skill.emoji}</span>
-                <strong>${t(skill.labelKey)}</strong>
-                <p>${t(skill.detailKey)}</p>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-}
-
-/* Honest connection states: Google/Apple/Email identity via Supabase Auth
-   is genuinely real (state.auth.user.provider). Maps/Calendar/Payments/
-   Bookings have no OAuth flow or data access anywhere in this app yet —
-   shown as not connected rather than as fake toggles that do nothing. */
-function alwenConnectedServices() {
-  const provider = state.auth.status === "signedIn" ? state.auth.user.provider || "email" : null;
-  return [
-    { id: "google", emoji: "🔎", label: t("alwen.connectedIdentityGoogle"), connected: provider === "google" },
-    { id: "apple", emoji: "🍎", label: t("alwen.connectedIdentityApple"), connected: provider === "apple" },
-    { id: "email", emoji: "✉️", label: t("alwen.connectedIdentityEmail"), connected: provider === "email" },
-    { id: "maps", emoji: "🗺️", label: t("alwen.connectedMaps"), connected: false },
-    { id: "calendar", emoji: "📆", label: t("alwen.connectedCalendar"), connected: false },
-    { id: "payments", emoji: "💳", label: t("alwen.connectedPayments"), connected: false },
-    { id: "bookings", emoji: "🍽️", label: t("alwen.connectedBookings"), connected: false }
-  ];
-}
-
-function renderAlwenConnectedServices() {
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.connectedTitle")}</h2>
-      <p class="alwen-section-hint">${t("alwen.connectedHint")}</p>
-      <div class="alwen-connected-grid">
-        ${alwenConnectedServices()
-          .map(
-            (item) => `
-              <div class="alwen-connected-card ${item.connected ? "is-connected" : ""}">
-                <span class="alwen-connected-emoji" aria-hidden="true">${item.emoji}</span>
-                <strong>${item.label}</strong>
-                <small>${item.connected ? t("alwen.connectedStateConnected") : t("alwen.connectedStateNotConnected")}</small>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-}
-
-/* Reuses deriveRealAchievements() as-is (already built for Profile, already
-   honest — derived from real emailVerified/myListings/ownedBusinesses state,
-   not a fabricated log) instead of a second, duplicate implementation. */
-function renderAlwenCityTimeline() {
-  const events = state.auth.status === "signedIn" ? deriveRealAchievements(state.auth.user) : [];
-  return `
-    <div class="alwen-section">
-      <h2>${t("alwen.timelineTitle")}</h2>
-      <p class="alwen-section-hint">${t("alwen.timelineHint")}</p>
-      ${events.length
-        ? `
-          <div class="alwen-timeline-list">
-            ${events
-              .map(
-                (event) => `
-                  <div class="alwen-timeline-row">
-                    <span class="alwen-timeline-icon" aria-hidden="true">${icon(event.icon)}</span>
-                    <span class="alwen-timeline-copy"><strong>${t(event.titleKey)}</strong><small>${event.date || ""}</small></span>
-                  </div>
-                `
-              )
-              .join("")}
-          </div>
-        `
-        : `<p class="alwen-section-empty">${t("alwen.timelineEmpty")}</p>`}
-    </div>
-  `;
-}
-
-function renderAlwenWorkspace() {
-  return `
-    <section class="alwen-workspace">
-      ${renderAlwenHero()}
-      ${renderAlwenQuickActions()}
-      ${renderAlwenRunningTasks()}
-      ${renderAlwenWaitingForYou()}
-      ${renderAlwenSuggestions()}
-      ${renderAlwenCityMemory()}
-      ${renderAlwenSkills()}
-      ${renderAlwenConnectedServices()}
-      ${renderAlwenCityTimeline()}
+      ${renderAlwenComposer({ context: "conversation", placeholder: t("alwen.composerPlaceholder") })}
     </section>
   `;
+}
+
+/** Preserves in-flight drafts across recoverable failures (never cleared
+ * on an error, only on a real successful send) and never leaves an
+ * indefinite loading state — every branch below resolves to idle/error. */
+async function submitAlwenConversationMessage(rawText, { messageType = "text" } = {}) {
+  const convo = state.alwenConversation;
+  const trimmed = String(rawText || "").trim();
+  if (!trimmed) return;
+
+  if (state.auth.status !== "signedIn") {
+    convo.error = t("alwen.alwenChatSignedOutError");
+    render();
+    return;
+  }
+
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    convo.error = t("alwen.composerOffline");
+    render();
+    return;
+  }
+
+  const intent = classifyAlwenIntent(trimmed);
+  const isNewConversation = !convo.id && convo.messages.length === 0;
+
+  convo.messages.push({ id: alwenMessageId(), conversationId: convo.id, role: "user", messageType, text: trimmed, createdAt: new Date().toISOString() });
+  convo.draft = "";
+  convo.error = null;
+
+  if (isNewConversation) trackEvent("alwen_conversation_started", { mode: convo.mode });
+  trackEvent("alwen_message_submitted", { messageType, intentType: intent, hasConversation: Boolean(convo.id) });
+
+  if (intent === ALWEN_INTENTS.PLACE_SEARCH || intent === ALWEN_INTENTS.HIRE_SERVICE) {
+    await submitAlwenStructuredSearchTurn(trimmed, intent);
+    return;
+  }
+
+  if (intent === ALWEN_INTENTS.TRANSLATION || intent === ALWEN_INTENTS.LIVE_CONVERSATION) {
+    await submitAlwenTranslationTurn(trimmed, { enterLiveMode: intent === ALWEN_INTENTS.LIVE_CONVERSATION });
+    return;
+  }
+
+  await submitAlwenGeneralChatTurn(trimmed);
+}
+
+/** general_conversation only — the one intent that still calls OpenAI's
+ * free-form chat path (with the confirm-then-create Hire/Marketplace
+ * tools). place_search/hire_service/translation never reach this. */
+async function submitAlwenGeneralChatTurn(trimmed) {
+  const convo = state.alwenConversation;
+  const pendingId = alwenMessageId();
+  convo.messages.push({ id: pendingId, conversationId: convo.id, role: "assistant", messageType: "text", text: "", status: "sending", createdAt: new Date().toISOString() });
+  convo.status = "sending";
+  render();
+
+  try {
+    const result = await sendAlwenMessage({
+      message: trimmed,
+      language: getCurrentLanguage(),
+      city: city.name || "Vilnius",
+      conversationId: convo.id
+    });
+    convo.id = result.conversationId || convo.id;
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.text = result.answer;
+      target.status = "success";
+    }
+    convo.status = "idle";
+    if (result.createdHelpRequest) applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
+    if (result.createdListing) applyCreatedListing(result.createdListing);
+  } catch (error) {
+    const code = error?.code || "";
+    const message =
+      code === "unauthenticated" ? t("alwen.alwenChatExpiredError")
+      : code === "provider_config_missing" ? t("alwen.alwenChatMissingKeyError")
+      : code === "rate_limited" ? (error?.message || t("alwen.composerRateLimited"))
+      : error?.message || t("alwen.alwenChatGenericError");
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.status = "error";
+      target.text = message;
+      target.error = { code, retryable: code !== "unauthenticated" };
+    }
+    convo.status = "idle";
+    trackEvent("alwen_failure_shown", { errorCategory: code || "unknown" });
+  }
+  render();
+}
+
+/** place_search/hire_service — deterministic, local, never calls OpenAI.
+ * Still goes through a "sending" placeholder for a consistent timeline
+ * shape with the AI-backed turns above (chat/translation). */
+async function submitAlwenStructuredSearchTurn(trimmed, intent) {
+  const convo = state.alwenConversation;
+  const resultType = intent === ALWEN_INTENTS.PLACE_SEARCH ? "place" : "professional";
+  const pendingId = alwenMessageId();
+  convo.messages.push({ id: pendingId, conversationId: convo.id, role: "assistant", messageType: "structured_result", resultType, results: [], status: "sending", createdAt: new Date().toISOString() });
+  convo.status = "sending";
+  render();
+
+  try {
+    const results = resultType === "place" ? searchAlwenPlaces(trimmed) : searchAlwenProfessionals(trimmed);
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.results = results;
+      target.status = "success";
+      target.text = results.length ? "" : t("alwen.noResultsFound");
+    }
+    convo.status = "idle";
+    trackEvent("alwen_structured_result_opened", { resultType, resultCount: results.length });
+    persistAlwenStructuredSearchTurn(convo, trimmed, resultType, results, target?.text || "");
+  } catch {
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.status = "error";
+      target.text = t("alwen.alwenChatGenericError");
+      target.error = { code: "search_failed", retryable: true };
+    }
+    convo.status = "idle";
+    trackEvent("alwen_failure_shown", { errorCategory: "search_failed" });
+  }
+  render();
+}
+
+/** Deterministic search turns never touch the alwen-chat edge function,
+ * so unlike chat/translation turns (which the edge function persists
+ * itself) they have to be written to Supabase from here. Best-effort:
+ * the results are already shown from local state, so a persistence
+ * failure is logged, not surfaced as a user-facing error — the turn just
+ * won't survive a refresh, which is a known limitation, not a broken
+ * search. */
+async function persistAlwenStructuredSearchTurn(convo, trimmed, resultType, results, introText) {
+  if (!isSupabaseConfigured() || state.auth.status !== "signedIn") return;
+  try {
+    if (!convo.id) {
+      const created = await createAlwenConversation({ title: trimmed.slice(0, 80) });
+      convo.id = created.id;
+    }
+    await createAlwenMessage({ conversationId: convo.id, role: "user", content: trimmed, messageType: "text" });
+    await createAlwenMessage({
+      conversationId: convo.id,
+      role: "assistant",
+      content: introText,
+      messageType: "structured_result",
+      resultType,
+      resultPayload: { ids: results.map((item) => item.id) }
+    });
+  } catch (error) {
+    logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "persistAlwenStructuredSearchTurn", error }, { severity: "warning" });
+  }
+}
+
+/** translation/live_conversation — native Alwen-chat translation (mode:
+ * "translate" on the same edge function), never a second AI backend.
+ * live_conversation additionally flips the conversation into liveTranslate
+ * mode; both intents otherwise share this exact turn logic. */
+async function submitAlwenTranslationTurn(trimmed, { enterLiveMode = false } = {}) {
+  const convo = state.alwenConversation;
+  if (enterLiveMode) convo.mode = "liveTranslate";
+
+  const pendingId = alwenMessageId();
+  convo.messages.push({ id: pendingId, conversationId: convo.id, role: "assistant", messageType: "translation", status: "sending", createdAt: new Date().toISOString() });
+  convo.status = "sending";
+  render();
+
+  try {
+    const result = await sendAlwenMessage({
+      message: trimmed,
+      language: getCurrentLanguage(),
+      city: city.name || "Vilnius",
+      conversationId: convo.id,
+      mode: "translate",
+      toLanguage: convo.mode === "liveTranslate" ? convo.languagePair.to : "auto"
+    });
+    convo.id = result.conversationId || convo.id;
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.status = "success";
+      target.originalText = result.original;
+      target.translatedText = result.translated;
+      target.detectedLanguage = result.detectedLanguage;
+      target.targetLanguage = result.targetLanguage;
+    }
+    convo.status = "idle";
+    // Live two-way mode auto-switches direction for the next turn — the
+    // next speaker is assumed to be replying in the language just
+    // translated into, so the pair flips without a manual toggle.
+    if (convo.mode === "liveTranslate") {
+      convo.languagePair = { from: result.targetLanguage, to: result.detectedLanguage };
+    }
+    trackEvent("alwen_translation_completed", { fromLanguage: result.detectedLanguage, toLanguage: result.targetLanguage });
+    if (convo.autoPlayTranslation) playAlwenTranslationAudio(pendingId);
+  } catch (error) {
+    const code = error?.code || "";
+    const message =
+      code === "unauthenticated" ? t("alwen.alwenChatExpiredError")
+      : code === "provider_config_missing" ? t("alwen.alwenChatMissingKeyError")
+      : code === "rate_limited" ? (error?.message || t("alwen.composerRateLimited"))
+      : error?.message || t("alwen.alwenChatGenericError");
+    const target = convo.messages.find((item) => item.id === pendingId);
+    if (target) {
+      target.status = "error";
+      target.text = message;
+      target.error = { code, retryable: code !== "unauthenticated" };
+    }
+    convo.status = "idle";
+    trackEvent("alwen_failure_shown", { errorCategory: code || "unknown" });
+  }
+  render();
+}
+
+function retryAlwenConversationMessage(messageId) {
+  const convo = state.alwenConversation;
+  const index = convo.messages.findIndex((item) => item.id === messageId);
+  if (index < 1) return;
+  const userMessage = convo.messages[index - 1];
+  if (userMessage?.role !== "user") return;
+  convo.messages.splice(index - 1, 2);
+  submitAlwenConversationMessage(userMessage.text, { messageType: userMessage.messageType });
+}
+
+/** Reuses speakTranslatedText()/stopTranslationSpeech() exactly as the
+ * Translate screen already does — a separate playback-state key
+ * (speechMessageId) so this never collides with Translate's own
+ * state.translateSpeechStatus/Panel. */
+async function playAlwenTranslationAudio(messageId) {
+  const convo = state.alwenConversation;
+  const message = convo.messages.find((item) => item.id === messageId);
+  if (!message?.translatedText) return;
+  if (convo.speechMessageId === messageId && convo.speechStatus === "playing") {
+    stopTranslationSpeech();
+    convo.speechStatus = "idle";
+    convo.speechMessageId = null;
+    render();
+    return;
+  }
+  try {
+    await speakTranslatedText({
+      text: message.translatedText,
+      onStateChange(status) {
+        convo.speechStatus = status === "stopped" ? "idle" : status;
+        convo.speechMessageId = status === "stopped" ? null : messageId;
+        render();
+      }
+    });
+  } catch {
+    convo.speechStatus = "error";
+    convo.speechMessageId = messageId;
+    render();
+  }
+}
+
+function resetAlwenConversation() {
+  const convo = state.alwenConversation;
+  convo.id = null;
+  convo.mode = "chat";
+  convo.status = "idle";
+  convo.messages = [];
+  convo.error = null;
+  convo.draft = "";
+  convo.partialTranscript = "";
+  render();
+}
+
+/** Reconstructs one persisted alwen_messages row into the shape the
+ * conversation timeline renders. Structured-result rows only ever stored
+ * ids (see persistAlwenStructuredSearchTurn) — this re-hydrates them
+ * against the live in-memory place/professional lists on every load, so a
+ * reopened conversation always shows current data, never a frozen
+ * snapshot (a business could have changed since the row was written). */
+function mapAlwenMessageRow(row) {
+  const base = { id: String(row.id), conversationId: row.conversation_id, role: row.role, messageType: row.message_type || "text", createdAt: row.created_at, status: "success" };
+  if (row.message_type === "translation" && row.role === "assistant") {
+    return {
+      ...base,
+      originalText: row.original_text || "",
+      translatedText: row.translated_text || row.content || "",
+      detectedLanguage: row.detected_language || "en",
+      targetLanguage: row.detected_language === "lt" ? "en" : "lt"
+    };
+  }
+  if (row.message_type === "structured_result" && row.role === "assistant") {
+    const ids = Array.isArray(row.result_payload?.ids) ? row.result_payload.ids : [];
+    const source = row.result_type === "place" ? importedBusinesses : row.result_type === "professional" ? serviceProfessionals : [];
+    const results = ids.map((id) => source.find((item) => String(item.id) === String(id))).filter(Boolean);
+    return { ...base, resultType: row.result_type, results, text: results.length ? "" : t("alwen.noResultsFound") };
+  }
+  return { ...base, text: row.content || "" };
+}
+
+/** Phase 12 — continue history after refresh, never overwrite an
+ * in-progress conversation with just the latest answer. Runs on every
+ * visit to the Alwen screen (mirrors refreshMyListings()'s "retry every
+ * visit" pattern elsewhere in this file) but is a no-op once a
+ * conversation is already loaded or has local messages, so it can never
+ * clobber an in-flight or already-restored conversation. */
+async function loadAlwenConversation() {
+  const convo = state.alwenConversation;
+  if (convo.loaded || convo.status === "sending" || convo.messages.length) return;
+  if (!isSupabaseConfigured() || state.auth.status !== "signedIn") return;
+  try {
+    const conversation = await fetchAlwenConversation();
+    if (!conversation) {
+      convo.loaded = true;
+      return;
+    }
+    const rows = await fetchAlwenMessages(conversation.id);
+    convo.id = conversation.id;
+    convo.mode = conversation.mode === "liveTranslate" ? "liveTranslate" : "chat";
+    convo.messages = rows.map(mapAlwenMessageRow);
+    convo.loaded = true;
+    render();
+  } catch (error) {
+    convo.loaded = true;
+    logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "loadAlwenConversation", error }, { severity: "warning" });
+  }
+}
+
+/* ---- Voice input for the composer — reuses the exact same
+   getUserMedia/MediaRecorder + transcribeTranslationAudio() pipeline
+   already built for Translate's fallback (startAudioTranscriptionFallback),
+   not a parallel voice stack. ---- */
+let activeAlwenRecorder = null;
+let activeAlwenRecorderStream = null;
+let activeAlwenRecorderChunks = [];
+let activeAlwenRecorderTimer = null;
+const ALWEN_RECORDING_MAX_MS = 15000;
+
+function stopAlwenComposerRecording() {
+  if (activeAlwenRecorderTimer) {
+    window.clearTimeout(activeAlwenRecorderTimer);
+    activeAlwenRecorderTimer = null;
+  }
+  if (activeAlwenRecorder?.state === "recording") {
+    activeAlwenRecorder.stop();
+    return;
+  }
+  activeAlwenRecorderStream?.getTracks().forEach((track) => track.stop());
+  activeAlwenRecorder = null;
+  activeAlwenRecorderStream = null;
+  activeAlwenRecorderChunks = [];
+}
+
+async function startAlwenComposerRecording() {
+  const convo = state.alwenConversation;
+  if (!canUseAudioTranscriptionFallback()) {
+    convo.error = t("alwen.composerMicUnsupported");
+    render();
+    return;
+  }
+  try {
+    activeAlwenRecorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    convo.status = "recording";
+    convo.error = null;
+    convo.partialTranscript = "";
+    render();
+    trackEvent("alwen_voice_input_used", { messageType: "voice" });
+
+    activeAlwenRecorderChunks = [];
+    const mimeType = preferredAudioMimeType();
+    activeAlwenRecorder = mimeType ? new MediaRecorder(activeAlwenRecorderStream, { mimeType }) : new MediaRecorder(activeAlwenRecorderStream);
+
+    activeAlwenRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data?.size) activeAlwenRecorderChunks.push(event.data);
+    });
+
+    activeAlwenRecorder.addEventListener("stop", async () => {
+      const recordingType = activeAlwenRecorder?.mimeType || mimeType || "audio/webm";
+      const audioBlob = new Blob(activeAlwenRecorderChunks, { type: recordingType });
+      activeAlwenRecorderStream?.getTracks().forEach((track) => track.stop());
+      activeAlwenRecorder = null;
+      activeAlwenRecorderStream = null;
+      activeAlwenRecorderChunks = [];
+      if (activeAlwenRecorderTimer) {
+        window.clearTimeout(activeAlwenRecorderTimer);
+        activeAlwenRecorderTimer = null;
+      }
+
+      try {
+        if (!audioBlob.size) throw new Error("EMPTY_RECORDING");
+        convo.status = "transcribing";
+        render();
+        const transcript = await transcribeTranslationAudio({ audioBlob, language: getCurrentLanguage() });
+        convo.status = "idle";
+        convo.partialTranscript = "";
+        if (transcript.trim()) {
+          await submitAlwenConversationMessage(transcript, { messageType: "voice" });
+        } else {
+          convo.error = t("alwen.composerNoSpeechDetected");
+          render();
+        }
+      } catch (error) {
+        convo.status = "idle";
+        convo.partialTranscript = "";
+        convo.error = error?.message === "EMPTY_RECORDING" ? t("alwen.composerNoSpeechDetected") : t("alwen.composerTranscriptionError");
+        render();
+      }
+    }, { once: true });
+
+    activeAlwenRecorder.start();
+    activeAlwenRecorderTimer = window.setTimeout(() => stopAlwenComposerRecording(), ALWEN_RECORDING_MAX_MS);
+  } catch {
+    stopAlwenComposerRecording();
+    convo.status = "idle";
+    convo.error = t("alwen.composerMicDenied");
+    render();
+  }
 }
 
 /** Honest signals only — every bullet here must trace back to real local
@@ -3600,14 +3963,13 @@ function renderHome() {
       </div>
     </section>
 
-    ${/* Home already has its own curated rails below (Live around you,
-       Trending Marketplace, etc.) — the generic "Nearby picks"
-       discover-toggle panel only ever showed up here because
-       state.discoverOpen is global and was left on from Marketplace or
-       Explore, and read as redundant clutter. A typed search still
-       surfaces "Alwen found" results in place, same as every other
-       screen; only the no-query discover fallback is suppressed. */
-      state.query.trim() ? renderAiSearchResults() : ""}
+    ${/* Home no longer shows an in-place "Alwen found" results preview as
+       you type — the Home prompt is purely an entry point into the one
+       canonical Alwen conversation now (see the ai-search-submit handler),
+       so typed text is only ever acted on by submitting it there, never
+       searched in place here. Home already has its own curated rails
+       below (Live around you, Trending Marketplace, etc.) regardless. */
+      ""}
 
     ${renderLiveAroundYou()}
     ${renderTrendingMarketplace()}
@@ -4157,124 +4519,18 @@ function renderTytSheet() {
   `;
 }
 
+/** A pure launcher into the one canonical Alwen conversation (Alwen 2.0) —
+ * it used to be its own mini-chat overlay with a duplicate single-turn
+ * chat model, which meant two competing Alwen surfaces could be on
+ * screen/reachable at once. Clicking the orb now just opens the same
+ * alwenConversation screen renderAiSearch("home") routes into, so there
+ * is only ever one place Alwen conversations happen. */
 function renderAlwenDock() {
-  const chat = state.alwenChat;
-  const isLoading = chat.status === "loading";
-  const canRetry = chat.status === "error" && chat.lastMessage;
   return `
-    <aside class="alwen-dock ${state.alwenOpen ? "is-open" : ""}" aria-label="${t("common.tellAlwen")}">
-      <button class="alwen-orb" data-alwen-toggle aria-expanded="${state.alwenOpen ? "true" : "false"}" aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
-      <div class="alwen-panel" role="dialog" aria-label="${t("common.tellAlwen")}">
-        <div class="alwen-panel-head">
-          <div>
-            <p class="eyebrow">${t("common.tellAlwen")}</p>
-            <strong>${t("alwen.alwenDockTitle")}</strong>
-          </div>
-          <button data-alwen-toggle aria-label="${t("common.close")}">×</button>
-        </div>
-
-        <p class="alwen-panel-intro">${t("alwen.alwenDockHint")}</p>
-        ${chat.status === "success" ? `
-          <div class="alwen-chat-answer" role="status">
-            <strong>${t("alwen.alwenChatAnswerLabel")}</strong>
-            <p>${escapeHtml(chat.answer)}</p>
-          </div>
-        ` : ""}
-        ${isLoading ? `
-          <div class="alwen-status-row" role="status">
-            <span class="alwen-status-dot" aria-hidden="true"></span>
-            <span>${t("alwen.alwenChatLooking")}</span>
-          </div>
-        ` : ""}
-        ${chat.status === "error" ? `
-          <div class="alwen-chat-error" role="alert">
-            <p>${escapeHtml(chat.error || t("alwen.alwenChatGenericError"))}</p>
-            <div>
-              ${canRetry ? `<button type="button" data-alwen-retry>${t("alwen.alwenChatRetry")}</button>` : ""}
-              ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
-            </div>
-          </div>
-        ` : ""}
-        <form class="alwen-chat-form" data-alwen-chat-form>
-          <label for="alwen-chat-input">${t("alwen.alwenChatLabel")}</label>
-          <div class="alwen-chat-compose">
-            <textarea id="alwen-chat-input" name="message" maxlength="2000" rows="3" placeholder="${t("alwen.alwenChatPlaceholder")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
-            <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
-          </div>
-        </form>
-        <div class="alwen-mode-row">
-          <button type="button" data-alwen-upload="image">${icon("uploadImageMode")}${t("common.uploadImage")}</button>
-          <button type="button" data-alwen-upload="document">${icon("uploadDocumentMode")}${t("common.uploadDocument")}</button>
-        </div>
-        <input type="file" accept="image/*" id="alwen-image-input" class="translation-camera-input" />
-        <input type="file" accept=".pdf,application/pdf" id="alwen-document-input" class="translation-camera-input" />
-        <div class="alwen-actions">${alwenActions.slice(0, 5).map((action) => `<button data-view="${action.view}">${t(action.labelKey)}</button>`).join("")}</div>
-      </div>
+    <aside class="alwen-dock" aria-label="${t("common.tellAlwen")}">
+      <button class="alwen-orb" data-alwen-toggle aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
     </aside>
   `;
-}
-
-async function submitAlwenChat(message = state.alwenChat.input || state.alwenChat.lastMessage) {
-  const trimmed = String(message || "").trim();
-  state.alwenChat.input = trimmed;
-  state.alwenChat.lastMessage = trimmed;
-  state.alwenChat.answer = "";
-  state.alwenChat.error = null;
-  // Bookkeeping only, additive to the existing success path below — lets
-  // the workspace page render a generated-UI card for whatever the Edge
-  // Function actually created, instead of parsing the free-text answer.
-  state.alwenChat.createdHelpRequest = null;
-  state.alwenChat.createdListing = null;
-
-  if (!trimmed) {
-    state.alwenChat.status = "error";
-    state.alwenChat.error = t("alwen.alwenChatEmptyError");
-    render();
-    return;
-  }
-
-  if (state.auth.status !== "signedIn") {
-    state.alwenChat.status = "error";
-    state.alwenChat.error = t("alwen.alwenChatSignedOutError");
-    render();
-    return;
-  }
-
-  state.alwenChat.status = "loading";
-  render();
-
-  try {
-    const result = await sendAlwenMessage({
-      message: trimmed,
-      language: getCurrentLanguage(),
-      city: city.name || "Vilnius",
-      conversationId: state.alwenChat.conversationId
-    });
-    state.alwenChat.status = "success";
-    state.alwenChat.answer = result.answer;
-    state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
-    state.alwenChat.input = "";
-    trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
-    if (result.createdHelpRequest) {
-      applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
-      state.alwenChat.createdHelpRequest = result.createdHelpRequest;
-    }
-    if (result.createdListing) {
-      applyCreatedListing(result.createdListing);
-      state.alwenChat.createdListing = result.createdListing;
-    }
-  } catch (error) {
-    const code = error?.code || "";
-    state.alwenChat.status = "error";
-    state.alwenChat.error =
-      code === "unauthenticated"
-        ? t("alwen.alwenChatExpiredError")
-        : code === "provider_config_missing"
-          ? t("alwen.alwenChatMissingKeyError")
-          : error?.message || t("alwen.alwenChatGenericError");
-    trackEvent("alwen_chat_failed", { code: code || "unknown" });
-  }
-  render();
 }
 
 /** One-touch voice translator, promoted to the top of the global Alwen
@@ -5985,7 +6241,7 @@ function renderNeedHelp() {
       <div class="connection-flow">
         <article><strong>1</strong><span>${t("common.describeNeed")}</span></article>
         <article><strong>2</strong><span>${t("common.prosRespond")}</span></article>
-        <article><strong>3</strong><span>${t("common.bookPay")}</span></article>
+        <article><strong>3</strong><span>${t("common.chatAndArrange")}</span></article>
       </div>
       <div class="section-title">
         <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
@@ -6038,7 +6294,6 @@ function openLiveOpportunityDetail(id) {
   state.selectedOpportunityId = item.id;
   state.activeView = "liveOpportunityDetail";
   state.activeSheet = null;
-  state.alwenOpen = false;
   state.quickTranslateOpen = false;
   render();
 }
@@ -6196,7 +6451,6 @@ function openEventDetail(id) {
   state.selectedEventId = item.id;
   state.activeView = "eventDetail";
   state.activeSheet = null;
-  state.alwenOpen = false;
   state.quickTranslateOpen = false;
   render();
 }
@@ -7174,7 +7428,6 @@ function openGeneratedConversation({ type, participant, verified = false, previe
   state.activeConversationId = id;
   state.activeView = "conversation";
   state.activeSheet = null;
-  state.alwenOpen = false;
   render();
 }
 
@@ -7243,6 +7496,7 @@ function startBusinessConversation(businessId) {
     userMessage: `Hi, I’d like to ask about ${item.name}.`,
     firstMessage: `Thanks for contacting us. Tell us what you need and we’ll help from here.`
   });
+  trackEvent("business_contacted", { businessId: String(item.id) });
 }
 
 /* Swipe-to-act wrapper shared by notification cards and conversation
@@ -8373,122 +8627,6 @@ function renderTranslation() {
   `;
 }
 
-const BOOKING_SLOT_TIMES = ["09:00", "11:00", "13:00", "15:00", "17:00", "19:00"];
-const BOOKING_DAY_COUNT = 6;
-
-/** Real slot logic, not decorative: for "today" only future slots are
- * offered (an hour of lead time), and each of the next few days gets a
- * fixed daily template — no different from how a real per-professional
- * calendar would be summarised before a backend exists to drive it. */
-function bookingSlotsForDay(dayOffset) {
-  if (dayOffset > 0) return BOOKING_SLOT_TIMES;
-  const cutoffHour = new Date().getHours() + 1;
-  return BOOKING_SLOT_TIMES.filter((time) => Number.parseInt(time.split(":")[0], 10) >= cutoffHour);
-}
-
-function bookingDayLabel(dayOffset) {
-  if (dayOffset === "flexible") return t("booking.anytimeFlexible");
-  if (dayOffset === 0) return t("common.today");
-  if (dayOffset === 1) return t("common.tomorrow");
-  const date = new Date();
-  date.setDate(date.getDate() + dayOffset);
-  return formatDate(date, { weekday: "short", day: "numeric", month: "short" });
-}
-
-function renderBookingSheet() {
-  const person = state.publicProfile;
-  if (!person) return "";
-
-  if (state.bookingConfirmed) {
-    const booking = state.bookingConfirmed;
-    return `
-      <div class="sheet-backdrop" data-sheet-close="true">
-        <section class="selection-sheet booking-sheet" aria-label="${t("booking.bookingConfirmedTitle")}">
-          <div class="sheet-handle"></div>
-          <div class="post-request-success">
-            <span class="post-request-success-icon">${icon("verify")}</span>
-            <h2>${t("booking.bookingConfirmedTitle")}</h2>
-            <p>${t("booking.bookingConfirmedHint").replace("{name}", escapeHtml(person.name))}</p>
-            <blockquote>${escapeHtml(booking.date)}</blockquote>
-            <button type="button" class="auth-primary-button" data-role="close-booking-sheet">${t("common.close")}</button>
-            <button type="button" class="auth-link" data-role="view-my-bookings">${t("booking.viewMyBookings")}</button>
-          </div>
-        </section>
-      </div>
-    `;
-  }
-
-  const draft = state.bookingDraft;
-  const isFlexible = draft.dateIndex === "flexible";
-  const hasSpecificDay = draft.dateIndex !== null && !isFlexible;
-  const slots = hasSpecificDay ? bookingSlotsForDay(draft.dateIndex) : [];
-  const canConfirm = isFlexible || (hasSpecificDay && Boolean(draft.time));
-
-  return `
-    <div class="sheet-backdrop" data-sheet-close="true">
-      <section class="selection-sheet booking-sheet" aria-label="${t("booking.bookingSheetTitle").replace("{name}", person.name)}">
-        <div class="sheet-handle"></div>
-        <div class="sheet-title">
-          <div>
-            <h2>${t("booking.bookingSheetTitle").replace("{name}", escapeHtml(person.name))}</h2>
-            <p>${t("booking.bookingSheetHint")}</p>
-          </div>
-          <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
-        </div>
-
-        <p class="booking-section-label">${t("booking.chooseDate")}</p>
-        <div class="chip-row booking-day-row">
-          ${Array.from({ length: BOOKING_DAY_COUNT }, (_, dayOffset) => `
-            <button type="button" class="chip ${draft.dateIndex === dayOffset ? "is-active" : ""}" data-booking-day="${dayOffset}">${bookingDayLabel(dayOffset)}</button>
-          `).join("")}
-          <button type="button" class="chip booking-flexible-chip ${isFlexible ? "is-active" : ""}" data-booking-day="flexible">${icon("calendar")}${t("booking.anytimeFlexible")}</button>
-        </div>
-
-        ${isFlexible ? `<p class="booking-flexible-hint">${t("booking.anytimeFlexibleHint")}</p>` : ""}
-
-        ${hasSpecificDay ? `
-          <p class="booking-section-label">${t("booking.chooseTime")}</p>
-          ${slots.length ? `
-            <div class="chip-row booking-time-row">
-              ${slots.map((time) => `<button type="button" class="chip ${draft.time === time ? "is-active" : ""}" data-booking-time="${time}">${time}</button>`).join("")}
-            </div>
-          ` : `<p class="booking-no-slots">${t("booking.noSlotsToday")}</p>`}
-        ` : ""}
-
-        <button type="button" class="auth-primary-button booking-confirm-button" data-role="confirm-booking" ${canConfirm ? "" : "disabled"}>${t("booking.confirmBooking")}</button>
-      </section>
-    </div>
-  `;
-}
-
-function submitBooking() {
-  const person = state.publicProfile;
-  const draft = state.bookingDraft;
-  const isFlexible = draft.dateIndex === "flexible";
-  if (!person || draft.dateIndex === null || (!isFlexible && !draft.time)) return;
-
-  const booking = {
-    id: Date.now(),
-    target: person.name,
-    type: person.category || t("entity.professional"),
-    date: isFlexible ? bookingDayLabel("flexible") : `${bookingDayLabel(draft.dateIndex)} · ${draft.time}`,
-    status: "Confirmed",
-    party: person.price || ""
-  };
-
-  reservations.unshift(booking);
-  trackEvent("booking_confirmed", { professional: person.name, dayOffset: draft.dateIndex, time: draft.time || "flexible" });
-  state.bookingConfirmed = booking;
-  render();
-}
-
-function resetBookingDraft() {
-  state.bookingDraft = { dateIndex: null, time: null };
-  state.bookingConfirmed = null;
-  state.activeSheet = null;
-  render();
-}
-
 const PUBLIC_PROFILE_CONTEXT_HINT = {
   community: "profile.public.publicProfileContextCommunity",
   marketplace: "profile.public.publicProfileContextMarketplace",
@@ -8663,7 +8801,7 @@ function renderPublicProfile() {
       ${contextKey ? `<p class="public-profile-context-hint">${t(contextKey)}</p>` : ""}
 
       <div class="public-profile-primary-actions">
-        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="book">${t("common.bookNow")}</button>` : ""}
+        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="request-booking">${t("nav.book")}</button>` : ""}
         <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
@@ -9882,7 +10020,6 @@ function bindEvents() {
       }
       state.activeView = button.dataset.view;
       state.activeSheet = null;
-      state.alwenOpen = false;
       state.quickTranslateOpen = false;
       if (button.dataset.category) state.category = button.dataset.category;
       if (button.dataset.view === "createListing" && button.dataset.category) {
@@ -9897,6 +10034,9 @@ function bindEvents() {
       }
       if ((button.dataset.view === "profile" || button.dataset.view === "hire" || button.dataset.view === "needHelp") && state.auth.status === "signedIn") {
         refreshMyHelpRequests();
+      }
+      if (button.dataset.view === "alwen") {
+        loadAlwenConversation();
       }
       if (button.dataset.seeAllCategory) {
         state.exploreCategory = button.dataset.seeAllCategory;
@@ -9917,9 +10057,13 @@ function bindEvents() {
     });
   });
 
+  // The floating dock is a pure launcher into the one canonical Alwen
+  // conversation screen — not a second chat surface. Every data-alwen-toggle
+  // button across the app (dock orb, Community's "Ask Alwen", etc.) opens
+  // the same alwenConversation screen renderAiSearch("home") routes into.
   document.querySelectorAll("[data-alwen-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.alwenOpen = !state.alwenOpen;
+      state.activeView = "alwen";
       state.activeSheet = null;
       render();
     });
@@ -9933,19 +10077,85 @@ function bindEvents() {
     });
   });
 
-  document.querySelector("[data-alwen-chat-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-alwen-conversation-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    submitAlwenChat(formData.get("message"));
+    submitAlwenConversationMessage(formData.get("message"));
   });
 
-  document.querySelector("[data-alwen-retry]")?.addEventListener("click", () => {
-    submitAlwenChat(state.alwenChat.lastMessage);
-  });
-
-  document.querySelectorAll('[data-action="alwen-quick-prompt"]').forEach((button) => {
+  document.querySelectorAll("[data-alwen-example-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
-      submitAlwenChat(t(button.dataset.promptKey));
+      submitAlwenConversationMessage(t(button.dataset.alwenExamplePrompt));
+    });
+  });
+
+  document.querySelectorAll("[data-alwen-retry-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      retryAlwenConversationMessage(button.dataset.alwenRetryMessage);
+    });
+  });
+
+  document.querySelector("[data-alwen-mic-toggle]")?.addEventListener("click", () => {
+    if (state.alwenConversation.status === "recording") stopAlwenComposerRecording();
+    else startAlwenComposerRecording();
+  });
+
+  document.querySelector("[data-alwen-stop-recording]")?.addEventListener("click", () => {
+    stopAlwenComposerRecording();
+  });
+
+  document.querySelector("[data-alwen-conversation-reset]")?.addEventListener("click", () => {
+    resetAlwenConversation();
+  });
+
+  document.querySelector("[data-alwen-toggle-live-translate]")?.addEventListener("click", () => {
+    const convo = state.alwenConversation;
+    convo.mode = convo.mode === "liveTranslate" ? "chat" : "liveTranslate";
+    render();
+    // Best-effort — if this conversation hasn't been persisted yet (no
+    // messages sent), there's nothing to update server-side; the next
+    // turn's own persistence records the mode via the current convo.mode.
+    if (convo.id) updateAlwenConversationMode(convo.id, convo.mode).catch((error) => logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "updateAlwenConversationMode", error }, { severity: "warning" }));
+  });
+
+  document.querySelector("[data-alwen-swap-language-pair]")?.addEventListener("click", () => {
+    const pair = state.alwenConversation.languagePair;
+    if (pair.from === "auto") return;
+    state.alwenConversation.languagePair = { from: pair.to, to: pair.from };
+    render();
+  });
+
+  document.querySelectorAll("[data-alwen-translation-play]").forEach((button) => {
+    button.addEventListener("click", () => {
+      playAlwenTranslationAudio(button.dataset.alwenTranslationPlay);
+    });
+  });
+
+  document.querySelectorAll("[data-alwen-translation-fullscreen]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.alwenTranslationFullscreen;
+      state.alwenConversation.fullScreenTranslationId = state.alwenConversation.fullScreenTranslationId === id ? null : id;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-alwen-translation-copy]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = state.alwenConversation.messages.find((item) => item.id === button.dataset.alwenTranslationCopy);
+      if (message?.translatedText) navigator.clipboard?.writeText(message.translatedText).catch(() => {});
+    });
+  });
+
+  // Analytics only — every one of these buttons/links already has its own
+  // functional handler (or is a plain <a href>) elsewhere in this file or
+  // in the browser's native navigation; this just records which fixed,
+  // already-honest action the user picked, never what result it led to.
+  document.querySelectorAll("[data-alwen-contextual-action]").forEach((el) => {
+    el.addEventListener("click", () => {
+      trackEvent("alwen_contextual_action_selected", {
+        actionType: el.dataset.alwenContextualAction,
+        ...(el.dataset.alwenContextualResultType ? { resultType: el.dataset.alwenContextualResultType } : {})
+      });
     });
   });
 
@@ -9996,7 +10206,6 @@ function bindEvents() {
       state.category = button.dataset.category;
       state.activeView = button.dataset.targetView || "marketplace";
       state.activeSheet = null;
-      state.alwenOpen = false;
       if (state.activeView === "marketplace") state.marketplaceCategoryChosen = true;
       render();
     });
@@ -10373,7 +10582,22 @@ function bindEvents() {
   document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {
     button.addEventListener("click", () => {
       document.getElementById("global-search")?.blur();
-      if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
+      const trimmedQuery = state.query.trim();
+      if (trimmedQuery) trackEvent("search_performed", { queryLength: trimmedQuery.length });
+      // The Home prompt is Alwen's primary entry point, not a deterministic
+      // search field — every submission here opens the one canonical Alwen
+      // conversation and sends the text immediately, instead of searching
+      // in place further down the page. classifyAlwenIntent (not this
+      // screen) decides place/hire/greeting from here on.
+      if (state.activeView === "home") {
+        if (!trimmedQuery) return;
+        state.query = "";
+        state.activeView = "alwen";
+        state.activeSheet = null;
+        render();
+        submitAlwenConversationMessage(trimmedQuery);
+        return;
+      }
       if (state.activeView === "explore") {
         const matched = matchExploreSearchCategory(state.query);
         if (matched) bumpExploreCategorySignal(matched);
@@ -10449,34 +10673,6 @@ function bindEvents() {
       state.activeSheet = "directions";
       render();
     });
-  });
-
-  document.querySelectorAll("[data-booking-day]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const value = button.dataset.bookingDay;
-      state.bookingDraft.dateIndex = value === "flexible" ? "flexible" : Number.parseInt(value, 10);
-      state.bookingDraft.time = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-booking-time]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.bookingDraft.time = button.dataset.bookingTime;
-      render();
-    });
-  });
-
-  document.querySelector('[data-role="confirm-booking"]')?.addEventListener("click", submitBooking);
-  document.querySelectorAll('[data-role="close-booking-sheet"]').forEach((button) => {
-    button.addEventListener("click", resetBookingDraft);
-  });
-  document.querySelector('[data-role="view-my-bookings"]')?.addEventListener("click", () => {
-    state.bookingDraft = { dateIndex: null, time: null };
-    state.bookingConfirmed = null;
-    state.activeSheet = null;
-    state.activeView = "reservations";
-    render();
   });
 
   document.querySelectorAll("[data-area-option]").forEach((button) => {
@@ -10574,6 +10770,9 @@ function bindEvents() {
 
   bindLiveField("listing-title", (value) => {
     state.listingDraft.title = value;
+  });
+  bindLiveField("alwen-composer-input", (value) => {
+    state.alwenConversation.draft = value;
   });
   bindLiveField("listing-description", (value) => {
     state.listingDraft.description = value;
@@ -11069,11 +11268,9 @@ function bindPublicProfileEvents() {
     }
   });
 
-  document.querySelector('[data-person-action="book"]')?.addEventListener("click", () => {
-    state.bookingDraft = { dateIndex: null, time: null };
-    state.bookingConfirmed = null;
-    state.activeSheet = "booking";
-    render();
+  document.querySelector('[data-person-action="request-booking"]')?.addEventListener("click", () => {
+    const personId = state.publicProfile?.id || "";
+    startProfessionalConversation(personId.replace(/^pro-/, ""), "book");
   });
 
   document.querySelector('[data-person-action="message"]')?.addEventListener("click", () => {
@@ -11163,7 +11360,6 @@ function bindHeaderTheme() {
 function bindAiSearchPlaceholderRotation() {
   let index = 0;
   let tytIndex = 0;
-  let alwenIndex = 0;
   window.setInterval(() => {
     // Community and Explore each get their own contextual prompt set —
     // the generic list includes prompts like "Register my business" that
@@ -11186,13 +11382,6 @@ function bindAiSearchPlaceholderRotation() {
     if (tytInput && document.activeElement !== tytInput && !tytInput.value) {
       tytIndex = (tytIndex + 1) % tytPrompts.length;
       tytInput.placeholder = tytPrompts[tytIndex];
-    }
-
-    const alwenPrompts = t("alwen.heroPromptExamples");
-    const alwenInput = document.getElementById("alwen-hero-input");
-    if (alwenInput && document.activeElement !== alwenInput && !alwenInput.value) {
-      alwenIndex = (alwenIndex + 1) % alwenPrompts.length;
-      alwenInput.placeholder = alwenPrompts[alwenIndex];
     }
   }, 2600);
 }
@@ -11399,6 +11588,12 @@ function bindPhotoZoom() {
   }, { capture: true });
 }
 
+// Wired first, before anything else in boot, so every uncaught exception
+// and unhandled rejection from here on reaches Sentry — falls back to
+// console (unchanged default behavior) when SENTRY_DSN isn't configured.
+configureErrorSink(createSentrySink({ dsn: SENTRY_DSN, release: APP_RELEASE_VERSION, environment: APP_ENV }));
+bindGlobalErrorObservers();
+
 approvedLegalPolicyMarkdown = await fetch("/src/legal/ALWENDA_LEGAL_POLICIES_EN.md").then((response) => {
   if (!response.ok) throw new Error(`Legal policy source unavailable (${response.status})`);
   return response.text();
@@ -11449,9 +11644,9 @@ render();
 bindAiSearchPlaceholderRotation();
 registerServiceWorker();
 bindInstallPrompt();
-bindErrorTracking();
 bindPhotoZoom();
 refreshLocalWeather();
+trackSessionStartedOncePerDay();
 
 /* Keep the greeting synchronized if Home stays open across noon/evening,
    and refresh current conditions periodically without a page reload. */

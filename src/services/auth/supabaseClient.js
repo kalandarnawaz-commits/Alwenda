@@ -11,8 +11,21 @@
  */
 import { SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured } from "../../config.js";
 import { bootstrapAuthenticatedProfile, buildProfileBootstrapPayloads } from "./profileBootstrap.js";
+import { logPilotEvent, OBSERVABILITY_EVENTS } from "../observability.js";
 
 export { isSupabaseConfigured };
+
+/** Every Supabase query in this file goes through here on failure — the
+ * single choke point that makes "every failed Supabase call reaches
+ * observability" true without instrumenting every call site in main.js.
+ * Same throw behavior as the old `if (error) throw error;`, just logged
+ * first. `context` is the exported function name, so a Sentry/console
+ * event always says which query failed. */
+function throwIfError(error, context) {
+  if (!error) return;
+  logPilotEvent(OBSERVABILITY_EVENTS.SUPABASE_FAILURE, { context, error }, { severity: "error" });
+  throw error;
+}
 
 export class AuthNotConfiguredError extends Error {
   constructor() {
@@ -352,6 +365,7 @@ function getClient() {
         // stuck replaying the same rejected promise for the rest of the
         // page's lifetime.
         clientPromise = null;
+        logPilotEvent(OBSERVABILITY_EVENTS.SUPABASE_FAILURE, { context: "getClient.sdkImport", error }, { severity: "error" });
         throw error;
       });
   }
@@ -369,7 +383,7 @@ export async function signInWithOAuthProvider(provider) {
     provider,
     options: { redirectTo: authRedirectUrl() }
   });
-  if (error) throw error;
+  if (error) throwIfError(error, "signInWithOAuthProvider");
 }
 
 export async function signInWithEmailOtp(email) {
@@ -378,7 +392,7 @@ export async function signInWithEmailOtp(email) {
     email,
     options: { emailRedirectTo: authRedirectUrl(), shouldCreateUser: true }
   });
-  if (error) throw error;
+  if (error) throwIfError(error, "signInWithEmailOtp");
 }
 
 export const signUpWithEmail = signInWithEmailOtp;
@@ -387,13 +401,13 @@ export const signInWithEmail = ({ email }) => signInWithEmailOtp(email);
 export async function resetPasswordForEmail(email) {
   const supabase = await getClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: authRedirectUrl() });
-  if (error) throw error;
+  if (error) throwIfError(error, "resetPasswordForEmail");
 }
 
 export async function updatePassword(newPassword) {
   const supabase = await getClient();
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
+  if (error) throwIfError(error, "updatePassword");
 }
 
 /** Merges into the Supabase user's user_metadata (name, avatar_url, role) so
@@ -403,20 +417,20 @@ export async function updatePassword(newPassword) {
 export async function updateUserMetadata(metadata) {
   const supabase = await getClient();
   const { data, error } = await supabase.auth.updateUser({ data: metadata });
-  if (error) throw error;
+  if (error) throwIfError(error, "updateUserMetadata");
   return data;
 }
 
 export async function signInWithPhoneOtp(phone) {
   const supabase = await getClient();
   const { error } = await supabase.auth.signInWithOtp({ phone });
-  if (error) throw error;
+  if (error) throwIfError(error, "signInWithPhoneOtp");
 }
 
 export async function verifyPhoneOtp({ phone, token }) {
   const supabase = await getClient();
   const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
-  if (error) throw error;
+  if (error) throwIfError(error, "verifyPhoneOtp");
   return data;
 }
 
@@ -424,7 +438,7 @@ export async function getCurrentSession() {
   if (!isSupabaseConfigured()) return null;
   const supabase = await getClient();
   const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
+  if (error) throwIfError(error, "getCurrentSession");
   return data.session;
 }
 
@@ -432,7 +446,7 @@ export async function getCurrentUser() {
   if (!isSupabaseConfigured()) return null;
   const supabase = await getClient();
   const { data, error } = await supabase.auth.getUser();
-  if (error) throw error;
+  if (error) throwIfError(error, "getCurrentUser");
   return data.user;
 }
 
@@ -453,7 +467,7 @@ export async function onAuthStateChange(callback) {
 export async function signOutSupabase(scope = "local") {
   const supabase = await getClient();
   const { error } = await supabase.auth.signOut({ scope });
-  if (error) throw error;
+  if (error) throwIfError(error, "signOutSupabase");
 }
 
 export async function loadUserProfiles() {
@@ -466,8 +480,8 @@ export async function loadUserProfiles() {
     supabase.from("private_profiles").select("*").eq("user_id", user.id).maybeSingle()
   ]);
 
-  if (publicResult.error) throw publicResult.error;
-  if (privateResult.error) throw privateResult.error;
+  if (publicResult.error) throwIfError(publicResult.error, "loadUserProfiles.publicProfiles");
+  if (privateResult.error) throwIfError(privateResult.error, "loadUserProfiles.privateProfiles");
 
   return { user, publicProfile: publicResult.data, privateProfile: privateResult.data };
 }
@@ -527,7 +541,7 @@ export async function createListing({
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) throwIfError(error, "createListing");
   return data;
 }
 
@@ -536,7 +550,7 @@ export async function getMyOfferorStatus() {
   const user = await getCurrentUser();
   if (!user) throw new Error("No authenticated user.");
   const { data, error } = await supabase.from("user_offeror_status").select("*").eq("user_id", user.id).maybeSingle();
-  if (error) throw error;
+  if (error) throwIfError(error, "getMyOfferorStatus");
   return data;
 }
 
@@ -549,7 +563,7 @@ export async function confirmOfferorStatus({ status, termsVersion, reason = null
     p_confirmed: true,
     p_reason: reason
   });
-  if (error) throw error;
+  if (error) throwIfError(error, "confirmOfferorStatus");
   return data;
 }
 
@@ -558,7 +572,7 @@ export async function getMyTraderVerification() {
   const user = await getCurrentUser();
   if (!user) throw new Error("No authenticated user.");
   const { data, error } = await supabase.from("trader_verifications").select("*").eq("user_id", user.id).order("version", { ascending: false }).limit(1).maybeSingle();
-  if (error) throw error;
+  if (error) throwIfError(error, "getMyTraderVerification");
   return data;
 }
 
@@ -571,14 +585,14 @@ export async function saveTraderVerificationDraft(fields, existingId = null) {
     ? supabase.from("trader_verifications").update(payload).eq("id", existingId).eq("user_id", user.id)
     : supabase.from("trader_verifications").insert(payload);
   const { data, error } = await query.select("*").single();
-  if (error) throw error;
+  if (error) throwIfError(error, "saveTraderVerificationDraft");
   return data;
 }
 
 export async function submitTraderVerification({ id, confirmationVersion }) {
   const supabase = await getClient();
   const { data, error } = await supabase.rpc("submit_trader_verification", { p_id: id, p_confirmation_version: confirmationVersion });
-  if (error) throw error;
+  if (error) throwIfError(error, "submitTraderVerification");
   return data;
 }
 
@@ -597,7 +611,7 @@ export async function uploadTraderVerificationDocument({ verificationId, documen
   const extension = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : "jpg";
   const storagePath = `${verificationId}/${user.id}/${crypto.randomUUID()}.${extension}`;
   const { error: uploadError } = await supabase.storage.from("trader-verification-documents").upload(storagePath, file, { contentType: file.type });
-  if (uploadError) throw uploadError;
+  if (uploadError) throwIfError(uploadError, "uploadTraderVerificationDocument.upload");
   const { data, error } = await supabase.from("trader_verification_documents").insert({
     verification_id: verificationId,
     owner_user_id: user.id,
@@ -609,7 +623,7 @@ export async function uploadTraderVerificationDocument({ verificationId, documen
   }).select("id,document_type,original_filename,mime_type,byte_size,malware_scan_status,created_at").single();
   if (error) {
     await supabase.storage.from("trader-verification-documents").remove([storagePath]);
-    throw error;
+    throwIfError(error, "uploadTraderVerificationDocument.insert");
   }
   return data;
 }
@@ -620,7 +634,7 @@ export async function fetchTraderVerificationQueue() {
     .select("id,user_id,status,legal_name,trading_name,country_of_establishment,trade_register_name,registration_number,submitted_at,user_visible_reason,created_at")
     .in("status", ["submitted", "under_review", "more_information_required", "suspended"])
     .order("submitted_at", { ascending: true });
-  if (error) throw error;
+  if (error) throwIfError(error, "fetchTraderVerificationQueue");
   return data || [];
 }
 
@@ -633,7 +647,7 @@ export async function reviewTraderVerification({ id, newStatus, userReason, inte
     p_internal_notes: internalNotes,
     p_expires_at: expiresAt
   });
-  if (error) throw error;
+  if (error) throwIfError(error, "reviewTraderVerification");
   return data;
 }
 
@@ -650,14 +664,14 @@ export async function recordTraderRegisterCheck({ verificationId, sourceName, re
     reference,
     notes
   }).select("*").single();
-  if (error) throw error;
+  if (error) throwIfError(error, "recordTraderRegisterCheck");
   return data;
 }
 
 export async function fetchTraderPublicProfile(userId) {
   const supabase = await getClient();
   const { data, error } = await supabase.from("trader_public_profiles").select("*").eq("user_id", userId).eq("verification_status", "verified").maybeSingle();
-  if (error) throw error;
+  if (error) throwIfError(error, "fetchTraderPublicProfile");
   return data;
 }
 
@@ -676,14 +690,14 @@ export async function uploadListingPhoto({ listingId, file, sortOrder = 0 }) {
   const storagePath = `${user.id}/${listingId}/${crypto.randomUUID()}.${extension}`;
 
   const { error: uploadError } = await supabase.storage.from("listing-photos").upload(storagePath, file, { contentType: file.type });
-  if (uploadError) throw uploadError;
+  if (uploadError) throwIfError(uploadError, "uploadListingPhoto.upload");
 
   const { data, error } = await supabase
     .from("listing_images")
     .insert({ listing_id: listingId, storage_path: storagePath, sort_order: sortOrder })
     .select("id, storage_path, sort_order")
     .single();
-  if (error) throw error;
+  if (error) throwIfError(error, "uploadListingPhoto.insert");
 
   return { ...data, publicUrl: supabase.storage.from("listing-photos").getPublicUrl(storagePath).data.publicUrl };
 }
@@ -695,7 +709,7 @@ export async function fetchListingImages(listingId) {
     .select("id, storage_path, sort_order")
     .eq("listing_id", listingId)
     .order("sort_order", { ascending: true });
-  if (error) throw error;
+  if (error) throwIfError(error, "fetchListingImages");
   return (data || []).map((row) => ({ ...row, publicUrl: supabase.storage.from("listing-photos").getPublicUrl(row.storage_path).data.publicUrl }));
 }
 
@@ -705,7 +719,7 @@ export async function fetchMyListings() {
   if (!user) return [];
 
   const { data, error } = await supabase.from("listings").select("*").eq("owner_user_id", user.id).order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throwIfError(error, "fetchMyListings");
 
   const withImages = await Promise.all(
     (data || []).map(async (listing) => ({ ...listing, images: await fetchListingImages(listing.id).catch(() => []) }))
@@ -734,7 +748,7 @@ export async function createHelpRequest({ category, description, urgency, area, 
     })
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throwIfError(error, "createHelpRequest");
   return data;
 }
 
@@ -748,8 +762,22 @@ export async function fetchMyHelpRequests() {
     .select("*")
     .eq("requester_user_id", user.id)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throwIfError(error, "fetchMyHelpRequests");
   return data || [];
+}
+
+/** Best-effort write to the real analytics destination (see
+ * src/services/analytics.js for the typed event schema this record must
+ * already satisfy). A no-op when Supabase isn't configured, and callers
+ * are expected to swallow failures — analytics must never break the app,
+ * matching the standing rule already documented on trackEvent() in
+ * main.js. Still logs to observability via throwIfError so a broken
+ * analytics pipeline is visible, just never user-facing. */
+export async function recordAnalyticsEvent(record) {
+  if (!isSupabaseConfigured()) return;
+  const supabase = await getClient();
+  const { error } = await supabase.from("analytics_events").insert(record);
+  if (error) throwIfError(error, "recordAnalyticsEvent");
 }
 
 export async function recordLegalAcceptance({ policyVersion, acceptedAt, marketingConsent }) {
@@ -757,14 +785,14 @@ export async function recordLegalAcceptance({ policyVersion, acceptedAt, marketi
   const user = await getCurrentUser();
   if (!user) throw new AuthNotConfiguredError();
   const { error } = await supabase.from("legal_acceptances").upsert({ user_id: user.id, policy_version: policyVersion, accepted_at: acceptedAt, marketing_consent: Boolean(marketingConsent) }, { onConflict: "user_id,policy_version" });
-  if (error) throw error;
+  if (error) throwIfError(error, "recordLegalAcceptance");
 }
 
 export async function createModerationReport(report) {
   const supabase = await getClient();
   const user = await getCurrentUser();
   const { data, error } = await supabase.from("legal_reports").insert({ ...report, reporter_user_id: user?.id || null }).select("id,status,created_at").single();
-  if (error) throw error;
+  if (error) throwIfError(error, "createModerationReport");
   return data;
 }
 
@@ -773,8 +801,86 @@ export async function createPrivacyRequest(requestType) {
   const user = await getCurrentUser();
   if (!user) throw new AuthNotConfiguredError();
   const { data, error } = await supabase.from("privacy_requests").insert({ user_id: user.id, request_type: requestType }).select("id,status,created_at").single();
-  if (error) throw error;
+  if (error) throwIfError(error, "createPrivacyRequest");
   return data;
+}
+
+/* ---- Alwen 2.0 — persistence for the unified conversation (Phase 11).
+   The alwen-chat edge function already writes chat/translation turns
+   itself (it runs with the user's own JWT, same RLS as here) — these
+   functions cover what the edge function never sees: place/professional
+   search turns, which are deterministic and local and never reach it,
+   plus loading history back on screen open/refresh. RLS on both tables
+   is already owner-scoped (see 202607150001_production_foundation.sql). ---- */
+
+export async function createAlwenConversation({ title = null, mode = "chat" } = {}) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase
+    .from("alwen_conversations")
+    .insert({ user_id: user.id, title, mode })
+    .select("id, title, mode, created_at")
+    .single();
+  if (error) throwIfError(error, "createAlwenConversation");
+  return data;
+}
+
+/** This app models one continuing Alwen conversation per user, not a
+ * conversation list — so "the" conversation is simply the most recent
+ * one, matching how resetAlwenConversation() in main.js starts a fresh
+ * one (there is no separate history/browse-past-conversations UI). */
+export async function fetchAlwenConversation() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("alwen_conversations")
+    .select("id, title, mode, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throwIfError(error, "fetchAlwenConversation");
+  return data || null;
+}
+
+export async function fetchAlwenMessages(conversationId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("alwen_messages")
+    .select("id, conversation_id, role, content, message_type, detected_language, original_text, translated_text, result_type, result_payload, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) throwIfError(error, "fetchAlwenMessages");
+  return data || [];
+}
+
+export async function createAlwenMessage({ conversationId, role, content, messageType = "text", resultType = null, resultPayload = null }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase
+    .from("alwen_messages")
+    .insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+      role,
+      content,
+      message_type: messageType,
+      ...(resultType ? { result_type: resultType } : {}),
+      ...(resultPayload ? { result_payload: resultPayload } : {})
+    })
+    .select("id, created_at")
+    .single();
+  if (error) throwIfError(error, "createAlwenMessage");
+  return data;
+}
+
+export async function updateAlwenConversationMode(conversationId, mode) {
+  const supabase = await getClient();
+  const { error } = await supabase.from("alwen_conversations").update({ mode }).eq("id", conversationId);
+  if (error) throwIfError(error, "updateAlwenConversationMode");
 }
 
 /** For a public profile's "Active listings" section — anyone's published
@@ -832,8 +938,8 @@ export async function completeUserProfile({ displayName, profession, avatarUrl }
       .single()
   ]);
 
-  if (publicResult.error) throw publicResult.error;
-  if (privateResult.error) throw privateResult.error;
+  if (publicResult.error) throwIfError(publicResult.error, "completeUserProfile.publicProfile");
+  if (privateResult.error) throwIfError(privateResult.error, "completeUserProfile.privateProfile");
 
   await updateUserMetadata({ name: displayName, role: profession || "", avatar_url: avatarUrl || null });
   return { user, publicProfile: publicResult.data, privateProfile: privateResult.data };

@@ -1,4 +1,5 @@
 import { DATA_ERROR_CODES, toDataError } from "../dataErrors.js";
+import { logPilotEvent, OBSERVABILITY_EVENTS } from "../observability.js";
 
 export const DEFAULT_PROFILE_VALUES = Object.freeze({
   city: "Vilnius",
@@ -106,6 +107,7 @@ export async function bootstrapAuthenticatedProfile({ supabase, user, defaults =
       ...profileBootstrapStatus(privateUpsert.data)
     };
   } catch (error) {
+    logPilotEvent(OBSERVABILITY_EVENTS.PROFILE_BOOTSTRAP_FAILURE, { context: "bootstrapAuthenticatedProfile", userId: user?.id, error }, { severity: "error" });
     throw toDataError(error);
   }
 }

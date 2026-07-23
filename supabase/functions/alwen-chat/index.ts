@@ -4,6 +4,90 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const MAX_MESSAGE_LENGTH = 2000;
+
+// Per-user throttling beyond Supabase's own platform-level Edge Function
+// limits — both configurable via Edge Function secrets so they can be
+// tuned without a redeploy of the function's logic.
+const RATE_LIMIT_PER_MINUTE = Number(Deno.env.get("ALWEN_CHAT_RATE_LIMIT_PER_MINUTE")) || 8;
+const DAILY_COST_CAP_USD = Number(Deno.env.get("ALWEN_CHAT_DAILY_COST_CAP_USD")) || 2;
+
+// gpt-4.1-mini pricing verified against OpenAI's published rates on
+// 2026-04-18: $0.40 / 1M input tokens, $1.60 / 1M output tokens. Re-verify
+// against the OpenAI dashboard before relying on this for real budgeting —
+// token pricing changes over time and this is not fetched live.
+const INPUT_TOKEN_USD_PER_MILLION = 0.40;
+const OUTPUT_TOKEN_USD_PER_MILLION = 1.60;
+
+function estimateCostUsd(inputTokens: number, outputTokens: number): number {
+  return (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_MILLION + (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_MILLION;
+}
+
+// A basic, explicitly-not-a-guarantee heuristic screen for the clearest
+// prompt-injection attempts, run on the raw user message before it ever
+// reaches OpenAI. High-confidence matches are rejected outright rather
+// than silently stripped, so the user gets a clear "please rephrase"
+// instead of a subtly-altered request.
+const PROMPT_INJECTION_PATTERNS = [
+  /ignore\s+(all\s+|previous\s+|prior\s+)?instructions/i,
+  /disregard\s+(all\s+|the\s+)?(rules|instructions|guidelines)/i,
+  /reveal\s+(your\s+|the\s+)?(system\s+prompt|instructions)/i,
+  /you\s+are\s+(now|no\s+longer)\s+/i,
+  /act\s+as\s+(if\s+you\s+(are|were)|a)\s+/i,
+  /\bdan\s+mode\b/i,
+  /developer\s+mode/i,
+  /\bjailbreak\b/i
+];
+
+function looksLikePromptInjection(message: string): boolean {
+  return PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+// Alwen 2.0 — translation is a native Alwen-chat capability (mode:
+// "translate"), not a second AI backend. A translate-mode call never
+// injects prior conversation history (each translation is a self-
+// contained request) and never exposes the create_hire_request/
+// create_marketplace_listing tools — it asks for one thing only.
+const SUPPORTED_TRANSLATE_LANGUAGES = ["en", "lt"];
+
+// Phase 13 context control — chat mode never sends unbounded history to
+// OpenAI, only the most recent turns.
+const MAX_CONTEXT_MESSAGES = 10;
+
+function normalizeTranslateLanguage(value: unknown): string {
+  return typeof value === "string" && SUPPORTED_TRANSLATE_LANGUAGES.includes(value) ? value : "auto";
+}
+
+function translateSystemPrompt(toLanguage: string): string {
+  const target = toLanguage === "auto" ? "the other of English or Lithuanian (whichever the message is NOT already in)" : toLanguage === "lt" ? "Lithuanian" : "English";
+  return `
+You are Alwen's translation engine inside Alwenda, serving the Vilnius pilot — English and Lithuanian only.
+
+Detect the language of the user's message automatically (it will be English or Lithuanian). Translate it into ${target}. Never translate a message into the same language it is already written in.
+
+Respond with ONLY a single JSON object — no prose, no markdown code fences, no explanation before or after it — in exactly this shape:
+{"type":"translation","original":"<the user's exact original text, unchanged>","translated":"<your translation>","detectedLanguage":"<'en' or 'lt'>","targetLanguage":"<'en' or 'lt'>"}
+`;
+}
+
+function parseTranslationResponse(rawText: string): { original: string; translated: string; detectedLanguage: string; targetLanguage: string } | null {
+  const cleaned = rawText.trim().replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (
+      parsed &&
+      typeof parsed.original === "string" &&
+      typeof parsed.translated === "string" &&
+      SUPPORTED_TRANSLATE_LANGUAGES.includes(parsed.detectedLanguage) &&
+      SUPPORTED_TRANSLATE_LANGUAGES.includes(parsed.targetLanguage)
+    ) {
+      return { original: parsed.original, translated: parsed.translated, detectedLanguage: parsed.detectedLanguage, targetLanguage: parsed.targetLanguage };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 const HELP_REQUEST_URGENCIES = ["today", "thisWeek", "flexible"];
 const LISTING_CATEGORIES = ["buy_sell", "rentals", "jobs", "local_services", "vehicles", "property"];
 const LISTING_PRICE_PERIODS = ["one_time", "hour", "day", "month", "quote"];
@@ -132,7 +216,7 @@ const OPENAI_TIMEOUT_MS = 20000;
 // has no timeout of its own — if OpenAI ever stalls, the whole request
 // would otherwise hang indefinitely with no feedback to the user instead
 // of failing with a clear, bounded error.
-async function callResponses(input: unknown[]) {
+async function callResponses(input: unknown[], toolsForCall: unknown[] | undefined = tools) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
   try {
@@ -142,7 +226,7 @@ async function callResponses(input: unknown[]) {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ model: "gpt-4.1-mini", input, tools, max_output_tokens: 700 }),
+      body: JSON.stringify({ model: "gpt-4.1-mini", input, ...(toolsForCall ? { tools: toolsForCall } : {}), max_output_tokens: 700 }),
       signal: controller.signal
     });
     const payload = await response.json();
@@ -205,6 +289,8 @@ Deno.serve(async (req) => {
     language?: unknown;
     city?: unknown;
     conversationId?: unknown;
+    mode?: unknown;
+    toLanguage?: unknown;
   };
 
   try {
@@ -217,23 +303,125 @@ Deno.serve(async (req) => {
   const language = typeof body.language === "string" ? body.language.slice(0, 24) : "en";
   const city = typeof body.city === "string" ? body.city.slice(0, 80) : "Vilnius";
   const conversationId = typeof body.conversationId === "string" && body.conversationId.trim() ? body.conversationId.trim() : crypto.randomUUID();
+  const mode = body.mode === "translate" ? "translate" : "chat";
+  const toLanguage = normalizeTranslateLanguage(body.toLanguage);
 
   if (!message) return safeError("A message is required.", 400);
   if (message.length > MAX_MESSAGE_LENGTH) return safeError(`Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`, 400);
 
+  // A basic heuristic, not a guarantee — high-confidence matches are
+  // rejected before any OpenAI call is made (and before any quota is
+  // spent), and logged to alwen_chat_usage with flagged_injection=true
+  // for later review.
+  if (looksLikePromptInjection(message)) {
+    await supabase.from("alwen_chat_usage").insert({ user_id: authData.user.id, conversation_id: conversationId, flagged_injection: true }).then(() => {}, () => {});
+    return safeError("Alwen couldn't process that message. Please rephrase what you need help with.", 400);
+  }
+
+  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentRequestCount } = await supabase
+    .from("alwen_chat_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", authData.user.id)
+    .gte("created_at", oneMinuteAgo);
+  if ((recentRequestCount || 0) >= RATE_LIMIT_PER_MINUTE) {
+    return safeError("You're sending messages faster than Alwen can keep up. Please wait a moment and try again.", 429);
+  }
+
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { data: todaysUsage } = await supabase
+    .from("alwen_chat_usage")
+    .select("estimated_cost_usd")
+    .eq("user_id", authData.user.id)
+    .gte("created_at", todayStart.toISOString());
+  const spentTodayUsd = (todaysUsage || []).reduce((sum, row) => sum + (Number(row.estimated_cost_usd) || 0), 0);
+  if (spentTodayUsd >= DAILY_COST_CAP_USD) {
+    return safeError("You've reached today's usage limit for Alwen. Please try again tomorrow.", 429);
+  }
+
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  const trackUsage = (payload: { usage?: { input_tokens?: number; output_tokens?: number } }) => {
+    totalInputTokens += payload.usage?.input_tokens || 0;
+    totalOutputTokens += payload.usage?.output_tokens || 0;
+  };
+
   try {
-    // These two reads don't depend on each other (a brand-new conversation
-    // just has no prior messages yet either way), so running them together
-    // instead of one-after-another saves a full round trip off the top of
-    // every request.
-    const [{ data: existingConversation }, { data: priorMessages }] = await Promise.all([
-      supabase.from("alwen_conversations").select("id").eq("id", conversationId).maybeSingle(),
-      supabase
-        .from("alwen_messages")
-        .select("role, content")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
-    ]);
+    const { data: existingConversationForMode } = await supabase.from("alwen_conversations").select("id").eq("id", conversationId).maybeSingle();
+
+    // Translation is a native Alwen-chat capability, not a second AI
+    // backend or a separate architecture — same edge function, same
+    // rate-limit/cost-ceiling/injection-screen/usage-logging above, just a
+    // different, single-purpose system prompt and no prior-turn context
+    // (each translation is a self-contained request, unlike chat mode).
+    if (mode === "translate") {
+      // A translate-mode call is a single self-contained turn, not
+      // necessarily live two-way mode (that's a client-side conversation
+      // toggle, set explicitly via updateAlwenConversationMode) — so a
+      // brand-new conversation created here keeps the normal "chat" mode
+      // default rather than assuming liveTranslate.
+      const persistUserTurn = Promise.all([
+        existingConversationForMode
+          ? Promise.resolve()
+          : supabase.from("alwen_conversations").insert({ id: conversationId, user_id: authData.user.id, title: message.slice(0, 80) }),
+        supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "user", content: message, message_type: "translation" })
+      ]);
+
+      const translateInput: unknown[] = [
+        { role: "system", content: translateSystemPrompt(toLanguage) },
+        { role: "user", content: message }
+      ];
+      const translatePayload = await callResponses(translateInput, undefined);
+      trackUsage(translatePayload);
+      await persistUserTurn;
+
+      const parsed = parseTranslationResponse(extractAnswerText(translatePayload));
+      await supabase.from("alwen_chat_usage").insert({
+        user_id: authData.user.id,
+        conversation_id: conversationId,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        total_tokens: totalInputTokens + totalOutputTokens,
+        estimated_cost_usd: estimateCostUsd(totalInputTokens, totalOutputTokens),
+        model: "gpt-4.1-mini"
+      });
+
+      if (!parsed) {
+        return safeError("Alwen could not translate that. Please try again.", 502);
+      }
+
+      await supabase.from("alwen_messages").insert({
+        conversation_id: conversationId,
+        user_id: authData.user.id,
+        role: "assistant",
+        content: parsed.translated,
+        message_type: "translation",
+        original_text: parsed.original,
+        translated_text: parsed.translated,
+        detected_language: parsed.detectedLanguage
+      });
+
+      return jsonResponse({
+        type: "translation",
+        original: parsed.original,
+        translated: parsed.translated,
+        detectedLanguage: parsed.detectedLanguage,
+        targetLanguage: parsed.targetLanguage,
+        conversationId
+      });
+    }
+
+    const existingConversation = existingConversationForMode;
+    // Phase 13 context control — only the most recent MAX_CONTEXT_MESSAGES
+    // turns are ever sent to OpenAI, never the full unbounded history.
+    const { data: recentMessagesDesc } = await supabase
+      .from("alwen_messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(MAX_CONTEXT_MESSAGES);
+    const priorMessages = (recentMessagesDesc || []).slice().reverse();
 
     const input: unknown[] = [
       { role: "system", content: systemPrompt(language, city) },
@@ -253,6 +441,7 @@ Deno.serve(async (req) => {
     ]);
 
     let payload = await callResponses(input);
+    trackUsage(payload);
     await persistUserTurn;
     const functionCall = (payload.output || []).find((item: { type?: string }) => item.type === "function_call") as
       | { type: string; call_id: string; name: string; arguments: string }
@@ -307,6 +496,7 @@ Deno.serve(async (req) => {
         { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
       ];
       payload = await callResponses(followUpInput);
+      trackUsage(payload);
     } else if (functionCall?.name === "create_marketplace_listing") {
       let args: Record<string, unknown> = {};
       try {
@@ -378,12 +568,22 @@ Deno.serve(async (req) => {
         { type: "function_call_output", call_id: functionCall.call_id, output: toolOutput }
       ];
       payload = await callResponses(followUpInput);
+      trackUsage(payload);
     }
 
     const answer = extractAnswerText(payload);
     if (!answer) return safeError("Alwen returned an empty answer. Please try again.", 502);
 
     await supabase.from("alwen_messages").insert({ conversation_id: conversationId, user_id: authData.user.id, role: "assistant", content: answer });
+    await supabase.from("alwen_chat_usage").insert({
+      user_id: authData.user.id,
+      conversation_id: conversationId,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalInputTokens + totalOutputTokens,
+      estimated_cost_usd: estimateCostUsd(totalInputTokens, totalOutputTokens),
+      model: "gpt-4.1-mini"
+    });
 
     return jsonResponse({
       answer,
@@ -392,6 +592,21 @@ Deno.serve(async (req) => {
       ...(createdListing ? { createdListing } : {})
     });
   } catch (error) {
+    // Log whatever OpenAI usage was actually incurred before the failure —
+    // a request that spent real tokens on one call and then failed on a
+    // later step must still count against the cost ceiling, or a user
+    // could repeatedly trigger partial failures to spend past it unlogged.
+    if (totalInputTokens || totalOutputTokens) {
+      await supabase.from("alwen_chat_usage").insert({
+        user_id: authData.user.id,
+        conversation_id: conversationId,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        total_tokens: totalInputTokens + totalOutputTokens,
+        estimated_cost_usd: estimateCostUsd(totalInputTokens, totalOutputTokens),
+        model: "gpt-4.1-mini"
+      }).then(() => {}, () => {});
+    }
     if (error instanceof Error && error.message === "OPENAI_REQUEST_FAILED") {
       return safeError("Alwen could not answer right now. Please try again.", 502);
     }
