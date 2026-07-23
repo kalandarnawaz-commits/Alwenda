@@ -11788,15 +11788,6 @@ strong:has(> .verified-check) {
   line-height: 1.25;
 }
 
-.pulse-author-name .pulse-verified {
-  flex: 0 0 auto;
-  overflow: visible;
-  white-space: normal;
-  text-overflow: clip;
-  color: var(--emerald-text);
-  font-size: 0.76rem;
-}
-
 .pulse-author-copy .pulse-meta-line {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -13470,7 +13461,8 @@ strong:has(> .verified-check) {
 
 .economy-activity-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   padding: 16px;
   border-radius: 20px;
@@ -13484,6 +13476,17 @@ strong:has(> .verified-check) {
   box-shadow: 0 14px 28px rgba(15, 31, 27, 0.1);
 }
 
+/* Icon + text always stay on their own row, above the button — a fixed-
+   width icon plus a fixed-width button left the description column too
+   narrow inside a multi-column grid (auto-fit, minmax(220px, 1fr)),
+   wrapping to one word per line and visually colliding with the button. */
+.economy-activity-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .economy-activity-card .tile-icon {
   display: grid;
   place-items: center;
@@ -13495,7 +13498,7 @@ strong:has(> .verified-check) {
   color: var(--ink);
 }
 
-.economy-activity-card > div {
+.economy-activity-card-top > div {
   flex: 1;
   min-width: 0;
 }
@@ -13512,7 +13515,7 @@ strong:has(> .verified-check) {
 }
 
 .economy-activity-card button {
-  flex-shrink: 0;
+  width: 100%;
   min-height: 38px;
   padding: 0 14px;
   border-radius: 999px;
