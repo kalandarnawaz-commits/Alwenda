@@ -3595,6 +3595,24 @@ function renderAlwenConversationScreen() {
   `;
 }
 
+/** Every "Tell Alwen" entry point across the app — the shared search bar
+ * (renderAiSearch, used on Home/Explore/Hire/Marketplace/Community/
+ * Contribute/Businesses/Reservations/Create) and TYT's own — all resolve
+ * to this single behavior: clear the query, open the one canonical Alwen
+ * conversation, and submit the text immediately. There is exactly one
+ * place "Tell Alwen" ever answers from — never a local inline result
+ * panel that leaves the user wondering why nothing happened. */
+function launchAlwenConversationWithQuery(rawText) {
+  const trimmedQuery = String(rawText || "").trim();
+  if (!trimmedQuery) return;
+  trackEvent("search_performed", { queryLength: trimmedQuery.length });
+  state.query = "";
+  state.activeView = "alwen";
+  state.activeSheet = null;
+  render();
+  submitAlwenConversationMessage(trimmedQuery);
+}
+
 /** Preserves in-flight drafts across recoverable failures (never cleared
  * on an error, only on a real successful send) and never leaves an
  * indefinite loading state — every branch below resolves to idle/error. */
@@ -4614,7 +4632,7 @@ function renderTytSheet() {
         <div class="tyt-ai-search">
           <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
           <input id="tyt-search" placeholder="${t("tyt.tytPromptPlaceholder")}" aria-label="${t("common.tellAlwen")}" />
-          <button data-view="${routeForQuery()}" data-sheet-close="true">${t("common.tellAlwen")}</button>
+          <button type="button" data-action="tyt-ai-search-submit">${t("common.tellAlwen")}</button>
         </div>
         <div class="tyt-action-grid">
           ${TYT_ACTIONS.map(([iconName, labelKey, view]) => `
@@ -5286,38 +5304,6 @@ const EXPLORE_TIME_BOOST = {
 };
 
 const EXPLORE_WEEKEND_EVENING_BOOST = ["Nightlife", "Food & Drink", "Attractions"];
-
-/** Keyword → category map used only to attribute a real, just-submitted
- * search to a category for the visit-count signal below — never to
- * silently rewrite or filter the query itself. */
-const EXPLORE_SEARCH_CATEGORY_HINTS = {
-  "Food & Drink": ["restaurant", "cafe", "coffee", "lunch", "dinner", "pizza", "sushi", "bakery"],
-  Groceries: ["grocery", "groceries", "supermarket", "convenience"],
-  Pharmacy: ["pharmacy", "medicine", "prescription"],
-  Healthcare: ["doctor", "clinic", "hospital", "dentist"],
-  Hotels: ["hotel", "hostel", "guesthouse"],
-  Shops: ["shop", "mall", "clothing", "electronics", "store"],
-  "Beauty & Wellness": ["salon", "spa", "barber", "haircut", "massage", "gym"],
-  Transport: ["taxi", "bus", "metro", "parking", "train"],
-  "Public Services": ["municipality", "embassy", "police"],
-  Attractions: ["museum", "landmark", "attraction"],
-  Parks: ["park", "playground"],
-  Finance: ["bank", "atm"],
-  Education: ["school", "university", "tutor"],
-  Nightlife: ["bar", "club", "nightlife", "pub"],
-  Automobile: ["mechanic", "garage", "fuel", "petrol", "tyres"],
-  "Pet Services": ["vet", "veterinary", "pet", "grooming"],
-  "Home Services": ["plumber", "electrician", "carpenter", "painter", "locksmith", "gardener", "handyman"]
-};
-
-function matchExploreSearchCategory(query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
-  for (const [category, keywords] of Object.entries(EXPLORE_SEARCH_CATEGORY_HINTS)) {
-    if (keywords.some((word) => new RegExp(`\\b${word}\\b`).test(q))) return category;
-  }
-  return null;
-}
 
 /** Real session behaviour — incremented when the user actually selects a
  * category or a search of theirs is attributed to one (see bindEvents).
@@ -10113,9 +10099,6 @@ function bindEvents() {
       if (button.closest(".carousel-control")) return;
       if (button !== event.target.closest("[data-view]")) return;
       if (event.target.closest(".floating-card-actions, .mini-save")) return;
-      if (button.closest(".ai-search, .tyt-ai-search") && state.query.trim()) {
-        trackEvent("search_performed", { queryLength: state.query.trim().length, destination: button.dataset.view });
-      }
       /* render() only resets scroll when activeView *changes* — re-tapping
          the already-active bottom-nav tab is a no-op for that check, so it
          needs its own explicit "scroll this page back to top" here,
@@ -10691,36 +10674,38 @@ function bindEvents() {
     });
   });
 
+  // "Tell Alwen" is Alwen's primary entry point everywhere it appears, not
+  // a per-screen deterministic search field — every submission opens the
+  // one canonical Alwen conversation and sends the text immediately,
+  // instead of searching in place on whatever screen it was typed from.
+  // classifyAlwenIntent (not this screen) decides place/hire/translate/
+  // general from here on. Same behavior on every screen this bar appears
+  // on (Home/Explore/Hire/Marketplace/Community/Contribute/Businesses/
+  // Reservations/Create) — there is exactly one place it can answer from.
   document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {
     button.addEventListener("click", () => {
       document.getElementById("global-search")?.blur();
-      const trimmedQuery = state.query.trim();
-      if (trimmedQuery) trackEvent("search_performed", { queryLength: trimmedQuery.length });
-      // The Home prompt is Alwen's primary entry point, not a deterministic
-      // search field — every submission here opens the one canonical Alwen
-      // conversation and sends the text immediately, instead of searching
-      // in place further down the page. classifyAlwenIntent (not this
-      // screen) decides place/hire/greeting from here on.
-      if (state.activeView === "home") {
-        if (!trimmedQuery) return;
-        state.query = "";
-        state.activeView = "alwen";
-        state.activeSheet = null;
-        render();
-        submitAlwenConversationMessage(trimmedQuery);
-        return;
-      }
-      if (state.activeView === "explore") {
-        const matched = matchExploreSearchCategory(state.query);
-        if (matched) bumpExploreCategorySignal(matched);
-        if (!state.exploreCategoryChosen) {
-          state.exploreCategory = "All";
-          state.exploreCategoryChosen = true;
-          render();
-        }
-      }
-      document.querySelector('[data-role="ai-search-results"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+      launchAlwenConversationWithQuery(state.query);
     });
+  });
+  document.getElementById("global-search")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    document.getElementById("global-search")?.blur();
+    launchAlwenConversationWithQuery(state.query);
+  });
+
+  // TYT's own "Tell Alwen" bar — was never wired to a real query at all
+  // (its data-view route was computed from the unrelated global state.query
+  // instead of what was actually typed here), now shares the exact same
+  // launch behavior as the bar above.
+  document.querySelector('[data-action="tyt-ai-search-submit"]')?.addEventListener("click", () => {
+    launchAlwenConversationWithQuery(document.getElementById("tyt-search")?.value);
+  });
+  document.getElementById("tyt-search")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    launchAlwenConversationWithQuery(document.getElementById("tyt-search")?.value);
   });
 
   document.querySelectorAll('[data-action="toggle-discover"]').forEach((button) => {

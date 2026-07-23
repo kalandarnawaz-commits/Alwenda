@@ -318,26 +318,32 @@ test("Home never renders an in-place Alwen results preview while typing — type
   assert.doesNotMatch(home, /renderAiSearchResults/, "renderHome must not call renderAiSearchResults at all — Home has no local search-as-you-type panel anymore");
 });
 
-test("the Home ai-search-submit handler opens the canonical Alwen conversation instead of searching in place", () => {
-  const block = extractBindEventsBlock(
-    main,
-    `document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {`,
-    `document.querySelectorAll('[data-action="toggle-discover"]')`
-  );
-  assert.match(block, /if \(state\.activeView === "home"\) \{/, "Home must be special-cased away from the generic in-place search path");
-  assert.match(block, /state\.activeView = "alwen";/, "submitting the Home prompt must navigate into the alwen view");
+test("launchAlwenConversationWithQuery preserves the typed text verbatim, guards empty input, and sends immediately after navigating to Alwen", () => {
+  const fn = extractFunction(main, "launchAlwenConversationWithQuery");
+  assert.match(fn, /const trimmedQuery = String\(rawText \|\| ""\)\.trim\(\);/, "the original typed text must be captured before it is cleared/navigated away from");
+  assert.match(fn, /if \(!trimmedQuery\) return;/, "an empty prompt must not navigate away from wherever it was submitted");
+  assert.match(fn, /state\.query = "";/, "the shared query field must be cleared so a later visit to that screen doesn't show stale text");
+  assert.match(fn, /state\.activeView = "alwen";/, "submitting must navigate into the alwen view");
+  assert.match(fn, /render\(\);\s*submitAlwenConversationMessage\(trimmedQuery\);/, "the exact captured text must be sent into the conversation right after the navigation render");
 });
 
-test("the Home prompt's submitted text is preserved verbatim and sent immediately after navigating to Alwen", () => {
+test("every 'Tell Alwen' entry point — the shared search bar on every screen it appears on, and TYT's own — routes through the one shared launcher, not a per-screen local search", () => {
   const block = extractBindEventsBlock(
     main,
     `document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {`,
     `document.querySelectorAll('[data-action="toggle-discover"]')`
   );
-  const homeBranch = block.slice(block.indexOf('if (state.activeView === "home") {'));
-  assert.match(homeBranch, /const trimmedQuery = state\.query\.trim\(\);|trimmedQuery/, "the original typed text must be captured before it is cleared/navigated away from");
-  assert.match(homeBranch, /if \(!trimmedQuery\) return;/, "an empty prompt must not navigate away from Home at all");
-  assert.match(homeBranch, /render\(\);\s*submitAlwenConversationMessage\(trimmedQuery\);/, "the exact captured text must be sent into the conversation right after the navigation render");
+  assert.match(block, /launchAlwenConversationWithQuery\(state\.query\)/, "the shared search bar (Home/Explore/Hire/Marketplace/Community/Contribute/Businesses/Reservations/Create) must all launch into Alwen the same way");
+  assert.match(block, /document\.getElementById\("global-search"\)\?\.addEventListener\("keydown"/, "pressing Enter in the shared search bar must submit too, not just clicking the button");
+  assert.match(block, /document\.querySelector\('\[data-action="tyt-ai-search-submit"\]'\)\?\.addEventListener\("click", \(\) => \{\s*launchAlwenConversationWithQuery\(document\.getElementById\("tyt-search"\)\?\.value\)/, "TYT's own search bar must read its own input's actual value and launch the same way, not a stale/unrelated field");
+  assert.doesNotMatch(block, /matchExploreSearchCategory|exploreCategoryChosen = true/, "there must be no more per-screen local search branch left for any context");
+});
+
+test("TYT's search input is a real, independently-typed field — not silently aliased to the global search state used elsewhere", () => {
+  const tytSheet = extractFunction(main, "renderTytSheet");
+  assert.doesNotMatch(tytSheet, /data-view="\$\{routeForQuery\(\)\}"/, "the old stale route computed from an unrelated field must be gone");
+  assert.match(tytSheet, /id="tyt-search"/);
+  assert.match(tytSheet, /data-action="tyt-ai-search-submit"/);
 });
 
 test("the floating Tell Alwen launcher opens the same canonical alwen view as the Home prompt, not a local panel toggle", () => {
