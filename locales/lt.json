@@ -401,6 +401,8 @@
     "verifyCodeTitle": "Patikrinkite savo {method}",
     "verifyCodeHint": "Įveskite 6 skaitmenų kodą, kurį išsiuntėme adresu {target}.",
     "authMagicLinkHint": "Atsiųsime saugią prisijungimo nuorodą el. paštu. Slaptažodžio nereikia.",
+    "authMagicLinkMethod": "Nuoroda el. paštu",
+    "authPasswordMethod": "Slaptažodis",
     "authSendSignInLink": "Siųsti prisijungimo nuorodą",
     "authCheckingSession": "Tikriname sesiją",
     "authCheckingSessionHint": "Akimirka, kol Alwenda atkuria saugų prisijungimą.",
