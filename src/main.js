@@ -1,6 +1,5 @@
 import {
   adminStats,
-  alwenActions,
   alwenBusinessDraft,
   alwenListingDraft,
   alwenRecommendations,
@@ -158,23 +157,11 @@ const state = {
   opportunityCategory: "all",
   opportunityDistance: "all",
   headerSolid: false,
-  alwenOpen: false,
   quickTranslateOpen: false,
   localWeather: null,
-  alwenChat: {
-    input: "",
-    lastMessage: "",
-    answer: "",
-    conversationId: null,
-    status: "idle",
-    error: null,
-    createdHelpRequest: null,
-    createdListing: null
-  },
-  /* The real, persistent, multi-turn Alwen experience (Alwen 2.0) — the
-     dedicated Alwen screen uses this, not state.alwenChat above. The
-     floating dock still uses state.alwenChat unchanged (out of scope for
-     this branch — see the unified-Alwen-conversation plan). */
+  /* The one and only Alwen surface (Alwen 2.0) — both the Home prompt and
+     the floating dock launcher route into this same conversation state.
+     There is no separate single-turn chat model anymore. */
   alwenConversation: {
     id: null,
     mode: "chat", // "chat" | "liveTranslate"
@@ -2512,7 +2499,7 @@ function renderShell() {
   const headerTheme = isHome && !state.headerSolid ? "theme-dark-header header-dark header-transparent" : "theme-light-header header-light header-solid";
 
   return `
-    <div class="app-shell ${isHome ? "is-home-shell" : "is-standard-shell"} ${state.alwenOpen ? "has-alwen-open" : ""} ${headerTheme}">
+    <div class="app-shell ${isHome ? "is-home-shell" : "is-standard-shell"} ${headerTheme}">
       <header class="app-top ${headerTheme}">
         ${BrandHeader()}
         <div class="top-controls">
@@ -2530,12 +2517,11 @@ function renderShell() {
         <div class="bottom-nav-group">${navItems.slice(2).map(renderNavButton).join("")}</div>
       </nav>
       ${renderTytOrb()}
-      ${/* The Alwen workspace page IS the Alwen experience now (its own
-         hero has the real chat form) — showing the floating dock on top
-         of it would be two chat surfaces reading the same state.alwenChat
-         stacked on one screen, exactly the "repeated Alwen controls"
-         problem this redesign was asked to remove. Every other screen
-         keeps the dock unchanged as the one consistent entry point. */
+      ${/* The Alwen conversation screen IS the Alwen experience now — the
+         dock is only a launcher into that same screen, so showing it while
+         already there would just be a redundant button to open itself.
+         Every other screen keeps the dock as the one consistent entry
+         point into the single canonical Alwen conversation. */
         state.activeView !== "alwen" ? renderAlwenDock() : ""}
       ${/* Community deliberately drops this floating mic dock — with the
          Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
@@ -3193,10 +3179,10 @@ function alwenGreeting() {
 
 /* ==========================================================================
    Alwen 2.0 — the unified conversation experience. state.alwenConversation
-   (multi-turn, real message history) drives this dedicated screen. The
-   floating dock elsewhere in the app still uses the separate, older
-   state.alwenChat single-turn model unchanged — out of scope for this
-   branch (see the unified-Alwen-conversation plan for the reasoning).
+   (multi-turn, real message history) drives this dedicated screen, and it
+   is the ONLY Alwen chat surface in the app: the Home prompt and the
+   floating dock are both just entry points that route in here (see the
+   ai-search-submit and data-alwen-toggle handlers in bindEvents()).
    ========================================================================== */
 
 function alwenMessageId() {
@@ -4534,124 +4520,18 @@ function renderTytSheet() {
   `;
 }
 
+/** A pure launcher into the one canonical Alwen conversation (Alwen 2.0) —
+ * it used to be its own mini-chat overlay with a duplicate single-turn
+ * chat model, which meant two competing Alwen surfaces could be on
+ * screen/reachable at once. Clicking the orb now just opens the same
+ * alwenConversation screen renderAiSearch("home") routes into, so there
+ * is only ever one place Alwen conversations happen. */
 function renderAlwenDock() {
-  const chat = state.alwenChat;
-  const isLoading = chat.status === "loading";
-  const canRetry = chat.status === "error" && chat.lastMessage;
   return `
-    <aside class="alwen-dock ${state.alwenOpen ? "is-open" : ""}" aria-label="${t("common.tellAlwen")}">
-      <button class="alwen-orb" data-alwen-toggle aria-expanded="${state.alwenOpen ? "true" : "false"}" aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
-      <div class="alwen-panel" role="dialog" aria-label="${t("common.tellAlwen")}">
-        <div class="alwen-panel-head">
-          <div>
-            <p class="eyebrow">${t("common.tellAlwen")}</p>
-            <strong>${t("alwen.alwenDockTitle")}</strong>
-          </div>
-          <button data-alwen-toggle aria-label="${t("common.close")}">×</button>
-        </div>
-
-        <p class="alwen-panel-intro">${t("alwen.alwenDockHint")}</p>
-        ${chat.status === "success" ? `
-          <div class="alwen-chat-answer" role="status">
-            <strong>${t("alwen.alwenChatAnswerLabel")}</strong>
-            <p>${escapeHtml(chat.answer)}</p>
-          </div>
-        ` : ""}
-        ${isLoading ? `
-          <div class="alwen-status-row" role="status">
-            <span class="alwen-status-dot" aria-hidden="true"></span>
-            <span>${t("alwen.alwenChatLooking")}</span>
-          </div>
-        ` : ""}
-        ${chat.status === "error" ? `
-          <div class="alwen-chat-error" role="alert">
-            <p>${escapeHtml(chat.error || t("alwen.alwenChatGenericError"))}</p>
-            <div>
-              ${canRetry ? `<button type="button" data-alwen-retry>${t("alwen.alwenChatRetry")}</button>` : ""}
-              ${state.auth.status !== "signedIn" ? `<button type="button" data-view="profile">${t("common.signIn")}</button>` : ""}
-            </div>
-          </div>
-        ` : ""}
-        <form class="alwen-chat-form" data-alwen-chat-form>
-          <label for="alwen-chat-input">${t("alwen.alwenChatLabel")}</label>
-          <div class="alwen-chat-compose">
-            <textarea id="alwen-chat-input" name="message" maxlength="2000" rows="3" placeholder="${t("alwen.alwenChatPlaceholder")}" ${isLoading ? "disabled" : ""}>${escapeHtml(chat.input)}</textarea>
-            <button type="submit" ${isLoading ? "disabled" : ""}>${isLoading ? t("alwen.alwenChatSending") : t("alwen.alwenChatSend")}</button>
-          </div>
-        </form>
-        <div class="alwen-mode-row">
-          <button type="button" data-alwen-upload="image">${icon("uploadImageMode")}${t("common.uploadImage")}</button>
-          <button type="button" data-alwen-upload="document">${icon("uploadDocumentMode")}${t("common.uploadDocument")}</button>
-        </div>
-        <input type="file" accept="image/*" id="alwen-image-input" class="translation-camera-input" />
-        <input type="file" accept=".pdf,application/pdf" id="alwen-document-input" class="translation-camera-input" />
-        <div class="alwen-actions">${alwenActions.slice(0, 5).map((action) => `<button data-view="${action.view}">${t(action.labelKey)}</button>`).join("")}</div>
-      </div>
+    <aside class="alwen-dock" aria-label="${t("common.tellAlwen")}">
+      <button class="alwen-orb" data-alwen-toggle aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
     </aside>
   `;
-}
-
-async function submitAlwenChat(message = state.alwenChat.input || state.alwenChat.lastMessage) {
-  const trimmed = String(message || "").trim();
-  state.alwenChat.input = trimmed;
-  state.alwenChat.lastMessage = trimmed;
-  state.alwenChat.answer = "";
-  state.alwenChat.error = null;
-  // Bookkeeping only, additive to the existing success path below — lets
-  // the workspace page render a generated-UI card for whatever the Edge
-  // Function actually created, instead of parsing the free-text answer.
-  state.alwenChat.createdHelpRequest = null;
-  state.alwenChat.createdListing = null;
-
-  if (!trimmed) {
-    state.alwenChat.status = "error";
-    state.alwenChat.error = t("alwen.alwenChatEmptyError");
-    render();
-    return;
-  }
-
-  if (state.auth.status !== "signedIn") {
-    state.alwenChat.status = "error";
-    state.alwenChat.error = t("alwen.alwenChatSignedOutError");
-    render();
-    return;
-  }
-
-  state.alwenChat.status = "loading";
-  render();
-
-  try {
-    const result = await sendAlwenMessage({
-      message: trimmed,
-      language: getCurrentLanguage(),
-      city: city.name || "Vilnius",
-      conversationId: state.alwenChat.conversationId
-    });
-    state.alwenChat.status = "success";
-    state.alwenChat.answer = result.answer;
-    state.alwenChat.conversationId = result.conversationId || state.alwenChat.conversationId;
-    state.alwenChat.input = "";
-    trackEvent("alwen_chat_succeeded", { messageLength: trimmed.length });
-    if (result.createdHelpRequest) {
-      applyCreatedHelpRequest(result.createdHelpRequest, { source: "alwen" });
-      state.alwenChat.createdHelpRequest = result.createdHelpRequest;
-    }
-    if (result.createdListing) {
-      applyCreatedListing(result.createdListing);
-      state.alwenChat.createdListing = result.createdListing;
-    }
-  } catch (error) {
-    const code = error?.code || "";
-    state.alwenChat.status = "error";
-    state.alwenChat.error =
-      code === "unauthenticated"
-        ? t("alwen.alwenChatExpiredError")
-        : code === "provider_config_missing"
-          ? t("alwen.alwenChatMissingKeyError")
-          : error?.message || t("alwen.alwenChatGenericError");
-    trackEvent("alwen_chat_failed", { code: code || "unknown" });
-  }
-  render();
 }
 
 /** One-touch voice translator, promoted to the top of the global Alwen
@@ -6415,7 +6295,6 @@ function openLiveOpportunityDetail(id) {
   state.selectedOpportunityId = item.id;
   state.activeView = "liveOpportunityDetail";
   state.activeSheet = null;
-  state.alwenOpen = false;
   state.quickTranslateOpen = false;
   render();
 }
@@ -6573,7 +6452,6 @@ function openEventDetail(id) {
   state.selectedEventId = item.id;
   state.activeView = "eventDetail";
   state.activeSheet = null;
-  state.alwenOpen = false;
   state.quickTranslateOpen = false;
   render();
 }
@@ -7551,7 +7429,6 @@ function openGeneratedConversation({ type, participant, verified = false, previe
   state.activeConversationId = id;
   state.activeView = "conversation";
   state.activeSheet = null;
-  state.alwenOpen = false;
   render();
 }
 
@@ -10144,7 +10021,6 @@ function bindEvents() {
       }
       state.activeView = button.dataset.view;
       state.activeSheet = null;
-      state.alwenOpen = false;
       state.quickTranslateOpen = false;
       if (button.dataset.category) state.category = button.dataset.category;
       if (button.dataset.view === "createListing" && button.dataset.category) {
@@ -10182,9 +10058,13 @@ function bindEvents() {
     });
   });
 
+  // The floating dock is a pure launcher into the one canonical Alwen
+  // conversation screen — not a second chat surface. Every data-alwen-toggle
+  // button across the app (dock orb, Community's "Ask Alwen", etc.) opens
+  // the same alwenConversation screen renderAiSearch("home") routes into.
   document.querySelectorAll("[data-alwen-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.alwenOpen = !state.alwenOpen;
+      state.activeView = "alwen";
       state.activeSheet = null;
       render();
     });
@@ -10196,16 +10076,6 @@ function bindEvents() {
       state.activeSheet = null;
       render();
     });
-  });
-
-  document.querySelector("[data-alwen-chat-form]")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    submitAlwenChat(formData.get("message"));
-  });
-
-  document.querySelector("[data-alwen-retry]")?.addEventListener("click", () => {
-    submitAlwenChat(state.alwenChat.lastMessage);
   });
 
   document.querySelector("[data-alwen-conversation-form]")?.addEventListener("submit", (event) => {
@@ -10337,7 +10207,6 @@ function bindEvents() {
       state.category = button.dataset.category;
       state.activeView = button.dataset.targetView || "marketplace";
       state.activeSheet = null;
-      state.alwenOpen = false;
       if (state.activeView === "marketplace") state.marketplaceCategoryChosen = true;
       render();
     });
@@ -10714,7 +10583,22 @@ function bindEvents() {
   document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {
     button.addEventListener("click", () => {
       document.getElementById("global-search")?.blur();
-      if (state.query.trim()) trackEvent("search_performed", { queryLength: state.query.trim().length });
+      const trimmedQuery = state.query.trim();
+      if (trimmedQuery) trackEvent("search_performed", { queryLength: trimmedQuery.length });
+      // The Home prompt is Alwen's primary entry point, not a deterministic
+      // search field — every submission here opens the one canonical Alwen
+      // conversation and sends the text immediately, instead of searching
+      // in place further down the page. classifyAlwenIntent (not this
+      // screen) decides place/hire/greeting from here on.
+      if (state.activeView === "home") {
+        if (!trimmedQuery) return;
+        state.query = "";
+        state.activeView = "alwen";
+        state.activeSheet = null;
+        render();
+        submitAlwenConversationMessage(trimmedQuery);
+        return;
+      }
       if (state.activeView === "explore") {
         const matched = matchExploreSearchCategory(state.query);
         if (matched) bumpExploreCategorySignal(matched);

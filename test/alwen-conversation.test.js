@@ -292,3 +292,65 @@ test("every Alwen 2.0 trackEvent call site passes only typed metadata, never mes
     assert.doesNotMatch(propsSource, /\btrimmed\b(?!\.length)|\bresult\.answer\b(?!\.length)|\bresult\.translated\b(?!\.length)|\bresult\.original\b(?!\.length)/, `trackEvent payload must not include message/translation content: ${propsSource}`);
   }
 });
+
+/* ---------------------------------------------------------------------
+   One canonical Alwen surface — the Home prompt and the floating dock
+   both route into the same alwenConversation screen; there is no second,
+   legacy mini-chat left anywhere for either of them to fall back into.
+--------------------------------------------------------------------- */
+
+function extractBindEventsBlock(source, startMarker, endMarker) {
+  const bindEvents = extractFunction(source, "bindEvents");
+  const start = bindEvents.indexOf(startMarker);
+  assert.ok(start !== -1, `bindEvents must contain: ${startMarker}`);
+  const end = bindEvents.indexOf(endMarker, start);
+  assert.ok(end !== -1, `bindEvents must contain after the start marker: ${endMarker}`);
+  return bindEvents.slice(start, end);
+}
+
+test("classifyAlwenIntent treats a plain greeting like 'hello alwen' as general conversation, never a place/hire search", () => {
+  assert.equal(classifyAlwenIntent("hello alwen"), ALWEN_INTENTS.GENERAL_CONVERSATION);
+  assert.equal(classifyAlwenIntent("hi Alwen, how are you?"), ALWEN_INTENTS.GENERAL_CONVERSATION);
+});
+
+test("the Home ai-search-submit handler opens the canonical Alwen conversation instead of searching in place", () => {
+  const block = extractBindEventsBlock(
+    main,
+    `document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {`,
+    `document.querySelectorAll('[data-action="toggle-discover"]')`
+  );
+  assert.match(block, /if \(state\.activeView === "home"\) \{/, "Home must be special-cased away from the generic in-place search path");
+  assert.match(block, /state\.activeView = "alwen";/, "submitting the Home prompt must navigate into the alwen view");
+});
+
+test("the Home prompt's submitted text is preserved verbatim and sent immediately after navigating to Alwen", () => {
+  const block = extractBindEventsBlock(
+    main,
+    `document.querySelectorAll('[data-action="ai-search-submit"]').forEach((button) => {`,
+    `document.querySelectorAll('[data-action="toggle-discover"]')`
+  );
+  const homeBranch = block.slice(block.indexOf('if (state.activeView === "home") {'));
+  assert.match(homeBranch, /const trimmedQuery = state\.query\.trim\(\);|trimmedQuery/, "the original typed text must be captured before it is cleared/navigated away from");
+  assert.match(homeBranch, /if \(!trimmedQuery\) return;/, "an empty prompt must not navigate away from Home at all");
+  assert.match(homeBranch, /render\(\);\s*submitAlwenConversationMessage\(trimmedQuery\);/, "the exact captured text must be sent into the conversation right after the navigation render");
+});
+
+test("the floating Tell Alwen launcher opens the same canonical alwen view as the Home prompt, not a local panel toggle", () => {
+  const block = extractBindEventsBlock(
+    main,
+    `document.querySelectorAll("[data-alwen-toggle]").forEach((button) => {`,
+    `document.querySelectorAll("[data-quick-translate-toggle]")`
+  );
+  assert.match(block, /state\.activeView = "alwen";/, "data-alwen-toggle must navigate into the alwen view");
+  assert.doesNotMatch(block, /state\.alwenOpen/, "there must be no separate open/closed panel state left to toggle");
+});
+
+test("no duplicate legacy mini-chat surface remains anywhere in the app", () => {
+  assert.doesNotMatch(main, /state\.alwenChat\b/, "the old single-turn alwenChat state model must be fully removed");
+  assert.doesNotMatch(main, /function submitAlwenChat\(/, "the old single-turn submitAlwenChat function must be fully removed");
+  assert.doesNotMatch(main, /data-alwen-chat-form/, "the legacy mini-chat form must no longer be rendered or bound");
+  assert.doesNotMatch(main, /class="alwen-panel"/, "the floating dock must no longer render its own chat panel");
+  assert.doesNotMatch(main, /alwenOpen/, "the open/closed dock-panel state must be fully removed, not just unused");
+  const dock = extractFunction(main, "renderAlwenDock");
+  assert.doesNotMatch(dock, /alwen-chat-form|alwen-chat-compose|submitAlwenChat/, "renderAlwenDock must be a pure launcher, not a second chat surface");
+});
