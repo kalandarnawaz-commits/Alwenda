@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
-const mockData = await readFile(new URL("../src/data/mockData.js", import.meta.url), "utf8");
+// serviceProfessionals is fabricated demo content, gated out of production —
+// it now lives in devFixtures.js (see src/data/mockData.js), not mockData.js.
+const mockData = await readFile(new URL("../src/data/devFixtures.js", import.meta.url), "utf8");
 
 function extractFunction(source, name) {
   const start = source.indexOf(`function ${name}(`);

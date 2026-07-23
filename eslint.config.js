@@ -9,7 +9,12 @@ export default [
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
-      globals: { ...globals.browser }
+      // Browser code, plus `process` alone (not the rest of globals.node)
+      // — src/config.js defensively checks `typeof process !== "undefined"`
+      // the same way it already checks `typeof window !== "undefined"`, so
+      // the same source file works correctly under both the browser and
+      // Node's test runner (APP_ENV can be set via process.env in tests).
+      globals: { ...globals.browser, process: "readonly" }
     },
     rules: {
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],

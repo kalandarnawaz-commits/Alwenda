@@ -213,6 +213,7 @@
     "reservationHeroSubtitle": "Restoranai, apgyvendinimas ir patikimos paslaugos — viena užklausa, tikri atsakymai.",
     "newRequestTitle": "Nauja užklausa",
     "myRequestsTitle": "Jūsų užklausos",
+    "reservationsEmptyTitle": "Dar neturite jokių rezervacijų",
     "popularToBookTitle": "Populiaru užsakyti",
     "popularToBookHint": "Aukščiausiai vertinamos vietos netoliese, paruoštos užklausai vienu paspaudimu.",
     "requestPlaceholder": "Restoranas, butas, viešbutis, klinika, paslauga...",
@@ -1114,7 +1115,7 @@
     "futureAiConversations": "Būsimi pokalbiai",
     "futureAiConversationsHint": "Alwen pokalbiai palaikys tekstą, balsą, vaizdus, failus, perskaitymo būsenas, santraukas ir procesų patvirtinimus.",
     "emptyTitle": "Kol kas nėra pokalbių.",
-    "emptyHint": "Žinutės nuo žmonių, verslų ir Alwen pasirodys čia.",
+    "emptyHint": "Susisiekite su verslu ar kitu naudotoju, kad pradėtumėte pokalbį.",
     "conversationTypeProfessional": "Specialistas",
     "conversationTypeBusiness": "Verslas",
     "conversationTypeMarketplace": "Turgus",
@@ -1180,6 +1181,10 @@
     },
     "sourceLabel": "Šaltinis",
     "updatedLabel": "Atnaujinta",
+    "emptyTitle": "Kol kas nėra verslų",
+    "emptyHint": "Tikros vietos verslo įmonės atsiras čia, kai savininkai pretenduos ir patvirtins savo profilius. Aplinkoje jau yra tikrų vietų netoliese.",
+    "emptyCta": "Naršyti aplinkoje",
+    "emptyReviews": "Kol kas nėra atsiliepimų",
     "verify": {
       "verifyBusinessEmailDomain": "Verslo el. pašto domenas",
       "verifyPhone": "Telefono patikra",
@@ -1437,6 +1442,9 @@
     "marketplaceTitle": "Viskas, ką miestas gali padaryti jums.",
     "marketplaceHeroTitle": "Rinka",
     "marketplaceHeroSubtitle": "Pirk. Parduok. Atrask. Samdyk. Rezervuok.",
+    "emptyTitle": "Kol kas nėra skelbimų",
+    "emptyHint": "Būkite pirmasis savo rajone, parduodantis, nuomojantis ar siūlantis paslaugą.",
+    "emptyCta": "Sukurti skelbimą",
     "hub": {
       "listingsCount": "{count} skelbimai",
       "noListingsYet": "Nauja čia",
@@ -1725,7 +1733,9 @@
     "adminListings": "Skelbimai",
     "adminBusinesses": "Verslai",
     "adminReservations": "Rezervacijos",
-    "adminTranslations": "Vertimai"
+    "adminTranslations": "Vertimai",
+    "unauthorizedTitle": "Neprieinama",
+    "unauthorizedHint": "Šis įrankis prieinamas tik įgaliotiems komandos nariams."
   },
   "mock": {
     "live": {
