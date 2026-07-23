@@ -4717,7 +4717,7 @@ function renderPulse(post) {
         <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t(meta.labelKey), verified: post.verified, context: "community" })}>
           <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
           <div class="pulse-author-copy">
-            <span class="pulse-author-name">${escapeHtml(post.author)}${post.verified ? `<span class="pulse-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</span>
+            <span class="pulse-author-name">${escapeHtml(post.author)}${post.verified ? verifiedCheck(t("messages.verified")) : ""}</span>
             <span class="pulse-meta-line">${escapeHtml(post.area)} · ${escapeHtml(post.time)}</span>
           </div>
         </div>
@@ -5570,10 +5570,12 @@ function renderContributeActivityCard(item) {
   const hasActivity = item.count > 0;
   return `
     <article class="economy-activity-card">
-      <span class="tile-icon">${icon(item.icon)}</span>
-      <div>
-        <h3>${t(item.labelKey)}</h3>
-        <p>${hasActivity ? t("contribute.activity.activeDetail", { count: item.count }) : t(item.emptyKey)}</p>
+      <div class="economy-activity-card-top">
+        <span class="tile-icon">${icon(item.icon)}</span>
+        <div>
+          <h3>${t(item.labelKey)}</h3>
+          <p>${hasActivity ? t("contribute.activity.activeDetail", { count: item.count }) : t(item.emptyKey)}</p>
+        </div>
       </div>
       <button type="button" data-view="${hasActivity ? item.activeView : item.emptyView}">${t(hasActivity ? item.activeCtaKey : item.emptyCtaKey)}</button>
     </article>
