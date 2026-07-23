@@ -174,6 +174,17 @@ test("live_conversation intent flips the conversation into liveTranslate mode", 
   assert.match(fn, /if \(enterLiveMode\) convo\.mode = "liveTranslate";/);
 });
 
+test("alwenComposerTranscriptionLanguage hints Whisper with the conversation's tracked expected-speaker language during live translate, not the static UI language", () => {
+  const fn = extractFunction(main, "alwenComposerTranscriptionLanguage");
+  assert.match(fn, /if \(convo\.mode === "liveTranslate" && convo\.languagePair\.from !== "auto"\) return convo\.languagePair\.from;/);
+  assert.match(fn, /return getCurrentLanguage\(\);/);
+});
+
+test("startAlwenComposerRecording transcribes with alwenComposerTranscriptionLanguage(convo), never a static language hint that would mis-decode the other speaker's language mid live-translate", () => {
+  const fn = extractFunction(main, "startAlwenComposerRecording");
+  assert.match(fn, /transcribeTranslationAudio\(\{ audioBlob, language: alwenComposerTranscriptionLanguage\(convo\) \}\)/);
+});
+
 test("alwenChatClient passes mode/toLanguage through and returns the translation shape distinctly from chat answers", async () => {
   const source = await readRepoFile("src/services/alwenChatClient.js");
   assert.match(source, /mode = "chat", toLanguage = "auto"/);
