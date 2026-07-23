@@ -3963,14 +3963,13 @@ function renderHome() {
       </div>
     </section>
 
-    ${/* Home already has its own curated rails below (Live around you,
-       Trending Marketplace, etc.) — the generic "Nearby picks"
-       discover-toggle panel only ever showed up here because
-       state.discoverOpen is global and was left on from Marketplace or
-       Explore, and read as redundant clutter. A typed search still
-       surfaces "Alwen found" results in place, same as every other
-       screen; only the no-query discover fallback is suppressed. */
-      state.query.trim() ? renderAiSearchResults() : ""}
+    ${/* Home no longer shows an in-place "Alwen found" results preview as
+       you type — the Home prompt is purely an entry point into the one
+       canonical Alwen conversation now (see the ai-search-submit handler),
+       so typed text is only ever acted on by submitting it there, never
+       searched in place here. Home already has its own curated rails
+       below (Live around you, Trending Marketplace, etc.) regardless. */
+      ""}
 
     ${renderLiveAroundYou()}
     ${renderTrendingMarketplace()}

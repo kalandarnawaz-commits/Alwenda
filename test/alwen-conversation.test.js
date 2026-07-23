@@ -313,6 +313,11 @@ test("classifyAlwenIntent treats a plain greeting like 'hello alwen' as general 
   assert.equal(classifyAlwenIntent("hi Alwen, how are you?"), ALWEN_INTENTS.GENERAL_CONVERSATION);
 });
 
+test("Home never renders an in-place Alwen results preview while typing — typed text is only acted on by submitting into the conversation", () => {
+  const home = extractFunction(main, "renderHome");
+  assert.doesNotMatch(home, /renderAiSearchResults/, "renderHome must not call renderAiSearchResults at all — Home has no local search-as-you-type panel anymore");
+});
+
 test("the Home ai-search-submit handler opens the canonical Alwen conversation instead of searching in place", () => {
   const block = extractBindEventsBlock(
     main,
