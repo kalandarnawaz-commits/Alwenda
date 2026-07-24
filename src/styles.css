@@ -10727,6 +10727,321 @@ strong:has(> .verified-check) {
   }
 }
 
+/* === Global-standard social identity + marketplace profile
+   (renderUserProfile) — cover + avatar hero, Following/Followers/Trust
+   metrics, reputation signals, tabs, a responsive listing grid, and the
+   followers/following/trust dialogs (which reuse .report-dialog-backdrop/
+   .report-dialog, styled above, rather than a new dialog shell). === */
+.user-profile-cover {
+  height: clamp(120px, 22vw, 200px);
+  margin: -20px -20px 0;
+  border-radius: var(--radius-lg, 24px) var(--radius-lg, 24px) 0 0;
+  background-position: center;
+  background-size: cover;
+  background-color: var(--surface-soft);
+}
+
+.user-profile-cover-fallback {
+  background-image: linear-gradient(135deg, var(--emerald-700), var(--surface-soft));
+}
+
+.user-profile-identity {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 4px;
+}
+
+.user-profile-avatar,
+.user-profile-avatar .profile-portrait,
+.user-profile-avatar .profile-portrait-fallback {
+  width: 96px;
+  height: 96px;
+}
+
+.user-profile-avatar {
+  /* Overlaps the avatar over the cover on its own — the row itself stays
+     in normal flow below the cover, so a tall name/handle/meta text block
+     never gets dragged up underneath the cover image (see the identical
+     .user-profile-identity-text rule below, which intentionally has no
+     negative margin). */
+  margin-top: -48px;
+  border: 4px solid var(--surface);
+  background: var(--surface);
+}
+
+.user-profile-identity-text {
+  flex: 1;
+  min-width: 180px;
+  padding-top: 8px;
+}
+
+.user-profile-identity-text h1 {
+  margin: 4px 0 0;
+  font-size: clamp(1.3rem, 4vw, 1.7rem);
+  line-height: 1.15;
+}
+
+.user-profile-handle {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.user-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.user-profile-more-menu {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.user-profile-more-menu button {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .user-profile-avatar,
+  .user-profile-avatar .profile-portrait,
+  .user-profile-avatar .profile-portrait-fallback {
+    width: 76px;
+    height: 76px;
+  }
+
+  .user-profile-avatar {
+    margin-top: -40px;
+  }
+
+  .user-profile-actions {
+    width: 100%;
+  }
+
+  .user-profile-actions .auth-primary-button,
+  .user-profile-actions .auth-link {
+    flex: 1;
+  }
+}
+
+.profile-social-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 16px);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.profile-metric {
+  display: grid;
+  gap: 2px;
+  padding: 12px 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.profile-metric:hover,
+.profile-metric:focus-visible {
+  background: var(--surface-soft);
+}
+
+.profile-metric strong {
+  font-size: 1.15rem;
+}
+
+.profile-metric span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.profile-reputation-signals {
+  margin-top: var(--space-2);
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: var(--space-4, 20px);
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.profile-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-tabs button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.profile-tabs button.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+[id="profile-tabpanel"] {
+  margin-top: var(--space-3);
+}
+
+.profile-listing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .profile-listing-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .profile-listing-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.profile-listing-grid-loading {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .profile-listing-grid-loading {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.profile-listing-skeleton {
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-md, 16px);
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: profile-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes profile-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-listing-skeleton {
+    animation: none;
+  }
+}
+
+.profile-listing-photo {
+  background-position: center;
+  background-size: cover;
+}
+
+.profile-listing-status {
+  font-weight: 800;
+}
+
+.profile-listing-status-published {
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--emerald-text);
+}
+
+.profile-listing-status-sold,
+.profile-listing-status-expired {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.profile-listing-status-paused,
+.profile-listing-status-draft {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.profile-reviews-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.profile-review-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 16px);
+  background: var(--surface);
+}
+
+.profile-review-rating {
+  color: #f59e0b;
+  letter-spacing: 2px;
+}
+
+.profile-review-card p {
+  margin: 6px 0 0;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.profile-review-date {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.profile-follow-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-follow-list .avatar-frame,
+.profile-follow-list .profile-portrait,
+.profile-follow-list .public-profile-initials {
+  width: 44px;
+  height: 44px;
+}
+
+.profile-about-bio {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
 /* === Professional list cards ("Matching professionals") — bigger avatar,
    a real stat row instead of a flat wall of grey text, and a fixed
    .verified-meta stretch bug (see .verified-meta above) that was rendering
