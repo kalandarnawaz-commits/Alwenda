@@ -785,6 +785,12 @@ async function hydrateSupabaseAuth() {
       } catch (error) {
         state.auth.authError = error?.message || t("auth.authErrorGeneric");
         applySignedOutState();
+        // Reset the dedupe tracker here too — without this, a later
+        // recovery event for the same user that this failed attempt had
+        // already marked as hydrated would be wrongly treated as a
+        // no-op duplicate, leaving the user stuck looking signed-out
+        // despite having a valid recovered session.
+        hydratedAuthUserId = null;
       }
       if (shouldRender) render();
     });

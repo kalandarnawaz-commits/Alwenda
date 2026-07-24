@@ -104,8 +104,19 @@ test("applySupabaseSession reports whether anything actually changed, so the cal
 test("hydrateSupabaseAuth's onAuthStateChange handler only calls render() when applySupabaseSession reports a real change", () => {
   const fn = extractFunction(main, "hydrateSupabaseAuth");
   assert.match(fn, /shouldRender = await applySupabaseSession\(changedSession, event\);/);
-  assert.match(fn, /if \(shouldRender\) render\(\);/);
-  // The catch branch still forces a render — an auth error is itself a
-  // real, user-visible state change (e.g. bounced to signed-out).
-  assert.match(fn, /catch \(error\) \{\s*state\.auth\.authError[\s\S]*applySignedOutState\(\);\s*\}\s*if \(shouldRender\) render\(\);/);
+  const catchBlockIndex = fn.indexOf("} catch (error) {\n        state.auth.authError");
+  const finalRenderIndex = fn.indexOf("if (shouldRender) render();");
+  assert.ok(catchBlockIndex > -1 && finalRenderIndex > catchBlockIndex, "the catch block must precede the shouldRender-gated render() call");
+  // shouldRender defaults to true and is never reassigned inside the catch
+  // branch, so an uncaught applySupabaseSession error still forces a
+  // render — an auth error is itself a real, user-visible state change
+  // (e.g. bounced to signed-out).
+  assert.doesNotMatch(fn.slice(catchBlockIndex, finalRenderIndex), /shouldRender\s*=/, "the catch branch must not reassign shouldRender — it must keep its default `true` so an error still renders");
+});
+
+test("hydrateSupabaseAuth's catch branch resets the hydratedAuthUserId dedupe tracker, so a later recovery for the same user is never wrongly treated as a duplicate", () => {
+  const fn = extractFunction(main, "hydrateSupabaseAuth");
+  const catchBlockMatch = fn.match(/\} catch \(error\) \{\s*state\.auth\.authError[\s\S]*?applySignedOutState\(\);([\s\S]*?)\n\s*\}\s*\n\s*if \(shouldRender\) render\(\);/);
+  assert.ok(catchBlockMatch, "could not find the onAuthStateChange catch block");
+  assert.match(catchBlockMatch[1], /hydratedAuthUserId = null;/, "without this, a failed applySupabaseSession call that had already marked a user as hydrated would leave that user permanently deduped — a subsequent recovery event for the same user would be silently dropped (no re-render), leaving them stuck looking signed-out despite a valid recovered session");
 });
