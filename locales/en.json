@@ -870,6 +870,17 @@
       "voiceDenied": "Microphone permission denied",
       "voiceCancelled": "Voice input cancelled",
       "voiceError": "Couldn't hear that — try again"
+    },
+    "composer": {
+      "composerPlaceholder": "Ask Alwen anything...",
+      "composerExamples": [
+        "Translate this conversation",
+        "Find a doctor nearby",
+        "Weekend plans",
+        "Compare restaurants",
+        "Help me post a listing"
+      ],
+      "composerSendLabel": "Send to Alwen"
     }
   },
   "tyt": {

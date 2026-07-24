@@ -870,6 +870,17 @@
       "voiceDenied": "Mikrofonzugriff verweigert",
       "voiceCancelled": "Spracheingabe abgebrochen",
       "voiceError": "Das haben wir nicht verstanden — versuch es erneut"
+    },
+    "composer": {
+      "composerPlaceholder": "Frag Alwen irgendetwas...",
+      "composerExamples": [
+        "Übersetze dieses Gespräch",
+        "Finde einen Arzt in der Nähe",
+        "Wochenendpläne",
+        "Vergleiche Restaurants",
+        "Hilf mir, eine Anzeige zu veröffentlichen"
+      ],
+      "composerSendLabel": "An Alwen senden"
     }
   },
   "tyt": {
