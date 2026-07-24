@@ -37,6 +37,7 @@ import {
   setLanguage,
   loadLocale,
   getCurrentLanguage,
+  currentLocaleTag,
   formatDate,
   formatCurrency,
   formatDistanceMeters,
@@ -144,6 +145,18 @@ const state = {
   translateCameraProgress: 0,
   translateCameraErrorMessage: null,
   query: "",
+  /* Home hero's own voice-search affordance — deliberately separate from
+     Translate's state.translateRecording/startVoiceInput() (main.js, near
+     startVoiceInput): this one writes straight into state.query and
+     auto-submits through the same launchAlwenConversationWithQuery() path
+     as typing + Enter, instead of feeding the Translate pipeline. Values:
+     "unsupported" | "idle" | "listening" | "denied" | "cancelled" | "error". */
+  homeVoiceState: "idle",
+  /* Real, user-generated recent Alwen queries only — see recordRecentQuery()
+     near launchAlwenConversationWithQuery for the trim/dedupe/sensitive-
+     filter/cap rules. Never fabricated, matches every other "only real
+     data" list in this file (savedPlaceIds, liveAroundYou, etc.). */
+  recentQueries: [],
   discoverOpen: false,
   marketplaceCategoryChosen: false,
   exploreCategoryChosen: false,
@@ -322,6 +335,18 @@ const LEGAL_POLICY_VERSION = "ALWENDA_LEGAL_POLICIES_EN-2026-07-18";
 const ANALYTICS_MAX_EVENTS = 300;
 const LAST_SESSION_STARTED_DATE_KEY = "alwenda:last-session-started-date";
 const BUSINESS_OVERRIDES_KEY = "alwenda:businessOverrides";
+const RECENT_QUERIES_KEY = "alwenda:recentQueries";
+const RECENT_QUERIES_MAX = 3;
+const RECENT_QUERY_MAX_LENGTH = 120;
+
+/** Conservative keyword screen for the one-line "Continue: '{query}'" memory
+ * feature — a query matching any of these is still answered by Alwen
+ * normally, it's just never written to persisted recent-query history, so
+ * a health/emergency/legal/financial/identity search never lingers as
+ * visible text on the next Home visit (e.g. over someone's shoulder, or a
+ * shared device). Deliberately broad/over-inclusive rather than precise:
+ * false positives just mean one fewer memory chip, never a leaked one. */
+const SENSITIVE_QUERY_PATTERN = /\b(doctor|dentist|clinic|hospital|symptom|diagnos|medication|prescription|therapy|therapist|mental health|std|pregnan|abortion|emergency|urgent|911|112|ambulance|police|lawyer|attorney|legal aid|divorce|custody|visa|asylum|deportation|immigration status|passport|ssn|social security|national id|id number|bank account|credit card|loan|debt|salary|bankrupt|eviction|domestic violence|abuse|shelter|addiction|rehab)\b/i;
 
 /**
  * Claimed/edited business data, keyed by business id, layered on top of
@@ -647,6 +672,10 @@ function hydrateAuthFromStorage() {
   state.hasOnboarded = Boolean(readLocalStorage(ONBOARDED_KEY));
   const storedSettings = readLocalStorage(SETTINGS_KEY);
   if (storedSettings) state.settings = { ...state.settings, ...storedSettings };
+  const storedRecentQueries = readLocalStorage(RECENT_QUERIES_KEY);
+  if (Array.isArray(storedRecentQueries)) {
+    state.recentQueries = storedRecentQueries.filter((entry) => typeof entry === "string").slice(0, RECENT_QUERIES_MAX);
+  }
 }
 
 function applySignedOutState() {
@@ -1696,6 +1725,26 @@ async function refreshLocalWeather() {
   }
 }
 
+/** Truthful only where opening_hours data can actually answer the question:
+ * counts as "open now" only pharmacies isOpenNow() can resolve to a definite
+ * true/false (it returns null for unparseable/missing hours — see isOpenNow
+ * above). If not a single real pharmacy record has determinable hours, this
+ * shows a plain nearby-count instead of ever asserting an open/closed status
+ * nobody can actually verify. Returns null (no pulse line at all) if there
+ * isn't a single real pharmacy in the imported dataset. */
+function pharmacySignal() {
+  const pharmacies = importedBusinesses.filter((item) => item.category === "Pharmacy");
+  if (!pharmacies.length) return null;
+  const now = new Date();
+  const statuses = pharmacies.map((item) => isOpenNow(item.openingHours, now));
+  const determinable = statuses.some((status) => status === true || status === false);
+  if (determinable) {
+    const openCount = statuses.filter((status) => status === true).length;
+    return { labelKey: "home.signals.pharmacyLabel", value: String(openCount), detailKey: "home.signals.pharmacyOpenDetail" };
+  }
+  return { labelKey: "home.signals.pharmacyLabel", value: String(pharmacies.length), detailKey: "home.signals.pharmacyNearbyDetail" };
+}
+
 /* Events/Jobs/Apartments values are computed from the real underlying
    collections (EVENTS, listings) on every call — never hardcoded — so the
    hero tile can never drift out of sync with what its destination screen
@@ -1710,18 +1759,20 @@ function currentLivingCitySignals() {
     { ...livingCitySignals[2], value: String(jobsCount) },
     { ...livingCitySignals[3], value: String(rentalsCount) }
   ];
-  if (!state.localWeather) return base;
+  const pharmacy = pharmacySignal();
+  const withPharmacy = pharmacy ? [...base, pharmacy] : base;
+  if (!state.localWeather) return withPharmacy;
   const [emoji, condition] = weatherCondition(state.localWeather.weather_code);
   const temperature = Math.round(state.localWeather.temperature_2m);
   const feelsLike = Math.round(state.localWeather.apparent_temperature);
   const wind = Math.round(state.localWeather.wind_speed_10m);
   return [
     {
-      ...base[0],
+      ...withPharmacy[0],
       value: `${temperature}°C`,
       detail: `${emoji} ${condition} · 🌡️ ${feelsLike}°C · 💨 ${wind} km/h`
     },
-    ...base.slice(1)
+    ...withPharmacy.slice(1)
   ];
 }
 
@@ -2592,15 +2643,26 @@ function renderShell() {
       ${/* The Alwen conversation screen IS the Alwen experience now — the
          dock is only a launcher into that same screen, so showing it while
          already there would just be a redundant button to open itself.
-         Every other screen keeps the dock as the one consistent entry
-         point into the single canonical Alwen conversation. */
-        state.activeView !== "alwen" ? renderAlwenDock() : ""}
+         Home also drops it now: the hero's own AI search bar (renderAiSearch
+         "home") already opens the exact same conversation inline, so the
+         floating dock would just be a second, redundant "ask Alwen" button
+         stacked on top of the one that's already the largest thing on
+         screen. Every other screen keeps the dock as the one consistent
+         entry point into the single canonical Alwen conversation. Note:
+         TYT (the centre orb above) is a separate, unrelated "Trade Your
+         Time" earn/help/sell hub — not a translation or Alwen-chat
+         surface — so it is deliberately NOT part of this noise cleanup
+         and stays visible on every screen including Home. */
+        state.activeView !== "alwen" && state.activeView !== "home" ? renderAlwenDock() : ""}
       ${/* Community deliberately drops this floating mic dock — with the
          Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
          already on screen, a third floating circle was competing
-         directly with post cards/images for attention. Every other
-         screen keeps it unchanged. */
-        state.activeView !== "translate" && state.activeView !== "community" ? renderQuickTranslateDock() : ""}
+         directly with post cards/images for attention. Home drops it for
+         the same reason as the Alwen dock above: its own hero already has
+         a full AI input (with its own mic — see renderAiSearch/startHome-
+         VoiceSearch), so this second floating translate/mic affordance is
+         redundant there. Every other screen keeps it unchanged. */
+        state.activeView !== "translate" && state.activeView !== "community" && state.activeView !== "home" ? renderQuickTranslateDock() : ""}
       ${renderSheet()}
       ${renderPersistentFooter()}
       ${renderCookieConsent()}
@@ -3602,10 +3664,30 @@ function renderAlwenConversationScreen() {
  * conversation, and submit the text immediately. There is exactly one
  * place "Tell Alwen" ever answers from — never a local inline result
  * panel that leaves the user wondering why nothing happened. */
+/** Home's "Continue: '{query}'" memory chip — real, user-generated queries
+ * only, trimmed/deduplicated/length-capped/sensitive-filtered before ever
+ * touching localStorage (see SENSITIVE_QUERY_PATTERN above). Fails silently
+ * if localStorage is unavailable via the existing readLocalStorage/
+ * writeLocalStorage helpers, same as every other persisted list in this
+ * file — the in-memory state.recentQueries still works for the session. */
+function recordRecentQuery(trimmedQuery) {
+  if (!trimmedQuery || trimmedQuery.length > RECENT_QUERY_MAX_LENGTH) return;
+  if (SENSITIVE_QUERY_PATTERN.test(trimmedQuery)) return;
+  const deduped = state.recentQueries.filter((entry) => entry.toLowerCase() !== trimmedQuery.toLowerCase());
+  state.recentQueries = [trimmedQuery, ...deduped].slice(0, RECENT_QUERIES_MAX);
+  writeLocalStorage(RECENT_QUERIES_KEY, state.recentQueries);
+}
+
+function clearRecentQueries() {
+  state.recentQueries = [];
+  writeLocalStorage(RECENT_QUERIES_KEY, null);
+}
+
 function launchAlwenConversationWithQuery(rawText) {
   const trimmedQuery = String(rawText || "").trim();
   if (!trimmedQuery) return;
   trackEvent("search_performed", { queryLength: trimmedQuery.length });
+  recordRecentQuery(trimmedQuery);
   state.query = "";
   state.activeView = "alwen";
   state.activeSheet = null;
@@ -4067,43 +4149,122 @@ const LIVING_SIGNAL_DESTINATION = [
   { view: "explore" },
   { view: "events" },
   { view: "marketplace", category: "jobs" },
-  { view: "marketplace", category: "rentals" }
+  { view: "marketplace", category: "rentals" },
+  { view: "explore", seeAllCategory: "Pharmacy" }
 ];
 
-function renderHome() {
+/* A wider pool than the 4 fixed chips this replaces — every destination is
+   an existing, already-real view/category (no new routing invented here),
+   the pool just gives selectHomeIntentChips() below more real options to
+   rank between. */
+const HOME_INTENT_CHIPS = [
+  { id: "doctor", labelKey: "home.intent.intentNeedDoctor", view: "explore", seeAllCategory: "Healthcare" },
+  { id: "translate", labelKey: "home.intent.intentTranslate", view: "translate" },
+  { id: "weekendPlans", labelKey: "home.intent.intentWeekendEvents", view: "explore" },
+  { id: "sellSomething", labelKey: "home.intent.intentSellSomething", view: "marketplace" },
+  { id: "needHelp", labelKey: "home.intent.intentNeedHelp", view: "community" },
+  { id: "findWork", labelKey: "home.intent.intentEarnNearby", view: "contribute" },
+  { id: "emergency", labelKey: "home.intent.intentEmergency", view: "explore", seeAllCategory: "Pharmacy" },
+  { id: "nearbyOffers", labelKey: "home.intent.intentNearbyOffers", view: "offers" },
+  { id: "plumber", labelKey: "home.intent.intentNeedPlumber", view: "hire" },
+  { id: "taxi", labelKey: "home.intent.intentNeedTaxi", view: "explore", seeAllCategory: "Transport" }
+];
+
+const RAIN_SNOW_WEATHER_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]);
+
+/** Deterministic by design: the same state (time bucket, weather, auth,
+ * real inventory counts) always ranks the pool the same way, and the set
+ * only changes when one of those real signals actually changes — never on
+ * a timer or randomly. Each chip keeps a fixed pool-order weight as a
+ * stable tie-break, plus a flat bonus when a genuine signal favours it;
+ * nothing here invents relevance, it only reprioritises among destinations
+ * that are always valid regardless of ranking. */
+function selectHomeIntentChips(count = 5) {
   const daySuffix = timeOfDaySuffix();
-  const displayName = state.auth.status === "signedIn" ? `, ${escapeHtml(state.auth.user.name.split(" ")[0])}` : "";
+  const isWeekend = [0, 6].includes(new Date().getDay());
+  const isBadWeather = Boolean(state.localWeather && RAIN_SNOW_WEATHER_CODES.has(state.localWeather.weather_code));
+  const isSignedIn = state.auth.status === "signedIn";
+  const hasEarnInventory = earnToday.length > 0;
+
+  const boost = {
+    doctor: daySuffix === "Morning" ? 1 : 0,
+    emergency: isBadWeather ? 1 : 0,
+    weekendPlans: isWeekend ? 1 : 0,
+    findWork: hasEarnInventory ? 1 : 0,
+    nearbyOffers: isSignedIn ? 1 : 0,
+    taxi: daySuffix === "Evening" ? 1 : 0,
+    translate: !isSignedIn ? 1 : 0
+  };
+
+  return HOME_INTENT_CHIPS
+    .map((chip, index) => ({ chip, score: (boost[chip.id] || 0) * 100 + (HOME_INTENT_CHIPS.length - index) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, count)
+    .map((entry) => entry.chip);
+}
+
+/** Real time-of-day + real weather, nothing invented — reuses the exact
+ * signals timeOfDaySuffix()/currentLivingCitySignals() already compute, so
+ * the tone can never claim a condition the rest of Home doesn't already
+ * agree is true. Only changes the hero's ambient gradient tint (see
+ * .home-hero.hero-tone-* in styles.css); never adds copy or a fake claim. */
+function homeHeroToneClass() {
+  if (state.localWeather) {
+    const code = state.localWeather.weather_code;
+    if ([71, 73, 75, 77, 85, 86].includes(code)) return "hero-tone-snow";
+    if (RAIN_SNOW_WEATHER_CODES.has(code)) return "hero-tone-rain";
+  }
+  const daySuffix = timeOfDaySuffix();
+  if (daySuffix === "Morning") return "hero-tone-morning";
+  if (daySuffix === "Evening") return "hero-tone-evening";
+  return "hero-tone-afternoon";
+}
+
+function renderHome() {
   const digest = buildTodayDigest();
+  const greeting =
+    state.auth.status === "signedIn"
+      ? t("home.greeting.homeGreetingSignedIn", { name: escapeHtml(state.auth.user.name.split(" ")[0]) })
+      : t("home.greeting.homeGreetingGuest", { city: escapeHtml(currentAreaLabel()) });
+  const daySuffix = timeOfDaySuffix();
+  const chips = selectHomeIntentChips();
+  const mostRecentQuery = state.recentQueries[0];
 
   return `
-    <section class="city-hero" aria-labelledby="home-question">
+    <section class="city-hero home-hero ${homeHeroToneClass()}" aria-labelledby="home-question">
       <div class="city-hero-copy">
         <p class="eyebrow">${t("home.cityLife")} · ${currentAreaLabel()}</p>
-        <h1 id="home-question">${t(`home.greeting.cityGreeting${daySuffix}`).replace("{name}", displayName)}</h1>
+        <h1 id="home-question">${greeting}</h1>
         <p>${t(`home.heroSubtitle.cityHeroSubtitle${daySuffix}`)}</p>
         ${digest.length ? `<ul class="today-digest">${digest.map((line) => `<li>${line}</li>`).join("")}</ul>` : ""}
+        ${mostRecentQuery ? `
+          <div class="home-memory" role="group" aria-label="${t("home.memory.memoryLabel")}">
+            <button type="button" class="home-memory-item" data-action="resume-recent-query">${t("home.memory.memoryContinue", { query: escapeHtml(mostRecentQuery) })}</button>
+            <button type="button" class="home-memory-clear" data-action="clear-recent-queries">${t("home.memory.memoryClear")}</button>
+          </div>
+        ` : ""}
       </div>
       ${renderAiSearch("home")}
       <div class="intent-suggestions city-intents">
-        ${[
-          ["home.intent.intentNeedPlumber", "hire"],
-          ["home.intent.intentSellBicycle", "marketplace"],
-          ["home.intent.intentWeekendEvents", "explore"],
-          ["home.intent.intentEarnNearby", "contribute"]
-        ].map(([label, view]) => `<button data-view="${view}">${t(label)}</button>`).join("")}
+        ${chips.map((chip) => `<button type="button" data-view="${chip.view}" ${chip.seeAllCategory ? `data-see-all-category="${chip.seeAllCategory}"` : ""}>${t(chip.labelKey)}</button>`).join("")}
       </div>
-      <div class="living-signal-row">
-        ${currentLivingCitySignals().map((signal, index) => {
-          const dest = LIVING_SIGNAL_DESTINATION[index] || { view: "explore" };
-          return `
-            <article class="living-signal-tile" role="button" tabindex="0" data-view="${dest.view}" ${dest.category ? `data-category="${dest.category}"` : ""}>
-              <span>${t(signal.labelKey)}</span>
-              <strong>${signal.value}</strong>
-              <p>${signal.detail || t(signal.detailKey)}</p>
-              <span class="living-signal-tile-arrow">${icon("arrow")}</span>
-            </article>
-          `;
-        }).join("")}
+      <div class="city-pulse" aria-label="${t("home.pulse.pulseLabel", { city: currentAreaLabel() })}">
+        <p class="city-pulse-eyebrow">${t("home.pulse.pulseEyebrow", { city: currentAreaLabel() })}</p>
+        <ul class="city-pulse-list">
+          ${currentLivingCitySignals().map((signal, index) => {
+            const dest = LIVING_SIGNAL_DESTINATION[index] || { view: "explore" };
+            return `
+              <li>
+                <button type="button" class="city-pulse-item" data-view="${dest.view}" ${dest.category ? `data-category="${dest.category}"` : ""} ${dest.seeAllCategory ? `data-see-all-category="${dest.seeAllCategory}"` : ""}>
+                  <span class="city-pulse-label">${t(signal.labelKey)}</span>
+                  <strong class="city-pulse-value">${signal.value}</strong>
+                  <span class="city-pulse-detail">${signal.detail || t(signal.detailKey)}</span>
+                  <span class="city-pulse-arrow" aria-hidden="true">${icon("arrow")}</span>
+                </button>
+              </li>
+            `;
+          }).join("")}
+        </ul>
       </div>
     </section>
 
@@ -4568,13 +4729,35 @@ function renderAiSearch(context) {
       : context === "explore"
         ? t("explore.explorePromptExamples")[0]
         : t("common.aiSearchPlaceholder");
+  const isHome = context === "home";
   return `
-    <div class="ai-search ${context === "home" ? "is-large" : ""}">
+    <div class="ai-search ${isHome ? "is-large" : ""} ${isHome ? "has-mic" : ""}">
       <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
       <input id="global-search" value="${escapeHtml(state.query)}" placeholder="${placeholder}" aria-label="${placeholder}" />
+      ${isHome ? `
+        <button type="button" class="ai-search-mic ${state.homeVoiceState === "listening" ? "is-listening" : ""}" data-action="home-voice-toggle" aria-label="${homeVoiceSupported() ? t("home.voice.voiceMicLabel") : t("home.voice.voiceUnsupportedLabel")}" ${!homeVoiceSupported() ? "disabled" : ""}>${icon("mic")}</button>
+      ` : ""}
       <button type="button" data-action="ai-search-submit">${t("common.tellAlwen")}</button>
     </div>
+    ${isHome ? `<p class="home-voice-status" role="status">${escapeHtml(homeVoiceStatusText())}</p>` : ""}
   `;
+}
+
+/** Feature-detected only — no fabricated transcript/fallback UI on browsers
+ * without the Web Speech API (matches the same discipline as Translate's
+ * startVoiceInput, main.js near "VOICE_INPUT_UNSUPPORTED_LANGUAGES"). */
+function homeVoiceSupported() {
+  return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+function homeVoiceStatusText() {
+  switch (state.homeVoiceState) {
+    case "listening": return t("home.voice.voiceListening");
+    case "denied": return t("home.voice.voiceDenied");
+    case "cancelled": return t("home.voice.voiceCancelled");
+    case "error": return t("home.voice.voiceError");
+    default: return "";
+  }
 }
 
 /** Toggle for the results panel below — on Explore/Marketplace it sits
@@ -8607,6 +8790,80 @@ function startVoiceInput() {
   }
 }
 
+let activeHomeSpeechRecognition = null;
+
+/** Home hero's own mic — deliberately separate from Translate's
+ * startVoiceInput/activeSpeechRecognition above: writes straight into
+ * state.query (the same field typing already uses) and auto-submits
+ * through the existing launchAlwenConversationWithQuery() on a genuine
+ * final transcript, instead of feeding the Translate pipeline. Every
+ * state transition here (state.homeVoiceState) is driven by a real
+ * SpeechRecognition event — never a fabricated transcript or success
+ * state on an unsupported browser. */
+function startHomeVoiceSearch() {
+  if (state.homeVoiceState === "listening") {
+    activeHomeSpeechRecognition?.stop();
+    state.homeVoiceState = "cancelled";
+    render();
+    return;
+  }
+
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Ctor) {
+    state.homeVoiceState = "unsupported";
+    render();
+    return;
+  }
+
+  const recognition = new Ctor();
+  activeHomeSpeechRecognition = recognition;
+  recognition.lang = currentLocaleTag();
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  let finalTranscript = "";
+
+  recognition.onstart = () => {
+    finalTranscript = "";
+    state.homeVoiceState = "listening";
+    render();
+  };
+
+  // Only text from a result flagged isFinal is ever treated as final —
+  // interim results are shown live in the input for feedback but never
+  // auto-submitted (see onend below), so a partial/misheard fragment can
+  // never fire a search on its own.
+  recognition.onresult = (event) => {
+    let interim = "";
+    for (const result of event.results) {
+      if (result.isFinal) finalTranscript += result[0].transcript;
+      else interim += result[0].transcript;
+    }
+    state.query = (finalTranscript + interim).trim();
+    render();
+  };
+
+  recognition.onerror = (event) => {
+    if (["not-allowed", "service-not-allowed"].includes(event.error)) state.homeVoiceState = "denied";
+    else if (["aborted", "no-speech"].includes(event.error)) state.homeVoiceState = "cancelled";
+    else state.homeVoiceState = "error";
+  };
+
+  recognition.onend = () => {
+    activeHomeSpeechRecognition = null;
+    const transcript = finalTranscript.trim();
+    if (state.homeVoiceState === "listening") state.homeVoiceState = "idle";
+    render();
+    if (transcript) launchAlwenConversationWithQuery(transcript);
+  };
+
+  try {
+    recognition.start();
+  } catch {
+    state.homeVoiceState = "error";
+    render();
+  }
+}
+
 function renderTranslation() {
   const suggestionKeys = [
     "translate.translateMenu",
@@ -10732,6 +10989,19 @@ function bindEvents() {
     });
   });
 
+  document.querySelector('[data-action="home-voice-toggle"]')?.addEventListener("click", () => {
+    startHomeVoiceSearch();
+  });
+
+  document.querySelector('[data-action="resume-recent-query"]')?.addEventListener("click", () => {
+    if (state.recentQueries[0]) launchAlwenConversationWithQuery(state.recentQueries[0]);
+  });
+
+  document.querySelector('[data-action="clear-recent-queries"]')?.addEventListener("click", () => {
+    clearRecentQueries();
+    render();
+  });
+
   document.querySelectorAll('[data-action="share-profile"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -11553,6 +11823,15 @@ function render() {
      opening at its own top. */
   if (state.activeView !== lastRenderedView) {
     window.scrollTo(0, 0);
+    /* Leaving Home while homeVoiceState is stuck on a terminal message
+       ("denied"/"cancelled"/"error") — or coming back to Home later —
+       should not leave that stale status under the AI search bar
+       forever. Skip the reset while a recognition session is actually
+       "listening" so navigating away mid-capture doesn't look like it
+       cut the mic off. */
+    if ((lastRenderedView === "home" || state.activeView === "home") && state.homeVoiceState !== "listening") {
+      state.homeVoiceState = "idle";
+    }
     lastRenderedView = state.activeView;
   }
   syncUrlToState();

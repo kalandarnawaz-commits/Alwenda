@@ -66,12 +66,20 @@
     "homeQuestion": "What do you want to do today?",
     "aiSearchPlaceholder": "What are you looking for in the city today?",
     "aiSearchPrompts": [
-      "Sell my bike",
-      "Book a cleaner",
-      "Find a babysitter",
-      "Translate this",
-      "Find housing",
-      "Hire a lawyer",
+      "Find a dentist open now",
+      "Translate this conversation",
+      "Need a plumber",
+      "Book a haircut",
+      "Sell my bicycle",
+      "Weekend plans",
+      "Need legal help",
+      "Find parking",
+      "Find apartments",
+      "Best coffee nearby",
+      "Compare internet providers",
+      "Need a babysitter",
+      "Book a taxi",
+      "Need emergency pharmacy",
       "Register my business"
     ],
     "askAi": "Tell Alwen",
@@ -723,7 +731,9 @@
     "greeting": {
       "cityGreeting": "Good afternoon{name}",
       "cityGreetingMorning": "Good morning{name}",
-      "cityGreetingEvening": "Good evening{name}"
+      "cityGreetingEvening": "Good evening{name}",
+      "homeGreetingSignedIn": "Welcome back, {name}.",
+      "homeGreetingGuest": "You're in {city}."
     },
     "heroSubtitle": {
       "cityHeroSubtitle": "Everything happening around you.",
@@ -810,7 +820,14 @@
       "intentNeedPlumber": "I need a plumber",
       "intentSellBicycle": "Sell my bicycle",
       "intentWeekendEvents": "Find weekend events",
-      "intentEarnNearby": "Earn money nearby"
+      "intentEarnNearby": "Earn money nearby",
+      "intentNeedDoctor": "Need a doctor",
+      "intentTranslate": "Translate",
+      "intentSellSomething": "Sell something",
+      "intentNeedHelp": "Need help",
+      "intentEmergency": "Emergency",
+      "intentNearbyOffers": "Nearby offers",
+      "intentNeedTaxi": "Need a taxi"
     },
     "prompt": {
       "promptNeedPlumber": "I need a plumber.",
@@ -832,7 +849,27 @@
       "jobsLabel": "Jobs",
       "jobsDetail": "Matched to your profile today",
       "apartmentsLabel": "Apartments",
-      "apartmentsDetail": "New rentals to check out"
+      "apartmentsDetail": "New rentals to check out",
+      "pharmacyLabel": "Pharmacies",
+      "pharmacyOpenDetail": "Open right now nearby",
+      "pharmacyNearbyDetail": "Nearby — opening hours not listed"
+    },
+    "pulse": {
+      "pulseLabel": "Live in {city}",
+      "pulseEyebrow": "Live in {city}"
+    },
+    "memory": {
+      "memoryLabel": "Continue where you left off",
+      "memoryContinue": "Continue: \"{query}\"",
+      "memoryClear": "Clear history"
+    },
+    "voice": {
+      "voiceMicLabel": "Ask Alwen by voice",
+      "voiceUnsupportedLabel": "Voice input isn't supported on this browser",
+      "voiceListening": "Listening…",
+      "voiceDenied": "Microphone permission denied",
+      "voiceCancelled": "Voice input cancelled",
+      "voiceError": "Couldn't hear that — try again"
     }
   },
   "tyt": {
