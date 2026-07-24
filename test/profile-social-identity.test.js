@@ -256,3 +256,27 @@ test("404.html exists as the GitHub Pages SPA fallback so a hard refresh on /pro
   assert.match(notFoundPage, /<div id="app"><\/div>/);
   assert.match(notFoundPage, /src="\/src\/main\.js/);
 });
+
+test("clicking Profile (header avatar, sign-in prompts, etc.) opens the new social profile for a signed-in user, not the legacy account dashboard", async () => {
+  const main = await readRepoFile("src/main.js");
+  // The generic [data-view] click handler must redirect "profile" to
+  // openUserProfile() for a signed-in user before render() ever consults
+  // the profile: renderProfile dispatch-table entry.
+  const clickHandlerStart = main.indexOf('document.querySelectorAll("[data-view]")');
+  const clickHandlerBody = main.slice(clickHandlerStart, main.indexOf("if (button.dataset.category)", clickHandlerStart));
+  assert.match(clickHandlerBody, /if \(button\.dataset\.view === "profile" && state\.auth\.status === "signedIn"\) \{\s*\n\s*openUserProfile\(state\.auth\.user\.publicProfile\?\.handle \|\| state\.auth\.user\.id\);/);
+  // A direct load/refresh/back-forward of ?view=profile must do the same,
+  // not just the click path.
+  const syncFn = extractFunction(main, "syncStateFromUrl");
+  assert.match(syncFn, /if \(view === "profile" && state\.auth\.status === "signedIn"\) \{\s*\n\s*openUserProfile\(state\.auth\.user\.publicProfile\?\.handle \|\| state\.auth\.user\.id\);/);
+});
+
+test("the legacy account dashboard (My Listings/Help Requests/Businesses/Saved Places) survives as a separate account route, not deleted", async () => {
+  const main = await readRepoFile("src/main.js");
+  assert.match(main, /account: renderProfile/);
+  assert.match(main, /const DEEP_LINK_VIEWS = new Set\(\[[\s\S]{0,400}"account"/);
+  // And the new profile links back to it for the signed-in owner, so it's
+  // not orphaned now that "profile" no longer routes there directly.
+  const renderFn = extractFunction(main, "renderUserProfile");
+  assert.match(renderFn, /data-view="account"/);
+});

@@ -2606,6 +2606,7 @@
     "handleHint": "Nur Kleinbuchstaben, Zahlen und Unterstriche, 3-24 Zeichen. Das wird dein Profillink: alwenda.com/profile/deinname",
     "handleInvalid": "Dieser Benutzername ist ungültig — verwende 3-24 Kleinbuchstaben, Zahlen oder Unterstriche, beginnend mit einem Buchstaben.",
     "handleTaken": "Dieser Benutzername ist bereits vergeben.",
-    "handleSaveError": "Dein Profil wurde gespeichert, aber der Benutzername konnte nicht aktualisiert werden. Versuche es erneut."
+    "handleSaveError": "Dein Profil wurde gespeichert, aber der Benutzername konnte nicht aktualisiert werden. Versuche es erneut.",
+    "accountAction": "Konto & Einstellungen"
   }
 }

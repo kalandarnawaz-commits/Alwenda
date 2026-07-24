@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "alwen-dock-unify-1";
+const RELEASE_VERSION = "social-profile-1";
 const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
 const AUTH_CALLBACK_PATH = "/auth/callback";

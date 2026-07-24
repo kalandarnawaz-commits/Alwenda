@@ -2606,6 +2606,7 @@
     "handleHint": "Lowercase letters, numbers, and underscores only, 3-24 characters. This becomes your profile link: alwenda.com/profile/yourname",
     "handleInvalid": "That username isn't valid — use 3-24 lowercase letters, numbers, or underscores, starting with a letter.",
     "handleTaken": "That username is already taken.",
-    "handleSaveError": "Your profile saved, but the username couldn't be updated. Try again."
+    "handleSaveError": "Your profile saved, but the username couldn't be updated. Try again.",
+    "accountAction": "Account & settings"
   }
 }

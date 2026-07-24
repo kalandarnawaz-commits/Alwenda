@@ -1105,6 +1105,7 @@ const DEEP_LINK_VIEWS = new Set([
   "reservations",
   "translate",
   "profile",
+  "account",
   "auth",
   "onboarding",
   "settings",
@@ -1179,6 +1180,17 @@ function syncStateFromUrl() {
   const view = legalPathViews[window.location.pathname] || (profilePathMatch ? "userProfile" : null) || searchParams.get("view");
   if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
   state.activeView = view;
+  // A direct/refreshed/back-forward load of ?view=profile for a signed-in
+  // user resolves to their own social profile, same as clicking the header
+  // avatar (see the [data-view] click handler) — "profile" only ever
+  // renders the legacy dashboard for a signed-out visitor now. Safe to
+  // check auth status here: syncStateFromUrl() only ever runs after
+  // hydrateSupabaseAuth() has resolved (boot awaits it first; popstate
+  // fires long after boot), so state.auth.status is never "checking" here.
+  if (view === "profile" && state.auth.status === "signedIn") {
+    openUserProfile(state.auth.user.publicProfile?.handle || state.auth.user.id);
+    return;
+  }
   const id = (profilePathMatch && decodeURIComponent(profilePathMatch[1])) || searchParams.get("id");
   if (!id || !ID_LINKED_VIEWS.has(view)) return;
   if (view === "publicProfile") openPublicProfileById(id);
@@ -3634,7 +3646,17 @@ function renderView() {
     offers: renderOffers,
     reservations: renderReservations,
     translate: renderTranslation,
+    // "profile" is the entry point clicked in the app chrome (header
+    // avatar, "Sign in" prompts, Contribute's identity card) — for a
+    // signed-in user it's always redirected to userProfile before this
+    // dispatch table is ever consulted (see the [data-view] click handler
+    // and syncStateFromUrl), so renderProfile only actually renders here
+    // for a signed-out visitor's sign-in prompt. The legacy account
+    // dashboard (My Listings/Help Requests/Businesses/Saved Places
+    // management) itself moved to the separate "account" route below,
+    // reachable from the new profile's own action row.
     profile: renderProfile,
+    account: renderProfile,
     notifications: renderNotificationsHub,
     messages: renderNotificationsHub,
     conversation: renderConversationDetail,
@@ -9913,7 +9935,8 @@ function renderUserProfile() {
         </div>
         <div class="user-profile-actions">
           ${profile.isOwn
-            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>`
+            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>
+               <button type="button" class="auth-link" data-view="account">${t("userProfile.accountAction")}</button>`
             : `<button type="button" class="${profile.isFollowing ? "auth-link" : "auth-primary-button"}" data-user-profile-follow="true" ${!canFollow && state.auth.status === "signedIn" ? "disabled" : ""}>${profile.isFollowing ? t("userProfile.followingCta") : t("userProfile.followCta")}</button>
                <button type="button" class="auth-link" data-user-profile-message="true">${t("common.messagePersonCta")}</button>
                <div class="user-profile-more-menu">
@@ -11001,6 +11024,9 @@ function bindEvents() {
       state.activeView = button.dataset.view;
       state.activeSheet = null;
       state.quickTranslateOpen = false;
+      if (button.dataset.view === "profile" && state.auth.status === "signedIn") {
+        openUserProfile(state.auth.user.publicProfile?.handle || state.auth.user.id);
+      }
       if (button.dataset.category) state.category = button.dataset.category;
       if (button.dataset.view === "createListing" && button.dataset.category) {
         state.listingDraft.category = button.dataset.category;

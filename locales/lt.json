@@ -2606,6 +2606,7 @@
     "handleHint": "Tik mažosios raidės, skaičiai ir pabraukimai, 3-24 simboliai. Tai taps jūsų profilio nuoroda: alwenda.com/profile/vardas",
     "handleInvalid": "Netinkamas vartotojo vardas — naudokite 3-24 mažąsias raides, skaičius ar pabraukimus, pradedant raide.",
     "handleTaken": "Šis vartotojo vardas jau užimtas.",
-    "handleSaveError": "Profilis išsaugotas, bet vartotojo vardo atnaujinti nepavyko. Bandykite dar kartą."
+    "handleSaveError": "Profilis išsaugotas, bet vartotojo vardo atnaujinti nepavyko. Bandykite dar kartą.",
+    "accountAction": "Paskyra ir nustatymai"
   }
 }
