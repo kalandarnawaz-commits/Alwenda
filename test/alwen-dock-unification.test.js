@@ -203,3 +203,35 @@ test("at the ≤430px breakpoint, the dock's bottom offset keeps it above the bo
     `dock bottom offset (${dockBottomOffset}px) must exceed the bottom-nav's top edge (${navTopFromScreenBottom}px = ${navBottomOffset}px + ${navHeight}px) so it never overlaps the nav`
   );
 });
+
+/* ---------------------------------------------------------------------
+   7. The last card can always scroll fully clear of the launcher
+      (verified live on Explore/Marketplace/Community — see PR discussion;
+      this locks in the underlying invariant so it can't silently regress)
+--------------------------------------------------------------------- */
+
+test("the app's scroll-bottom padding always exceeds the dock's own footprint, so scrolled content can clear it", () => {
+  // .app-shell's padding-bottom is the space reserved below every screen's
+  // real content (in addition to renderPersistentFooter()'s own height,
+  // which isn't a fixed CSS number and so isn't part of this check — this
+  // test is the conservative floor, not the full live margin). If this
+  // padding ever shrank below the dock's own footprint (its fixed offset
+  // from the screen bottom plus its own height), the last card on a short
+  // page could end up permanently stuck behind the dock with no amount of
+  // scrolling able to clear it.
+  const appShellMatch = styles.match(/\.app-shell \{\s*padding-bottom: calc\((\d+)px \+ env\(safe-area-inset-bottom\)\) !important;\s*\}/);
+  const dockBlockMatch = styles.match(/\.alwen-dock \{\s*position: fixed !important;[\s\S]*?bottom: calc\((\d+)px \+ env\(safe-area-inset-bottom\)\) !important;[\s\S]*?height: (\d+)px !important;/);
+
+  assert.ok(appShellMatch, "could not find .app-shell's padding-bottom rule");
+  assert.ok(dockBlockMatch, "could not find the base .alwen-dock rule's bottom offset and height");
+
+  const appShellPaddingBottom = Number(appShellMatch[1]);
+  const dockBottomOffset = Number(dockBlockMatch[1]);
+  const dockHeight = Number(dockBlockMatch[2]);
+  const dockFootprint = dockBottomOffset + dockHeight;
+
+  assert.ok(
+    appShellPaddingBottom > dockFootprint,
+    `.app-shell padding-bottom (${appShellPaddingBottom}px) must exceed the dock's own footprint (${dockFootprint}px = ${dockBottomOffset}px bottom offset + ${dockHeight}px height) so the last card can always scroll clear of it`
+  );
+});
