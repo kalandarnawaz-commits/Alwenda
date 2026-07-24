@@ -250,9 +250,9 @@ test("rate limiting, daily cost ceiling, and prompt-injection screening all run 
    in-progress conversation on load.
 --------------------------------------------------------------------- */
 
-test("supabaseClient exposes the 5 Alwen conversation persistence functions, all logged via throwIfError", async () => {
+test("supabaseClient exposes the 6 Alwen conversation persistence functions, all logged via throwIfError", async () => {
   const source = await readRepoFile("src/services/auth/supabaseClient.js");
-  for (const name of ["createAlwenConversation", "fetchAlwenConversation", "fetchAlwenMessages", "createAlwenMessage", "updateAlwenConversationMode"]) {
+  for (const name of ["createAlwenConversation", "fetchAlwenConversation", "fetchAlwenMessages", "createAlwenMessage", "deleteAlwenConversation", "updateAlwenConversationMode"]) {
     assert.match(source, new RegExp(`export async function ${name}\\(`), `${name} must exist`);
   }
   const block = source.slice(source.indexOf("export async function createAlwenConversation"));
@@ -260,12 +260,95 @@ test("supabaseClient exposes the 5 Alwen conversation persistence functions, all
   assert.match(block, /throwIfError\(error, "fetchAlwenConversation"\)/);
   assert.match(block, /throwIfError\(error, "fetchAlwenMessages"\)/);
   assert.match(block, /throwIfError\(error, "createAlwenMessage"\)/);
+  assert.match(block, /throwIfError\(error, "deleteAlwenConversation"\)/);
   assert.match(block, /throwIfError\(error, "updateAlwenConversationMode"\)/);
+});
+
+test("deleteAlwenConversation deletes exactly the one conversation row it's given — never a broad 'all of this user's conversations' delete — so RLS plus this scoping is the only thing standing between a clear and another user's or another saved conversation's data", async () => {
+  const fn = extractFunction(await readRepoFile("src/services/auth/supabaseClient.js"), "deleteAlwenConversation");
+  assert.match(fn, /\.from\("alwen_conversations"\)\s*\.delete\(\)\s*\.eq\("id", conversationId\)/, "must scope the delete to the exact conversationId argument, not the current user's whole conversation set");
+  assert.doesNotMatch(fn, /\.eq\("user_id"/, "must not additionally filter by user_id — RLS already enforces ownership, and adding this here would suggest a user_id-wide delete was ever intended");
+});
+
+/* ---------------------------------------------------------------------
+   clearActiveAlwenConversation() — the single source of truth for
+   "Clear history" (Home) and "+ new conversation" (the Alwen screen
+   itself). Bug this fixes: clicking "Clear history" used to only clear
+   state.recentQueries (Home's "Continue: ..." nudge) and left the actual
+   Alwen conversation — in-memory state, and the persisted Supabase row —
+   completely untouched, so reopening Alwen (or just refreshing the page)
+   silently restored the "cleared" query and its results.
+--------------------------------------------------------------------- */
+
+test("clearActiveAlwenConversation resets every field of state.alwenConversation, not just messages", () => {
+  const fn = extractFunction(main, "clearActiveAlwenConversation");
+  for (const line of [
+    'convo.id = null;',
+    'convo.mode = "chat";',
+    'convo.status = "idle";',
+    'convo.messages = [];',
+    'convo.error = null;',
+    'convo.draft = "";',
+    'convo.partialTranscript = "";',
+    'convo.speechStatus = "idle";',
+    'convo.speechMessageId = null;',
+    'convo.fullScreenTranslationId = null;',
+    'convo.loaded = true;'
+  ]) {
+    assert.ok(fn.includes(line), `clearActiveAlwenConversation must reset: ${line}`);
+  }
+});
+
+test("clearActiveAlwenConversation also clears Home's Continue nudge (state.recentQueries) so the Home continuation prompt disappears too, not just the Alwen screen", () => {
+  const fn = extractFunction(main, "clearActiveAlwenConversation");
+  assert.match(fn, /clearRecentQueries\(\);/);
+});
+
+test("clearActiveAlwenConversation deletes the persisted conversation server-side, captured before the reset so the id isn't lost, and never throws out of a failed delete", () => {
+  const fn = extractFunction(main, "clearActiveAlwenConversation");
+  assert.match(fn, /const conversationId = convo\.id;/, "the id must be captured before convo.id is reset to null below it");
+  assert.match(fn, /await deleteAlwenConversation\(conversationId\)/);
+  assert.match(fn, /catch \(error\) \{\s*logPilotEvent\(OBSERVABILITY_EVENTS\.ALWEN_FAILURE, \{ context: "clearActiveAlwenConversation", error \}/, "a failed delete must be caught and logged, never thrown to the caller (matches persistAlwenStructuredSearchTurn's established best-effort pattern)");
+});
+
+test("clearActiveAlwenConversation is safe and idempotent when called with no active conversation (id already null) — it must not call deleteAlwenConversation with an undefined/null id", () => {
+  const fn = extractFunction(main, "clearActiveAlwenConversation");
+  assert.match(fn, /if \(!conversationId\) return;/, "must guard the delete call so calling this twice in a row (or with nothing to clear) is a safe no-op for the network call");
+});
+
+test("Home's 'Clear history' button and the Alwen screen's '+ new conversation' button both call clearActiveAlwenConversation and nothing else — no duplicated partial-reset logic in either handler", () => {
+  const homeBlock = extractBindEventsBlock(
+    main,
+    'document.querySelector(\'[data-action="clear-recent-queries"]\')?.addEventListener("click", () => {',
+    'document.querySelectorAll(\'[data-action="share-profile"]\')'
+  );
+  assert.match(homeBlock, /clearActiveAlwenConversation\(\);/);
+  assert.doesNotMatch(homeBlock, /clearRecentQueries\(\);/, "Home's handler must not also call clearRecentQueries() directly — that would be the exact partial-reset duplication this fix removes");
+
+  const alwenResetBlock = extractBindEventsBlock(
+    main,
+    'document.querySelector("[data-alwen-conversation-reset]")?.addEventListener("click", () => {',
+    'document.querySelector("[data-alwen-toggle-live-translate]")'
+  );
+  assert.match(alwenResetBlock, /clearActiveAlwenConversation\(\);/);
+
+  assert.doesNotMatch(main, /function resetAlwenConversation\(/, "the old narrower reset function must be fully removed, not left as an unused duplicate reset path");
 });
 
 test("loadAlwenConversation never overwrites an already-loaded or in-flight conversation", () => {
   const fn = extractFunction(main, "loadAlwenConversation");
   assert.match(fn, /if \(convo\.loaded \|\| convo\.status === "sending" \|\| convo\.messages\.length\) return;/);
+});
+
+test("loadAlwenConversation re-checks convo.loaded after each await, so a clear that runs while a load is already in flight can't have its fetch land afterward and resurrect the just-deleted conversation — this is what makes a refresh immediately after Clear history stay empty", () => {
+  const fn = extractFunction(main, "loadAlwenConversation");
+  const fetchConversationIndex = fn.indexOf("await fetchAlwenConversation()");
+  const fetchMessagesIndex = fn.indexOf("await fetchAlwenMessages(");
+  assert.ok(fetchConversationIndex !== -1 && fetchMessagesIndex !== -1 && fetchConversationIndex < fetchMessagesIndex);
+  const afterFirstAwait = fn.slice(fetchConversationIndex, fetchMessagesIndex);
+  assert.match(afterFirstAwait, /if \(convo\.loaded\) return;/, "must re-check convo.loaded immediately after the first await, before touching state");
+  const afterSecondAwait = fn.slice(fetchMessagesIndex);
+  assert.match(afterSecondAwait, /if \(convo\.loaded\) return;/, "must re-check convo.loaded immediately after the second await too, before assigning convo.id/messages");
 });
 
 test("mapAlwenMessageRow re-hydrates structured results from live data by id, never a frozen snapshot", () => {
