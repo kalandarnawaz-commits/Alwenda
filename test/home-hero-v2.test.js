@@ -232,3 +232,67 @@ test("pharmacySignal falls back to a plain, truthful nearby count — never an o
   const result = runPharmacySignal(pharmacies, isOpenNowImpl);
   assert.deepEqual(result, { labelKey: "home.signals.pharmacyLabel", value: "2", detailKey: "home.signals.pharmacyNearbyDetail" });
 });
+
+/* ---------------------------------------------------------------------
+   5. Home-voice-status reset on navigation (render)
+--------------------------------------------------------------------- */
+
+function runRender({ initialLastRenderedView, activeView, homeVoiceState, activeSheet = null }) {
+  const state = { activeView, homeVoiceState, activeSheet, hasOnboarded: true };
+  const body = [
+    `let lastRenderedView = ${JSON.stringify(initialLastRenderedView)};`,
+    extractFunction(main, "render"),
+    "render();",
+    "return { homeVoiceState: state.homeVoiceState, lastRenderedView };"
+  ].join("\n");
+  const fn = new Function(
+    "state",
+    "document",
+    "window",
+    "renderOnboarding",
+    "renderWelcomeSequence",
+    "renderShell",
+    "bindEvents",
+    "bindCarousels",
+    "bindCoverflow",
+    "bindHeaderTheme",
+    "syncUrlToState",
+    body
+  );
+  const noop = () => {};
+  const fakeDocument = { getElementById: () => ({ innerHTML: "" }), body: { classList: { toggle: noop } } };
+  const fakeWindow = { scrollTo: noop };
+  return fn(state, fakeDocument, fakeWindow, () => "", () => "", () => "", noop, noop, noop, noop, noop);
+}
+
+test("render() clears a stale terminal homeVoiceState when navigating away from Home", () => {
+  for (const staleState of ["denied", "cancelled", "error"]) {
+    const { homeVoiceState } = runRender({ initialLastRenderedView: "home", activeView: "explore", homeVoiceState: staleState });
+    assert.equal(homeVoiceState, "idle", `expected "${staleState}" to reset when leaving Home`);
+  }
+});
+
+test("render() clears a stale terminal homeVoiceState when Home is freshly (re)opened", () => {
+  for (const staleState of ["denied", "cancelled", "error"]) {
+    const { homeVoiceState } = runRender({ initialLastRenderedView: "explore", activeView: "home", homeVoiceState: staleState });
+    assert.equal(homeVoiceState, "idle", `expected "${staleState}" to reset when re-entering Home`);
+  }
+});
+
+test("render() never resets homeVoiceState while a recognition session is genuinely \"listening\", even across a Home navigation", () => {
+  const leaving = runRender({ initialLastRenderedView: "home", activeView: "explore", homeVoiceState: "listening" });
+  assert.equal(leaving.homeVoiceState, "listening");
+
+  const entering = runRender({ initialLastRenderedView: "explore", activeView: "home", homeVoiceState: "listening" });
+  assert.equal(entering.homeVoiceState, "listening");
+});
+
+test("render() leaves homeVoiceState untouched when navigating between two non-Home views", () => {
+  const { homeVoiceState } = runRender({ initialLastRenderedView: "explore", activeView: "marketplace", homeVoiceState: "error" });
+  assert.equal(homeVoiceState, "error");
+});
+
+test("render() does not reset homeVoiceState on a re-render that keeps the same activeView (e.g. typing, opening a sheet)", () => {
+  const { homeVoiceState } = runRender({ initialLastRenderedView: "home", activeView: "home", homeVoiceState: "denied" });
+  assert.equal(homeVoiceState, "denied");
+});

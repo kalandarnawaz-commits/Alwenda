@@ -11823,6 +11823,15 @@ function render() {
      opening at its own top. */
   if (state.activeView !== lastRenderedView) {
     window.scrollTo(0, 0);
+    /* Leaving Home while homeVoiceState is stuck on a terminal message
+       ("denied"/"cancelled"/"error") — or coming back to Home later —
+       should not leave that stale status under the AI search bar
+       forever. Skip the reset while a recognition session is actually
+       "listening" so navigating away mid-capture doesn't look like it
+       cut the mic off. */
+    if ((lastRenderedView === "home" || state.activeView === "home") && state.homeVoiceState !== "listening") {
+      state.homeVoiceState = "idle";
+    }
     lastRenderedView = state.activeView;
   }
   syncUrlToState();
