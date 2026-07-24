@@ -99,8 +99,8 @@ button {
 }
 
 /* Canonical .app-shell sizing/overflow. Later blocks only add responsive
-   padding-inline and state-specific tweaks (is-home-shell, has-alwen-open) —
-   do not reintroduce width/max-width/padding-bottom/overflow overrides here. */
+   padding-inline and state-specific tweaks (is-home-shell) — do not
+   reintroduce width/max-width/padding-bottom/overflow overrides here. */
 .app-shell {
   position: relative;
   width: 100%;
@@ -4155,27 +4155,6 @@ select:focus-visible,
   box-shadow: var(--shadow-soft) !important;
 }
 
-.alwen-dock .alwen-panel {
-  border-radius: var(--radius-xl) !important;
-  box-shadow: var(--shadow-float) !important;
-}
-
-.alwen-dock.is-open .alwen-panel {
-  animation: alwenSheetIn 240ms var(--ease) both;
-}
-
-@keyframes alwenSheetIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 .bottom-nav {
   border-radius: var(--radius-lg) !important;
 }
@@ -5109,22 +5088,6 @@ select:focus-visible,
 
 .alwen-orb:hover {
   transform: translateY(-3px) scale(1.03);
-}
-
-.alwen-panel {
-  border-radius: 26px;
-  box-shadow: 0 24px 80px rgba(28, 25, 20, 0.18);
-}
-
-.alwen-actions {
-  display: grid;
-  gap: 8px;
-}
-
-.alwen-actions button,
-.alwen-mode-row button {
-  justify-content: flex-start;
-  border-radius: 16px;
 }
 
 @media (max-width: 760px) {
@@ -6792,16 +6755,6 @@ select:focus-visible,
   position: relative !important;
 }
 
-.alwen-panel {
-  position: absolute !important;
-  right: 0 !important;
-  bottom: 66px !important;
-  width: min(360px, calc(100vw - 24px)) !important;
-  max-height: min(58vh, 380px);
-  overflow: auto;
-  pointer-events: auto !important;
-}
-
 @media (max-width: 430px) {
   .bottom-nav {
     left: 8px !important;
@@ -6854,10 +6807,6 @@ body {
   min-width: 0;
 }
 
-.app-shell.has-alwen-open .main {
-  padding-bottom: 300px;
-}
-
 .section-shell,
 .living-section,
 .marketplace-shell,
@@ -6903,9 +6852,7 @@ body {
 .trust-row,
 .visual-trust,
 .profile-badges,
-.post-actions,
-.alwen-mode-row,
-.alwen-actions {
+.post-actions {
   display: flex !important;
   flex-wrap: wrap;
   align-items: center;
@@ -7002,78 +6949,6 @@ body {
   height: 32px !important;
   background: transparent !important;
   padding: 0 !important;
-}
-
-.alwen-panel {
-  position: absolute !important;
-  right: 0 !important;
-  bottom: 70px !important;
-  display: none !important;
-  width: min(380px, calc(100vw - 24px)) !important;
-  max-height: min(58vh, 430px) !important;
-  padding: 16px !important;
-  overflow: auto !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 28px !important;
-  background: var(--surface) !important;
-  color: var(--ink);
-  box-shadow: 0 28px 90px rgba(28, 25, 20, 0.22) !important;
-  backdrop-filter: blur(24px);
-  pointer-events: auto !important;
-}
-
-.alwen-dock.is-open {
-  height: 58px !important;
-}
-
-.alwen-dock.is-open .alwen-panel {
-  display: grid !important;
-  gap: 12px !important;
-}
-
-.alwen-panel-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.alwen-panel-head strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 1.08rem;
-  line-height: 1.2;
-}
-
-.alwen-panel-head button {
-  display: grid;
-  place-items: center;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-  color: var(--ink);
-  font-size: 1.1rem;
-  font-weight: 850;
-}
-
-.alwen-panel-intro {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.alwen-status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm, 8px);
-  background: var(--surface-soft);
-  color: var(--muted);
-  font-size: 0.86rem;
-  font-weight: 700;
 }
 
 .alwen-status-dot {
@@ -7259,117 +7134,6 @@ body {
   .alwen-quick-translate-open {
     padding: 9px !important;
   }
-}
-
-.alwen-chat-form {
-  display: grid;
-  gap: 8px;
-}
-
-.alwen-chat-form label {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 850;
-}
-
-.alwen-chat-compose {
-  display: grid;
-  gap: 8px;
-}
-
-.alwen-chat-compose textarea {
-  width: 100%;
-  min-height: 88px;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface-soft);
-  color: var(--ink);
-  padding: 12px;
-  font: inherit;
-  line-height: 1.4;
-}
-
-.alwen-chat-compose button,
-.alwen-chat-error button {
-  min-height: 40px;
-  border-radius: 999px;
-  background: #111;
-  color: #fff;
-  font-weight: 850;
-}
-
-.alwen-chat-compose button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.alwen-chat-answer,
-.alwen-chat-error {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 18px;
-}
-
-.alwen-chat-answer {
-  background: var(--mint);
-  color: var(--ink);
-}
-
-.alwen-chat-answer strong {
-  font-size: 0.82rem;
-}
-
-.alwen-chat-answer p,
-.alwen-chat-error p {
-  margin: 0;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.alwen-chat-error {
-  background: rgba(239, 68, 68, 0.09);
-  color: var(--ink);
-}
-
-.alwen-chat-error div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.alwen-mode-row button,
-.alwen-actions button {
-  min-height: 38px;
-  padding: 0 12px;
-  border-radius: 999px !important;
-  background: var(--surface-soft) !important;
-  color: var(--ink) !important;
-  font-size: 0.86rem;
-  font-weight: 840;
-  box-shadow: none !important;
-}
-
-.alwen-mode-row {
-  flex-wrap: nowrap !important;
-}
-
-.alwen-mode-row button {
-  flex: 1 1 0;
-  min-height: 52px !important;
-  gap: 8px;
-}
-
-.alwen-mode-row button .icon {
-  font-size: 1.35rem;
-  min-width: 0;
-  height: auto;
-}
-
-.alwen-actions button:first-child {
-  background: #111 !important;
-  color: #fff !important;
 }
 
 .alwen-quick-translate {
@@ -7854,18 +7618,6 @@ body {
   color: var(--ink);
 }
 
-@media (min-width: 1280px) {
-  .app-shell.has-alwen-open {
-    width: min(100%, 1120px);
-  }
-}
-
-@media (max-width: 900px) {
-  .app-shell.has-alwen-open .main {
-    padding-bottom: 420px;
-  }
-}
-
 @media (max-width: 640px) {
   .app-shell {
     padding-inline: 10px;
@@ -7873,10 +7625,6 @@ body {
 
   .app-shell.is-home-shell .main {
     margin-top: -72px;
-  }
-
-  .app-shell.has-alwen-open .main {
-    padding-bottom: 430px;
   }
 
   .section-title {
@@ -7912,14 +7660,6 @@ body {
     right: 16px !important;
     bottom: calc(86px + env(safe-area-inset-bottom)) !important;
     width: calc(100vw - 32px) !important;
-  }
-
-  .alwen-panel {
-    right: 0 !important;
-    bottom: 68px !important;
-    width: calc(100vw - 32px) !important;
-    max-height: min(54vh, 420px) !important;
-    border-radius: 24px !important;
   }
 
   /* No mobile-specific z-index bump here anymore — it used to push
