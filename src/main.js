@@ -686,6 +686,11 @@ function applySignedOutState() {
   if (state.activeView === "auth" && !state.auth.authView) state.auth.authView = "login";
 }
 
+/** Tracks which signed-in user's session has already been fully hydrated
+ * (side effects run + render triggered) this page load — see the dedupe
+ * guard in applySupabaseSession() below. null means signed out. */
+let hydratedAuthUserId = null;
+
 async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   if (event === "PASSWORD_RECOVERY") {
     state.auth.passwordRecoveryActive = true;
@@ -693,13 +698,30 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
     state.auth.status = "signedIn";
     state.auth.authView = "resetPassword";
     state.activeView = "auth";
-    return;
+    return true;
   }
 
   if (!session?.user) {
+    const wasHydrated = hydratedAuthUserId !== null;
+    hydratedAuthUserId = null;
     applySignedOutState();
-    return;
+    return wasHydrated;
   }
+
+  // Supabase's real auth-js client (as opposed to the REST fallback, which
+  // only ever fires once) commonly fires this more than once for the same
+  // already-signed-in user within the first few seconds of a page load —
+  // INITIAL_SESSION, SIGNED_IN, and an early TOKEN_REFRESHED have all been
+  // observed landing back-to-back. Every firing used to re-run the
+  // fire-and-forget refreshes below and force a render() from the caller,
+  // so a single page load could tear down and rebuild the whole app
+  // (including Home Hero v2's new full-bleed hero) several times in a row
+  // — this, combined with those refreshes rendering views that don't even
+  // use their data (see refreshMyListings() etc.), is what showed up as
+  // Home "flickering" right after load. A repeat event for a user we've
+  // already fully hydrated this page load is a no-op.
+  if (hydratedAuthUserId === session.user.id) return false;
+  hydratedAuthUserId = session.user.id;
 
   // Being signed in is defined purely by having a real Supabase Auth
   // session — never by whether the profile sync below succeeds. This runs
@@ -733,7 +755,7 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
       resetProfileDraftFromUser(account);
       state.auth.authView = "completeProfile";
       state.activeView = "auth";
-      return;
+      return true;
     }
   } catch (error) {
     console.warn("[auth] Profile sync failed; staying signed in with basic account info.", error);
@@ -742,6 +764,7 @@ async function applySupabaseSession(session, event = "INITIAL_SESSION") {
   if (state.activeView === "auth" || state.activeView === "welcomeSequence") {
     state.activeView = "home";
   }
+  return true;
 }
 
 /** Real session restore + live sync via Supabase Auth. There is no local
@@ -756,13 +779,20 @@ async function hydrateSupabaseAuth() {
   try {
     await applySupabaseSession(await getCurrentSession());
     await onAuthStateChange(async (changedSession, event) => {
+      let shouldRender = true;
       try {
-        await applySupabaseSession(changedSession, event);
+        shouldRender = await applySupabaseSession(changedSession, event);
       } catch (error) {
         state.auth.authError = error?.message || t("auth.authErrorGeneric");
         applySignedOutState();
+        // Reset the dedupe tracker here too — without this, a later
+        // recovery event for the same user that this failed attempt had
+        // already marked as hydrated would be wrongly treated as a
+        // no-op duplicate, leaving the user stuck looking signed-out
+        // despite having a valid recovered session.
+        hydratedAuthUserId = null;
       }
-      render();
+      if (shouldRender) render();
     });
   } catch (error) {
     state.auth.authError = error?.message || t("auth.authErrorGeneric");
@@ -4005,7 +4035,11 @@ async function loadAlwenConversation() {
     convo.mode = conversation.mode === "liveTranslate" ? "liveTranslate" : "chat";
     convo.messages = rows.map(mapAlwenMessageRow);
     convo.loaded = true;
-    render();
+    // Home never reads state.alwenConversation, so a full re-render here
+    // while the user is sitting on Home only tears down and rebuilds the
+    // hero for data it doesn't show — see the same note on
+    // refreshMyListings()/refreshMyHelpRequests() below.
+    if (state.activeView !== "home") render();
   } catch (error) {
     convo.loaded = true;
     logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "loadAlwenConversation", error }, { severity: "warning" });
@@ -7187,7 +7221,9 @@ async function refreshMyHelpRequests() {
         helpRequests.unshift(shapeHelpRequestForDisplay(item));
       }
     }
-    render();
+    // Home never reads state.myHelpRequests (Profile/Contribute do) — see
+    // the same note on refreshMyListings() below.
+    if (state.activeView !== "home") render();
   } catch (error) {
     console.warn("[helpRequests] Failed to load my help requests.", error);
   }
@@ -7321,7 +7357,17 @@ async function refreshMyListings() {
         listings.unshift(shapeListingForDisplay(item));
       }
     }
-    render();
+    // Home never reads state.myListings (Profile/Contribute do). This — and
+    // the identical guards on refreshMyHelpRequests()/loadAlwenConversation()
+    // — is the fix for Home Hero v2's post-deploy flicker: these three
+    // fire-and-forget background refreshes fire independently within the
+    // first few seconds after sign-in and were each forcing a full
+    // teardown-and-rebuild of whatever view was on screen (via render()'s
+    // unconditional innerHTML replace), including Home's new, visually
+    // heavy full-bleed hero — even though none of their data ever appears
+    // there. Every other view they DO affect keeps rendering exactly as
+    // before; only Home skips the redundant rebuild.
+    if (state.activeView !== "home") render();
   } catch (error) {
     console.warn("[listings] Failed to load my listings.", error);
   }
