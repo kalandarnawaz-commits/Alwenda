@@ -1410,6 +1410,241 @@ body.has-open-sheet {
   }
 }
 
+/* ==========================================================================
+   Home hero AI command bar (renderHomeAiComposer in main.js) — a dedicated
+   component, not a variant of .ai-search below (used by every other
+   context: create/community/explore/marketplace/contribute/hire/
+   businesses/reservations, all unchanged). Always a single row at every
+   width — the bug this replaces was .ai-search's shared "stack any button
+   full-width below the input under ~480px" rule catching the old
+   Tell Alwen button meant for the mic to size right past it, detaching it
+   onto its own row. This is a plain flex row instead of the old grid, so
+   there is no equivalent "third column drops out" failure mode.
+   ========================================================================== */
+/* Height is a single clamp() across the whole viewport range (44px at
+   phone widths up to 54px at desktop) instead of three discrete
+   breakpoint jumps — smoother, more "the same bar everywhere" than a
+   mobile/tablet/desktop each getting their own fixed height, and
+   noticeably shorter than the original 56–72px so the hero photo behind
+   it stays the dominant thing on screen, not the input. */
+.home-command-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 640px);
+  min-height: clamp(44px, 40px + 1.1vw, 54px);
+  padding: 5px 6px 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 32px rgba(15, 23, 20, 0.18);
+  cursor: text;
+  transition: box-shadow var(--motion-fast, 160ms) var(--ease, ease), transform var(--motion-fast, 160ms) var(--ease, ease), border-color var(--motion-fast, 160ms) var(--ease, ease);
+}
+
+/* Gentle glow on focus — reuses the same emerald tone --shadow-glow already
+   uses elsewhere (avatar frames, etc.) rather than inventing a new accent. */
+.home-command-bar:focus-within {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18), 0 16px 40px rgba(15, 23, 20, 0.22);
+  transform: translateY(-1px);
+}
+
+.home-command-bar-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+}
+
+.home-command-bar-icon .app-icon {
+  width: 16px;
+  height: 16px;
+  filter: none;
+  mix-blend-mode: normal;
+}
+
+.home-command-bar-field {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Fixed dark text/placeholder, not var(--ink) — this pill stays frosted
+   white over the hero photo in both themes (same reasoning as
+   .city-hero .ai-search input below), so text must stay dark in both. */
+.home-command-bar-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #151515;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* The decorative typewriter span (bindHomeComposerTypewriter in main.js)
+   sits exactly where a native placeholder would, since a real placeholder
+   attribute can't be animated character-by-character across browsers. It
+   only ever exists in the DOM while the input is empty (see
+   renderHomeAiComposer), so there is never a moment where both a typed
+   value and this overlay are visible at once. */
+.home-command-bar-typewriter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  color: rgba(21, 21, 21, 0.48);
+  font-size: 1rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.home-command-bar-typewriter::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: currentColor;
+  animation: homeComposerCaret 900ms steps(1) infinite;
+}
+
+@keyframes homeComposerCaret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.home-command-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.home-command-bar-mic,
+.home-command-bar-send {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #151515;
+  cursor: pointer;
+  transition: background var(--motion-fast, 160ms) var(--ease, ease), color var(--motion-fast, 160ms) var(--ease, ease), opacity var(--motion-fast, 160ms) var(--ease, ease), width var(--motion-fast, 160ms) var(--ease, ease), min-width var(--motion-fast, 160ms) var(--ease, ease), transform var(--motion-fast, 160ms) var(--ease, ease);
+}
+
+.home-command-bar-mic:hover:not(:disabled) {
+  background: rgba(17, 17, 17, 0.08);
+}
+
+.home-command-bar-mic:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Subtle microphone pulse — reuses the existing @keyframes homeMicPulse
+   (defined above for the pre-redesign .ai-search-mic) rather than
+   duplicating it; only fires while actively listening, not as a constant
+   idle animation, matching this app's generally calm/restrained motion. */
+.home-command-bar-mic.is-listening {
+  background: var(--emerald-600);
+  color: white;
+  animation: homeMicPulse 1.6s ease-in-out infinite;
+}
+
+/* Send arrow appears only after typing — collapsed to zero width/opacity
+   by default rather than just hidden, so the mic stays visually centred
+   in the actions cluster instead of leaving a gap where the arrow will
+   eventually appear. */
+.home-command-bar-send {
+  background: #111;
+  color: white;
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  transform: scale(0.6);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.home-command-bar-send.is-visible {
+  width: 36px;
+  min-width: 36px;
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.home-command-bar-send:hover {
+  background: #2a2a2a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-command-bar,
+  .home-command-bar-mic,
+  .home-command-bar-send {
+    transition: opacity var(--motion-fast, 160ms) linear;
+  }
+  .home-command-bar-mic.is-listening,
+  .home-command-bar-typewriter::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-command-bar {
+    padding: 4px 5px 4px 10px;
+    gap: 8px;
+  }
+}
+
+:root[data-theme="dark"] .home-command-bar {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+/* Native View Transitions API hook for the Home → Alwen conversation
+   hand-off (renderWithViewTransition in main.js) — a soft cross-fade plus
+   a slight rise instead of the browser's default cross-fade, so leaving
+   Home feels like the composer expanding into the conversation rather
+   than an unrelated page swap. Reduced-motion and non-supporting browsers
+   simply skip document.startViewTransition() entirely (see main.js), so
+   no separate opt-out is needed here. */
+::view-transition-old(root) {
+  animation: homeToAlwenOut var(--motion, 260ms) var(--ease, ease) both;
+}
+
+::view-transition-new(root) {
+  animation: homeToAlwenIn var(--motion, 260ms) var(--ease, ease) both;
+}
+
+@keyframes homeToAlwenOut {
+  to {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+}
+
+@keyframes homeToAlwenIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
 .home-voice-status {
   min-height: 1em;
   margin: 2px 0 0;

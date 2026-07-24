@@ -4032,6 +4032,26 @@ function clearRecentQueries() {
   writeLocalStorage(RECENT_QUERIES_KEY, null);
 }
 
+/** render(), but morphed in via the native View Transitions API instead of
+ * an abrupt innerHTML swap — used exactly once, below, for the single
+ * moment every "Tell Alwen" entry point (Home's composer, every other
+ * renderAiSearch() context, TYT, voice search, "Continue: ...") hands off
+ * into the real Alwen conversation, so that always feels like one
+ * continuous surface rather than a page change. Every other render() call
+ * in the app (typing, opening a sheet, switching tabs, ...) is untouched —
+ * animating those too would be constant, unwanted motion, not "continuous."
+ * Feature-detected + reduced-motion-aware with a plain render() fallback,
+ * same discipline as the voice input feature-detection elsewhere in this
+ * file — nothing is fabricated for browsers that don't support it. */
+function renderWithViewTransition() {
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  if (reducedMotion || typeof document.startViewTransition !== "function") {
+    render();
+    return;
+  }
+  document.startViewTransition(() => render());
+}
+
 function launchAlwenConversationWithQuery(rawText) {
   const trimmedQuery = String(rawText || "").trim();
   if (!trimmedQuery) return;
@@ -4040,7 +4060,7 @@ function launchAlwenConversationWithQuery(rawText) {
   state.query = "";
   state.activeView = "alwen";
   state.activeSheet = null;
-  render();
+  renderWithViewTransition();
   submitAlwenConversationMessage(trimmedQuery);
 }
 
@@ -4597,7 +4617,7 @@ function renderHome() {
           </div>
         ` : ""}
       </div>
-      ${renderAiSearch("home")}
+      ${renderHomeAiComposer()}
       <div class="intent-suggestions city-intents">
         ${chips.map((chip) => `<button type="button" data-view="${chip.view}" ${chip.seeAllCategory ? `data-see-all-category="${chip.seeAllCategory}"` : ""}>${t(chip.labelKey)}</button>`).join("")}
       </div>
@@ -5069,6 +5089,56 @@ function renderCapabilityRail() {
   `;
 }
 
+/** Home's own AI command bar — a dedicated component, not a renderAiSearch()
+ * variant, since the two have diverged too far to keep sharing one
+ * function: this is one always-single-row pill (the old shared ".ai-search
+ * button" rule stacked "Tell Alwen" onto its own row under ~480px, which is
+ * exactly the bug this replaces), a send arrow that only appears once
+ * there's text, and a decorative animated placeholder (bindHomeComposer-
+ * Typewriter() below) instead of the plain rotating-placeholder-attribute
+ * swap every other renderAiSearch() context still uses. Submission itself
+ * is unchanged — same #global-search input id, same ai-search-submit/
+ * home-voice-toggle data-actions, so every existing handler in bindEvents()
+ * keeps working untouched. */
+function renderHomeAiComposer() {
+  const hasQuery = Boolean(state.query.trim());
+  return `
+    <div class="home-command-bar" data-role="home-command-bar">
+      <span class="home-command-bar-icon" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
+      <div class="home-command-bar-field">
+        <input
+          id="global-search"
+          class="home-command-bar-input"
+          value="${escapeHtml(state.query)}"
+          aria-label="${t("home.composer.composerPlaceholder")}"
+          autocomplete="off"
+        />
+        ${!state.query ? `<span class="home-command-bar-typewriter" aria-hidden="true" data-role="home-typewriter">${escapeHtml(t("home.composer.composerPlaceholder"))}</span>` : ""}
+      </div>
+      <div class="home-command-bar-actions">
+        <button
+          type="button"
+          class="home-command-bar-mic ${state.homeVoiceState === "listening" ? "is-listening" : ""}"
+          data-action="home-voice-toggle"
+          aria-label="${homeVoiceSupported() ? t("home.voice.voiceMicLabel") : t("home.voice.voiceUnsupportedLabel")}"
+          ${!homeVoiceSupported() ? "disabled" : ""}
+        >${icon("mic")}</button>
+        <button
+          type="button"
+          class="home-command-bar-send ${hasQuery ? "is-visible" : ""}"
+          data-action="ai-search-submit"
+          aria-label="${t("home.composer.composerSendLabel")}"
+          ${hasQuery ? "" : "tabindex=\"-1\""}
+        >${icon("arrow")}</button>
+      </div>
+    </div>
+    <p class="home-voice-status" role="status">${escapeHtml(homeVoiceStatusText())}</p>
+  `;
+}
+
+/** Shared by every non-Home context (create/community/explore/marketplace/
+ * contribute/hire/businesses/reservations) — Home has its own dedicated
+ * renderHomeAiComposer() above and never calls this. */
 function renderAiSearch(context) {
   // Community and Explore each get their own contextual placeholder
   // immediately (the rotation in bindAiSearchPlaceholderRotation() takes
@@ -5082,17 +5152,12 @@ function renderAiSearch(context) {
       : context === "explore"
         ? t("explore.explorePromptExamples")[0]
         : t("common.aiSearchPlaceholder");
-  const isHome = context === "home";
   return `
-    <div class="ai-search ${isHome ? "is-large" : ""} ${isHome ? "has-mic" : ""}">
+    <div class="ai-search">
       <span class="alwen-mini" aria-hidden="true">${brandIconMarkup("app-icon")}</span>
       <input id="global-search" value="${escapeHtml(state.query)}" placeholder="${placeholder}" aria-label="${placeholder}" />
-      ${isHome ? `
-        <button type="button" class="ai-search-mic ${state.homeVoiceState === "listening" ? "is-listening" : ""}" data-action="home-voice-toggle" aria-label="${homeVoiceSupported() ? t("home.voice.voiceMicLabel") : t("home.voice.voiceUnsupportedLabel")}" ${!homeVoiceSupported() ? "disabled" : ""}>${icon("mic")}</button>
-      ` : ""}
       <button type="button" data-action="ai-search-submit">${t("common.tellAlwen")}</button>
     </div>
-    ${isHome ? `<p class="home-voice-status" role="status">${escapeHtml(homeVoiceStatusText())}</p>` : ""}
   `;
 }
 
@@ -5203,7 +5268,7 @@ function renderTytSheet() {
  * it used to be its own mini-chat overlay with a duplicate single-turn
  * chat model, which meant two competing Alwen surfaces could be on
  * screen/reachable at once. Clicking the orb now just opens the same
- * alwenConversation screen renderAiSearch("home") routes into, so there
+ * alwenConversation screen renderHomeAiComposer() routes into, so there
  * is only ever one place Alwen conversations happen. */
 function renderAlwenDock() {
   return `
@@ -11066,7 +11131,7 @@ function bindEvents() {
   // The floating dock is a pure launcher into the one canonical Alwen
   // conversation screen — not a second chat surface. Every data-alwen-toggle
   // button across the app (dock orb, Community's "Ask Alwen", etc.) opens
-  // the same alwenConversation screen renderAiSearch("home") routes into.
+  // the same alwenConversation screen renderHomeAiComposer() routes into.
   document.querySelectorAll("[data-alwen-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = "alwen";
@@ -11629,6 +11694,17 @@ function bindEvents() {
 
   document.querySelector('[data-action="home-voice-toggle"]')?.addEventListener("click", () => {
     startHomeVoiceSearch();
+  });
+
+  // The whole pill is the entry point, not just the input — tapping its
+  // icon, padding, or the (usually empty) space around the typewriter text
+  // focuses the input immediately, same as tapping a Spotlight/ChatGPT-
+  // style search box. The mic and send buttons keep their own click
+  // handlers untouched (registered above/below), so this only ever fires
+  // for the parts of the bar that aren't already interactive.
+  document.querySelector('[data-role="home-command-bar"]')?.addEventListener("click", (event) => {
+    if (event.target.closest(".home-command-bar-mic, .home-command-bar-send")) return;
+    document.getElementById("global-search")?.focus();
   });
 
   document.querySelector('[data-action="resume-recent-query"]')?.addEventListener("click", () => {
@@ -12463,20 +12539,25 @@ function bindAiSearchPlaceholderRotation() {
   let index = 0;
   let tytIndex = 0;
   window.setInterval(() => {
-    // Community and Explore each get their own contextual prompt set —
-    // the generic list includes prompts like "Register my business" that
-    // don't belong on a neighbourhood feed or a "what do you need in the
-    // city" search.
-    const prompts =
-      state.activeView === "community"
-        ? t("community.communityPromptExamples")
-        : state.activeView === "explore"
-          ? t("explore.explorePromptExamples")
-          : t("common.aiSearchPrompts");
-    const input = document.getElementById("global-search");
-    if (input && document.activeElement !== input && !input.value) {
-      index = (index + 1) % prompts.length;
-      input.placeholder = prompts[index];
+    // Home owns its own animated placeholder now — see
+    // bindHomeComposerTypewriter() — so this plain attribute swap would
+    // just fight it for the same input's placeholder text.
+    if (state.activeView !== "home") {
+      // Community and Explore each get their own contextual prompt set —
+      // the generic list includes prompts like "Register my business" that
+      // don't belong on a neighbourhood feed or a "what do you need in the
+      // city" search.
+      const prompts =
+        state.activeView === "community"
+          ? t("community.communityPromptExamples")
+          : state.activeView === "explore"
+            ? t("explore.explorePromptExamples")
+            : t("common.aiSearchPrompts");
+      const input = document.getElementById("global-search");
+      if (input && document.activeElement !== input && !input.value) {
+        index = (index + 1) % prompts.length;
+        input.placeholder = prompts[index];
+      }
     }
 
     const tytPrompts = t("tyt.tytPromptExamples");
@@ -12486,6 +12567,56 @@ function bindAiSearchPlaceholderRotation() {
       tytInput.placeholder = tytPrompts[tytIndex];
     }
   }, 2600);
+}
+
+/** A real per-character typing/pausing/erasing loop over a decorative span
+ * that sits visually where a placeholder would, cycling through "Ask Alwen
+ * anything..." and home.composer.composerExamples — reusing the exact
+ * "runs forever from boot, re-queries the DOM each tick, self-skips when
+ * not applicable" shape as bindAiSearchPlaceholderRotation() above, so it
+ * survives every render() without needing to be re-bound. The real
+ * #global-search input's own placeholder attribute is left blank on Home
+ * (see renderHomeAiComposer) — this span is the only visible placeholder
+ * there, aria-hidden since the input already carries an aria-label. */
+function bindHomeComposerTypewriter() {
+  const examples = [t("home.composer.composerPlaceholder"), ...t("home.composer.composerExamples")];
+  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  let exampleIndex = 0;
+  let charIndex = 0;
+  let phase = "typing"; // "typing" | "pausing" | "erasing"
+  let pauseTicks = 0;
+
+  window.setInterval(() => {
+    if (state.activeView !== "home") return;
+    const span = document.querySelector('[data-role="home-typewriter"]');
+    const input = document.getElementById("global-search");
+    if (!span || !input || document.activeElement === input || input.value) return;
+
+    if (reducedMotion()) {
+      span.textContent = examples[0];
+      return;
+    }
+
+    const target = examples[exampleIndex];
+    if (phase === "typing") {
+      charIndex += 1;
+      span.textContent = target.slice(0, charIndex);
+      if (charIndex >= target.length) {
+        phase = "pausing";
+        pauseTicks = 0;
+      }
+    } else if (phase === "pausing") {
+      pauseTicks += 1;
+      if (pauseTicks >= 14) phase = "erasing";
+    } else {
+      charIndex -= 1;
+      span.textContent = target.slice(0, charIndex);
+      if (charIndex <= 0) {
+        exampleIndex = (exampleIndex + 1) % examples.length;
+        phase = "typing";
+      }
+    }
+  }, 65);
 }
 
 let lastRenderedView = null;
@@ -12753,6 +12884,7 @@ bindThemeListener();
 bindHistoryNavigation();
 render();
 bindAiSearchPlaceholderRotation();
+bindHomeComposerTypewriter();
 registerServiceWorker();
 bindInstallPrompt();
 bindPhotoZoom();

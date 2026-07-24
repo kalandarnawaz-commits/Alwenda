@@ -870,6 +870,17 @@
       "voiceDenied": "Mikrofono leidimas atmestas",
       "voiceCancelled": "Balso įvestis atšaukta",
       "voiceError": "Nepavyko išgirsti — bandykite dar kartą"
+    },
+    "composer": {
+      "composerPlaceholder": "Paklauskite Alwen bet ko...",
+      "composerExamples": [
+        "Išversk bet kokį pokalbį akimirksniu",
+        "Surask gydytoją netoliese, dabar",
+        "Suplanuok visą savaitgalį",
+        "Palygink restoranus netoliese",
+        "Paskelbk skelbimą per kelias sekundes"
+      ],
+      "composerSendLabel": "Siųsti Alwen"
     }
   },
   "tyt": {

@@ -335,7 +335,7 @@ test("launchAlwenConversationWithQuery preserves the typed text verbatim, guards
   assert.match(fn, /if \(!trimmedQuery\) return;/, "an empty prompt must not navigate away from wherever it was submitted");
   assert.match(fn, /state\.query = "";/, "the shared query field must be cleared so a later visit to that screen doesn't show stale text");
   assert.match(fn, /state\.activeView = "alwen";/, "submitting must navigate into the alwen view");
-  assert.match(fn, /render\(\);\s*submitAlwenConversationMessage\(trimmedQuery\);/, "the exact captured text must be sent into the conversation right after the navigation render");
+  assert.match(fn, /renderWithViewTransition\(\);\s*submitAlwenConversationMessage\(trimmedQuery\);/, "the exact captured text must be sent into the conversation right after the navigation render");
 });
 
 test("every 'Tell Alwen' entry point — the shared search bar on every screen it appears on, and TYT's own — routes through the one shared launcher, not a per-screen local search", () => {
