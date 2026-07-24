@@ -66,12 +66,20 @@
     "homeQuestion": "Ką norite nuveikti šiandien?",
     "aiSearchPlaceholder": "Ko ieškote mieste šiandien?",
     "aiSearchPrompts": [
+      "Rasti dabar dirbantį odontologą",
+      "Išversti šį pokalbį",
+      "Reikia santechniko",
+      "Užsisakyti kirpimą",
       "Parduoti dviratį",
-      "Užsisakyti valytoją",
-      "Rasti auklę",
-      "Išversti tekstą",
+      "Savaitgalio planai",
+      "Reikia teisinės pagalbos",
+      "Rasti parkavimo vietą",
       "Rasti būstą",
-      "Samdyti advokatą",
+      "Geriausia kava netoliese",
+      "Palyginti interneto tiekėjus",
+      "Rasti auklę",
+      "Užsisakyti taksi",
+      "Reikia budinčios vaistinės",
       "Registruoti verslą"
     ],
     "askAi": "Pasakyti Alwen",
@@ -723,7 +731,9 @@
     "greeting": {
       "cityGreeting": "Laba diena{name}",
       "cityGreetingMorning": "Labas rytas{name}",
-      "cityGreetingEvening": "Labas vakaras{name}"
+      "cityGreetingEvening": "Labas vakaras{name}",
+      "homeGreetingSignedIn": "Sveiki sugrįžę, {name}.",
+      "homeGreetingGuest": "Jūs esate {city}."
     },
     "heroSubtitle": {
       "cityHeroSubtitle": "Viskas, kas vyksta aplink jus.",
@@ -810,7 +820,14 @@
       "intentNeedPlumber": "Reikia santechniko",
       "intentSellBicycle": "Parduoti dviratį",
       "intentWeekendEvents": "Rasti savaitgalio renginius",
-      "intentEarnNearby": "Uždirbti netoliese"
+      "intentEarnNearby": "Uždirbti netoliese",
+      "intentNeedDoctor": "Reikia gydytojo",
+      "intentTranslate": "Versti",
+      "intentSellSomething": "Parduoti ką nors",
+      "intentNeedHelp": "Reikia pagalbos",
+      "intentEmergency": "Skubi pagalba",
+      "intentNearbyOffers": "Pasiūlymai netoliese",
+      "intentNeedTaxi": "Reikia taksi"
     },
     "prompt": {
       "promptNeedPlumber": "Reikia santechniko.",
@@ -832,7 +849,27 @@
       "jobsLabel": "Darbai",
       "jobsDetail": "Atitinka tavo profilį šiandien",
       "apartmentsLabel": "Butai",
-      "apartmentsDetail": "Nauji nuomos skelbimai"
+      "apartmentsDetail": "Nauji nuomos skelbimai",
+      "pharmacyLabel": "Vaistinės",
+      "pharmacyOpenDetail": "Dabar atidarytos netoliese",
+      "pharmacyNearbyDetail": "Netoliese — darbo laikas nenurodytas"
+    },
+    "pulse": {
+      "pulseLabel": "Gyvai {city}",
+      "pulseEyebrow": "Gyvai {city}"
+    },
+    "memory": {
+      "memoryLabel": "Tęskite nuo tos vietos, kur sustojote",
+      "memoryContinue": "Tęsti: „{query}“",
+      "memoryClear": "Išvalyti istoriją"
+    },
+    "voice": {
+      "voiceMicLabel": "Klausti Alwen balsu",
+      "voiceUnsupportedLabel": "Šioje naršyklėje balso įvestis nepalaikoma",
+      "voiceListening": "Klausoma…",
+      "voiceDenied": "Mikrofono leidimas atmestas",
+      "voiceCancelled": "Balso įvestis atšaukta",
+      "voiceError": "Nepavyko išgirsti — bandykite dar kartą"
     }
   },
   "tyt": {

@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "elevenlabs-tts-20260719-1";
+const RELEASE_VERSION = "home-hero-v2";
 const CACHE_VERSION = `alwenda-shell-${RELEASE_VERSION}`;
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./auth/callback/index.html"];
 const AUTH_CALLBACK_PATH = "/auth/callback";

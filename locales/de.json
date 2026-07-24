@@ -66,12 +66,20 @@
     "homeQuestion": "Was möchtest du heute erledigen?",
     "aiSearchPlaceholder": "Wonach suchst du heute in der Stadt?",
     "aiSearchPrompts": [
+      "Zahnarzt finden, der jetzt offen hat",
+      "Dieses Gespräch übersetzen",
+      "Klempner gesucht",
+      "Termin beim Friseur buchen",
       "Mein Fahrrad verkaufen",
-      "Reinigungskraft buchen",
-      "Babysitter finden",
-      "Das hier übersetzen",
+      "Wochenendpläne",
+      "Rechtliche Hilfe benötigt",
+      "Parkplatz finden",
       "Wohnung finden",
-      "Anwalt beauftragen",
+      "Bester Kaffee in der Nähe",
+      "Internetanbieter vergleichen",
+      "Babysitter finden",
+      "Taxi buchen",
+      "Notdienst-Apotheke finden",
       "Mein Unternehmen registrieren"
     ],
     "askAi": "Alwen fragen",
@@ -723,7 +731,9 @@
     "greeting": {
       "cityGreeting": "Guten Tag{name}",
       "cityGreetingMorning": "Guten Morgen{name}",
-      "cityGreetingEvening": "Guten Abend{name}"
+      "cityGreetingEvening": "Guten Abend{name}",
+      "homeGreetingSignedIn": "Willkommen zurück, {name}.",
+      "homeGreetingGuest": "Du bist in {city}."
     },
     "heroSubtitle": {
       "cityHeroSubtitle": "Alles, was gerade um dich herum passiert.",
@@ -810,7 +820,14 @@
       "intentNeedPlumber": "Ich brauche einen Klempner",
       "intentSellBicycle": "Mein Fahrrad verkaufen",
       "intentWeekendEvents": "Wochenendveranstaltungen finden",
-      "intentEarnNearby": "In der Nähe Geld verdienen"
+      "intentEarnNearby": "In der Nähe Geld verdienen",
+      "intentNeedDoctor": "Arzt gesucht",
+      "intentTranslate": "Übersetzen",
+      "intentSellSomething": "Etwas verkaufen",
+      "intentNeedHelp": "Hilfe benötigt",
+      "intentEmergency": "Notfall",
+      "intentNearbyOffers": "Angebote in der Nähe",
+      "intentNeedTaxi": "Taxi gesucht"
     },
     "prompt": {
       "promptNeedPlumber": "Ich brauche einen Klempner.",
@@ -832,7 +849,27 @@
       "jobsLabel": "Jobs",
       "jobsDetail": "Passend zu deinem Profil heute",
       "apartmentsLabel": "Wohnungen",
-      "apartmentsDetail": "Neue Mietangebote zum Entdecken"
+      "apartmentsDetail": "Neue Mietangebote zum Entdecken",
+      "pharmacyLabel": "Apotheken",
+      "pharmacyOpenDetail": "Gerade jetzt in der Nähe geöffnet",
+      "pharmacyNearbyDetail": "In der Nähe — Öffnungszeiten nicht gelistet"
+    },
+    "pulse": {
+      "pulseLabel": "Live in {city}",
+      "pulseEyebrow": "Live in {city}"
+    },
+    "memory": {
+      "memoryLabel": "Dort weitermachen, wo du aufgehört hast",
+      "memoryContinue": "Weiter: „{query}“",
+      "memoryClear": "Verlauf löschen"
+    },
+    "voice": {
+      "voiceMicLabel": "Alwen per Sprache fragen",
+      "voiceUnsupportedLabel": "Spracheingabe wird in diesem Browser nicht unterstützt",
+      "voiceListening": "Hört zu …",
+      "voiceDenied": "Mikrofonzugriff verweigert",
+      "voiceCancelled": "Spracheingabe abgebrochen",
+      "voiceError": "Das haben wir nicht verstanden — versuch es erneut"
     }
   },
   "tyt": {
