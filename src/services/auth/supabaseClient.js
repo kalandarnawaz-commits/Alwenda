@@ -944,6 +944,197 @@ export async function fetchListingsByOwner(ownerId, limit = 3) {
   return data || [];
 }
 
+// ---------------------------------------------------------------------
+// Profile social identity — handles, follow relationships, trust score,
+// person-directed reviews, and per-user listing/block lookups. Backed by
+// supabase/migrations/202607240001_profile_social_identity.sql.
+// ---------------------------------------------------------------------
+
+/** Client-side mirror of the public_profiles_handle_format DB constraint,
+ * so the settings form can reject an invalid handle before round-tripping
+ * to Postgres. The DB constraint (not this function) is the real guard. */
+export function validateHandleFormat(handle) {
+  return typeof handle === "string" && /^[a-z][a-z0-9_]{2,23}$/.test(handle);
+}
+
+export async function fetchProfileByHandle(handle) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("public_profiles").select("*").ilike("handle", handle).maybeSingle();
+  if (error) throwIfError(error, "fetchProfileByHandle");
+  return data;
+}
+
+export async function fetchProfileById(userId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("public_profiles").select("*").eq("user_id", userId).maybeSingle();
+  if (error) throwIfError(error, "fetchProfileById");
+  return data;
+}
+
+export async function updateOwnHandle(handle) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .update({ handle, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .select("*")
+    .single();
+  if (error) throwIfError(error, "updateOwnHandle");
+  return data;
+}
+
+export async function fetchFollowCounts(userId) {
+  const supabase = await getClient();
+  const [followers, following] = await Promise.all([
+    supabase.from("profile_follows").select("follower_user_id", { count: "exact", head: true }).eq("followed_user_id", userId),
+    supabase.from("profile_follows").select("followed_user_id", { count: "exact", head: true }).eq("follower_user_id", userId)
+  ]);
+  if (followers.error) throwIfError(followers.error, "fetchFollowCounts.followers");
+  if (following.error) throwIfError(following.error, "fetchFollowCounts.following");
+  return { followers: followers.count || 0, following: following.count || 0 };
+}
+
+/** Two-step fetch (relationship rows, then a batched profile lookup) rather
+ * than a Supabase embedded-resource join — a join needs the exact
+ * auto-generated foreign-key constraint name, which can't be verified
+ * without a live database in this environment. */
+async function fetchProfilesByIds(userIds) {
+  if (!userIds.length) return [];
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("public_profiles").select("user_id, display_name, avatar_url, handle").in("user_id", userIds);
+  if (error) throwIfError(error, "fetchProfilesByIds");
+  return data || [];
+}
+
+export async function fetchFollowers(userId, { limit = 20, offset = 0 } = {}) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("profile_follows")
+    .select("follower_user_id, created_at")
+    .eq("followed_user_id", userId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throwIfError(error, "fetchFollowers");
+  const rows = data || [];
+  const byId = new Map((await fetchProfilesByIds(rows.map((row) => row.follower_user_id))).map((profile) => [profile.user_id, profile]));
+  return rows.map((row) => ({ userId: row.follower_user_id, followedAt: row.created_at, profile: byId.get(row.follower_user_id) || null }));
+}
+
+export async function fetchFollowing(userId, { limit = 20, offset = 0 } = {}) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("profile_follows")
+    .select("followed_user_id, created_at")
+    .eq("follower_user_id", userId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throwIfError(error, "fetchFollowing");
+  const rows = data || [];
+  const byId = new Map((await fetchProfilesByIds(rows.map((row) => row.followed_user_id))).map((profile) => [profile.user_id, profile]));
+  return rows.map((row) => ({ userId: row.followed_user_id, followedAt: row.created_at, profile: byId.get(row.followed_user_id) || null }));
+}
+
+export async function isFollowingUser(followedUserId) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const { data, error } = await supabase
+    .from("profile_follows")
+    .select("follower_user_id")
+    .eq("follower_user_id", user.id)
+    .eq("followed_user_id", followedUserId)
+    .maybeSingle();
+  if (error) throwIfError(error, "isFollowingUser");
+  return Boolean(data);
+}
+
+export async function followUser(followedUserId) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { error } = await supabase.from("profile_follows").insert({ follower_user_id: user.id, followed_user_id: followedUserId });
+  if (error) throwIfError(error, "followUser");
+}
+
+export async function unfollowUser(followedUserId) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { error } = await supabase.from("profile_follows").delete().eq("follower_user_id", user.id).eq("followed_user_id", followedUserId);
+  if (error) throwIfError(error, "unfollowUser");
+}
+
+export async function fetchTrustScore(userId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.from("trust_scores").select("*").eq("user_id", userId).maybeSingle();
+  if (error) throwIfError(error, "fetchTrustScore");
+  return data;
+}
+
+/** Triggers a real recalculation via the SECURITY DEFINER refresh_trust_score
+ * RPC — the only write path for trust_scores. Never sends a score value. */
+export async function refreshTrustScore(userId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("refresh_trust_score", { p_user_id: userId });
+  if (error) throwIfError(error, "refreshTrustScore");
+  return data;
+}
+
+export async function fetchProfileReviews(userId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("profile_reviews")
+    .select("id, reviewer_user_id, rating, body, created_at")
+    .eq("reviewee_user_id", userId)
+    .eq("status", "published")
+    .order("created_at", { ascending: false });
+  if (error) throwIfError(error, "fetchProfileReviews");
+  return data || [];
+}
+
+/** statuses defaults to every status a listing grid may ever display —
+ * "draft" and "removed" are excluded by default since drafts are private
+ * and removed listings are soft-deleted; pass statuses explicitly (e.g.
+ * including "draft") for an owner's own-profile view. */
+export async function fetchListingsForUser(userId, { statuses = ["published", "paused", "sold", "expired"] } = {}) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("owner_user_id", userId)
+    .in("status", statuses)
+    .order("created_at", { ascending: false });
+  if (error) throwIfError(error, "fetchListingsForUser");
+  return data || [];
+}
+
+export async function fetchBlockedUserIds() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from("user_blocks").select("blocked_user_id").eq("blocker_user_id", user.id);
+  if (error) throwIfError(error, "fetchBlockedUserIds");
+  return (data || []).map((row) => row.blocked_user_id);
+}
+
+export async function blockUser(userId) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { error } = await supabase.from("user_blocks").insert({ blocker_user_id: user.id, blocked_user_id: userId });
+  if (error) throwIfError(error, "blockUser");
+}
+
+export async function unblockUser(userId) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const { error } = await supabase.from("user_blocks").delete().eq("blocker_user_id", user.id).eq("blocked_user_id", userId);
+  if (error) throwIfError(error, "unblockUser");
+}
+
 export async function completeUserProfile({ displayName, profession, avatarUrl }) {
   const supabase = await getClient();
   const user = await getCurrentUser();

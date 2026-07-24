@@ -92,8 +92,25 @@ import {
   fetchAlwenMessages,
   createAlwenMessage,
   updateAlwenConversationMode,
+  validateHandleFormat,
+  fetchProfileByHandle,
+  fetchProfileById,
+  updateOwnHandle,
+  fetchFollowCounts,
+  fetchFollowers,
+  fetchFollowing,
+  isFollowingUser,
+  followUser,
+  unfollowUser,
+  fetchTrustScore,
+  refreshTrustScore,
+  fetchProfileReviews,
+  fetchListingsForUser,
+  fetchBlockedUserIds,
+  blockUser,
+  unblockUser,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=pilot-readiness-1";
+} from "./services/auth/supabaseClient.js?v=profile-identity-1";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { ALWEN_INTENTS, classifyAlwenIntent, wantsOpenNowOnly } from "./services/alwen/intentRouter.js?v=alwen-2-0-1";
 import {
@@ -236,6 +253,7 @@ const state = {
   settingsConfirmDelete: false,
   businessDraft: null,
   publicProfile: null,
+  userProfile: null,
   reportedPeople: [],
   blockedPeople: [],
   helpfulPostIds: [],
@@ -491,6 +509,228 @@ function openPublicProfileById(id) {
   };
   refreshPublicProfileListings(state.publicProfile.id);
   return true;
+}
+
+/* The global-identity profile view (renderUserProfile) — distinct from the
+   lightweight, mock-data-backed state.publicProfile "quick view" above.
+   Backed by real public_profiles/profile_follows/trust_scores/profile_reviews
+   rows via supabase/migrations/202607240001_profile_social_identity.sql. */
+
+const OWN_USER_PROFILE_TABS = ["listings", "saved", "reviews", "activity", "about"];
+const PUBLIC_USER_PROFILE_TABS = ["listings", "reviews", "activity", "about"];
+
+function currentUserProfileTabs() {
+  return state.userProfile?.isOwn ? OWN_USER_PROFILE_TABS : PUBLIC_USER_PROFILE_TABS;
+}
+
+/** Opens /profile/:handle or /profile/:id. Always fetches a real row —
+ * never fabricates a profile for a handle/id that doesn't exist, so an
+ * invalid or removed link honestly shows "notFound" instead of empty
+ * placeholder content that looks like a real (but blank) account. */
+async function openUserProfile(handleOrId) {
+  const requested = (handleOrId || "").trim();
+  state.activeView = "userProfile";
+  state.activeSheet = null;
+  state.userProfile = {
+    requested,
+    status: "loading",
+    userId: null,
+    handle: null,
+    displayName: "",
+    avatarUrl: "",
+    coverUrl: "",
+    bio: "",
+    city: "",
+    verificationStatus: null,
+    createdAt: null,
+    isOwn: false,
+    followCounts: { followers: 0, following: 0 },
+    isFollowing: false,
+    followActionPending: false,
+    trust: null,
+    activeTab: "listings",
+    listings: [],
+    listingsStatus: "idle",
+    reviews: [],
+    reviewsStatus: "idle",
+    activity: [],
+    activityStatus: "idle",
+    followersDialog: null,
+    followingDialog: null,
+    trustDialogOpen: false,
+    isBlocked: false
+  };
+  render();
+  try {
+    const profile = looksLikeUserId(requested) ? await fetchProfileById(requested) : await fetchProfileByHandle(requested);
+    if (state.userProfile?.requested !== requested) return; // navigated away before this resolved
+    if (!profile) {
+      state.userProfile.status = "notFound";
+      render();
+      return;
+    }
+    const currentUserId = state.auth.user?.id || null;
+    state.userProfile.status = "ready";
+    state.userProfile.userId = profile.user_id;
+    state.userProfile.handle = profile.handle || null;
+    state.userProfile.displayName = profile.display_name || "";
+    state.userProfile.avatarUrl = profile.avatar_url || "";
+    state.userProfile.coverUrl = profile.cover_url || "";
+    state.userProfile.bio = profile.bio || "";
+    state.userProfile.city = profile.city || "";
+    state.userProfile.verificationStatus = profile.verification_status || "unverified";
+    state.userProfile.createdAt = profile.created_at || null;
+    state.userProfile.isOwn = Boolean(currentUserId && currentUserId === profile.user_id);
+    state.userProfile.activeTab = state.userProfile.isOwn ? "listings" : "listings";
+    render();
+    loadTraderDisclosure(profile.user_id);
+    loadUserProfileSocialData(profile.user_id);
+    loadUserProfileTabData(profile.user_id, state.userProfile.activeTab);
+  } catch {
+    if (state.userProfile?.requested === requested) {
+      state.userProfile.status = "error";
+      render();
+    }
+  }
+}
+
+/** Follow counts, whether the viewer already follows this person, their
+ * trust score, and (only for another account) whether the viewer has
+ * blocked them — loaded in parallel, each fails independently so one
+ * unavailable signal never blanks the whole profile. */
+async function loadUserProfileSocialData(userId) {
+  const [counts, following, trust, blockedIds] = await Promise.all([
+    fetchFollowCounts(userId).catch(() => null),
+    state.auth.status === "signedIn" && state.auth.user?.id !== userId ? isFollowingUser(userId).catch(() => false) : Promise.resolve(false),
+    fetchTrustScore(userId).catch(() => null),
+    state.auth.status === "signedIn" ? fetchBlockedUserIds().catch(() => []) : Promise.resolve([])
+  ]);
+  if (!state.userProfile || state.userProfile.userId !== userId) return;
+  if (counts) state.userProfile.followCounts = counts;
+  state.userProfile.isFollowing = Boolean(following);
+  state.userProfile.trust = trust;
+  state.userProfile.isBlocked = blockedIds.includes(userId);
+  render();
+}
+
+async function switchUserProfileTab(tab) {
+  if (!state.userProfile || !currentUserProfileTabs().includes(tab)) return;
+  state.userProfile.activeTab = tab;
+  render();
+  loadUserProfileTabData(state.userProfile.userId, tab);
+}
+
+async function loadUserProfileTabData(userId, tab) {
+  if (!state.userProfile || state.userProfile.userId !== userId) return;
+  if (tab === "listings" || tab === "saved") {
+    if (state.userProfile.listingsStatus === "loading" || state.userProfile.listingsStatus === "loaded") return;
+    state.userProfile.listingsStatus = "loading";
+    try {
+      const statuses = state.userProfile.isOwn ? ["draft", "published", "paused", "sold", "expired"] : ["published", "paused", "sold", "expired"];
+      const items = await fetchListingsForUser(userId, { statuses });
+      if (state.userProfile?.userId !== userId) return;
+      state.userProfile.listings = items;
+      state.userProfile.listingsStatus = "loaded";
+    } catch {
+      if (state.userProfile?.userId === userId) state.userProfile.listingsStatus = "error";
+    }
+    render();
+  } else if (tab === "reviews") {
+    if (state.userProfile.reviewsStatus === "loading" || state.userProfile.reviewsStatus === "loaded") return;
+    state.userProfile.reviewsStatus = "loading";
+    try {
+      const items = await fetchProfileReviews(userId);
+      if (state.userProfile?.userId !== userId) return;
+      state.userProfile.reviews = items;
+      state.userProfile.reviewsStatus = "loaded";
+    } catch {
+      if (state.userProfile?.userId === userId) state.userProfile.reviewsStatus = "error";
+    }
+    render();
+  }
+}
+
+async function toggleFollowUserProfile() {
+  const profile = state.userProfile;
+  if (!profile || !profile.userId || profile.isOwn || profile.followActionPending) return;
+  if (state.auth.status !== "signedIn") {
+    state.activeView = "auth";
+    render();
+    return;
+  }
+  profile.followActionPending = true;
+  const wasFollowing = profile.isFollowing;
+  // Optimistic update, reconciled against the real count on failure — the
+  // count itself is never computed client-side beyond this temporary ±1.
+  profile.isFollowing = !wasFollowing;
+  profile.followCounts.followers += wasFollowing ? -1 : 1;
+  render();
+  try {
+    if (wasFollowing) await unfollowUser(profile.userId);
+    else await followUser(profile.userId);
+    trackEvent(wasFollowing ? "profile_unfollowed" : "profile_followed", { target_user_id: profile.userId });
+  } catch {
+    profile.isFollowing = wasFollowing;
+    profile.followCounts.followers += wasFollowing ? 1 : -1;
+  } finally {
+    profile.followActionPending = false;
+    render();
+  }
+}
+
+async function openUserProfileFollowDialog(kind) {
+  const profile = state.userProfile;
+  if (!profile || !profile.userId) return;
+  const key = kind === "following" ? "followingDialog" : "followersDialog";
+  profile[key] = { status: "loading", items: [] };
+  render();
+  try {
+    const items = kind === "following" ? await fetchFollowing(profile.userId) : await fetchFollowers(profile.userId);
+    if (state.userProfile?.userId !== profile.userId) return;
+    profile[key] = { status: "ready", items };
+  } catch {
+    if (state.userProfile?.userId === profile.userId) profile[key] = { status: "error", items: [] };
+  }
+  render();
+}
+
+function closeUserProfileFollowDialog(kind) {
+  if (!state.userProfile) return;
+  state.userProfile[kind === "following" ? "followingDialog" : "followersDialog"] = null;
+  render();
+}
+
+async function refreshUserProfileTrustScore() {
+  const profile = state.userProfile;
+  if (!profile || !profile.userId || !profile.isOwn) return;
+  try {
+    const updated = await refreshTrustScore(profile.userId);
+    if (state.userProfile?.userId === profile.userId && updated) state.userProfile.trust = updated;
+  } catch {
+    // Leave the previously-known trust score in place — never invent one.
+  }
+  render();
+}
+
+function toggleUserProfileTrustDialog(open) {
+  if (!state.userProfile) return;
+  state.userProfile.trustDialogOpen = open;
+  render();
+}
+
+async function toggleBlockUserProfilePerson() {
+  const profile = state.userProfile;
+  if (!profile || !profile.userId || profile.isOwn || state.auth.status !== "signedIn") return;
+  const wasBlocked = profile.isBlocked;
+  profile.isBlocked = !wasBlocked;
+  render();
+  try {
+    if (wasBlocked) await unblockUser(profile.userId);
+    else await blockUser(profile.userId);
+  } catch {
+    profile.isBlocked = wasBlocked;
+    render();
+  }
 }
 
 function initials(name) {
@@ -857,6 +1097,7 @@ const DEEP_LINK_VIEWS = new Set([
   "businessDashboard",
   "savedPlaces",
   "publicProfile",
+  "userProfile",
   "legalTerms",
   "legalPrivacy",
   "legalCookies",
@@ -868,7 +1109,16 @@ const DEEP_LINK_VIEWS = new Set([
 /* Views whose deep link needs a companion ?id= to mean anything — read
    from and written to the URL alongside `view` by syncStateFromUrl /
    syncUrlToState below. */
-const ID_LINKED_VIEWS = new Set(["publicProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
+const ID_LINKED_VIEWS = new Set(["publicProfile", "userProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
+
+/* Handles are lowercase a-z0-9_ only (mirrors public_profiles_handle_format
+   in supabase/migrations/202607240001_profile_social_identity.sql) and a
+   Supabase user id is always a UUID, which always contains hyphens — a
+   handle never can. That's enough to tell the two apart from a single URL
+   segment without a network round trip. */
+function looksLikeUserId(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || "");
+}
 
 /* A directly-typed URL for these still works (syncStateFromUrl honors
    them below) so the internal Ops/city-import tooling stays runnable —
@@ -882,6 +1132,7 @@ let lastPushedUrlKey = null;
 
 function currentDeepLinkId() {
   if (state.activeView === "publicProfile") return state.publicProfile?.id || null;
+  if (state.activeView === "userProfile") return state.userProfile?.handle || state.userProfile?.userId || null;
   if (state.activeView === "businessProfile") return state.selectedBusinessId != null ? String(state.selectedBusinessId) : null;
   if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
   if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
@@ -904,12 +1155,18 @@ function syncStateFromUrl() {
     return;
   }
   const legalPathViews = { "/terms": "legalTerms", "/terms/": "legalTerms", "/privacy": "legalPrivacy", "/privacy/": "legalPrivacy", "/cookies": "legalCookies", "/cookies/": "legalCookies", "/safety": "legalSafety", "/safety/": "legalSafety" };
-  const view = legalPathViews[window.location.pathname] || searchParams.get("view");
+  // Real path-based profile URLs (/profile/:handle, /profile/:id) — served
+  // via 404.html's SPA fallback on a direct load/refresh, see that file's
+  // comment. Takes priority over the generic ?view=/?id= form below, same
+  // as legalPathViews above.
+  const profilePathMatch = window.location.pathname.match(/^\/profile\/([^/]+)\/?$/);
+  const view = legalPathViews[window.location.pathname] || (profilePathMatch ? "userProfile" : null) || searchParams.get("view");
   if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
   state.activeView = view;
-  const id = searchParams.get("id");
+  const id = (profilePathMatch && decodeURIComponent(profilePathMatch[1])) || searchParams.get("id");
   if (!id || !ID_LINKED_VIEWS.has(view)) return;
   if (view === "publicProfile") openPublicProfileById(id);
+  else if (view === "userProfile") openUserProfile(id);
   else if (view === "businessProfile") state.selectedBusinessId = Number(id);
   else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
@@ -936,6 +1193,10 @@ function syncUrlToState() {
   const legalViewPaths = { legalTerms: "/terms", legalPrivacy: "/privacy", legalCookies: "/cookies", legalSafety: "/safety" };
   if (legalViewPaths[state.activeView]) {
     history.pushState({ view: state.activeView }, "", legalViewPaths[state.activeView]);
+    return;
+  }
+  if (state.activeView === "userProfile" && id) {
+    history.pushState({ view: state.activeView, id }, "", `/profile/${encodeURIComponent(id)}`);
     return;
   }
   const params = new URLSearchParams();
@@ -1009,7 +1270,7 @@ function resetAuthDrafts() {
   state.auth.forgotDraft = { email: "" };
   state.auth.verifyDraft = { code: "" };
   state.auth.resetDraft = { password: "", confirmPassword: "" };
-  state.auth.profileDraft = { name: "", role: "", avatar: "" };
+  state.auth.profileDraft = { name: "", role: "", avatar: "", handle: "" };
   state.auth.visiblePasswordFields = {};
 }
 
@@ -1230,7 +1491,7 @@ async function submitResetPassword() {
 }
 
 function resetProfileDraftFromUser(account) {
-  state.auth.profileDraft = { name: account?.name || "", role: account?.role || "", avatar: account?.avatar || "" };
+  state.auth.profileDraft = { name: account?.name || "", role: account?.role || "", avatar: account?.avatar || "", handle: account?.publicProfile?.handle || "" };
 }
 
 async function submitCompleteProfile() {
@@ -1238,6 +1499,8 @@ async function submitCompleteProfile() {
   if (!draft.name.trim()) return void (state.auth.authError = t("auth.authErrorName"));
   const account = state.auth.user;
   if (!account) return void (state.auth.authError = t("auth.authErrorGeneric"));
+  const trimmedHandle = draft.handle.trim().toLowerCase();
+  if (trimmedHandle && !validateHandleFormat(trimmedHandle)) return void (state.auth.authError = t("userProfile.handleInvalid"));
 
   try {
     const profiles = await completeUserProfile({
@@ -1246,10 +1509,25 @@ async function submitCompleteProfile() {
       avatarUrl: draft.avatar || account.avatar || null
     });
     state.auth.user = mapSupabaseUserToAccount(profiles.user, profiles);
+    // A handle is optional and validated separately server-side (uniqueness,
+    // reserved words) — its failure must never block the name/role save
+    // above, which has already succeeded by this point.
+    let handleFailed = false;
+    if (trimmedHandle && trimmedHandle !== (account.publicProfile?.handle || "")) {
+      try {
+        const updated = await updateOwnHandle(trimmedHandle);
+        state.auth.user.publicProfile = updated;
+      } catch (handleError) {
+        handleFailed = true;
+        state.auth.authError = handleError?.message?.includes("duplicate") || handleError?.code === "23505" ? t("userProfile.handleTaken") : t("userProfile.handleSaveError");
+      }
+    }
     state.auth.status = "signedIn";
-    state.auth.authError = null;
     trackEvent("profile_completed", {});
-    state.activeView = "home";
+    if (!handleFailed) {
+      state.auth.authError = null;
+      state.activeView = "home";
+    }
     render();
   } catch (error) {
     state.auth.authError = error?.message || t("auth.authErrorName");
@@ -2906,6 +3184,8 @@ function renderCompleteProfile() {
         </label>
       </div>
       ${authField({ id: "profile-name", label: t("common.nameLabel"), value: draft.name, placeholder: t("common.namePlaceholder") })}
+      ${authField({ id: "profile-handle", label: `${t("userProfile.handleLabel")} ${t("common.optionalSuffix")}`, value: draft.handle, placeholder: t("userProfile.handlePlaceholder"), extra: 'inputmode="text" autocapitalize="none" autocorrect="off"' })}
+      <p class="settings-section-hint">${t("userProfile.handleHint")}</p>
       ${authField({ id: "profile-role", label: `${t("common.roleLabel")} ${t("common.optionalSuffix")}`, value: draft.role, placeholder: t("common.rolePlaceholder") })}
       <button type="submit" class="auth-primary-button">${t("common.saveAndContinueCta")}</button>
     </form>
@@ -2943,7 +3223,7 @@ async function refreshTraderAccountState() {
 async function loadTraderDisclosure(userId) {
   if (!userId || state.traderPublicProfiles[userId] !== undefined) return;
   try { state.traderPublicProfiles[userId] = await fetchTraderPublicProfile(userId); } catch { state.traderPublicProfiles[userId] = null; }
-  if (state.activeView === "listingDetail") render();
+  if (state.activeView === "listingDetail" || state.activeView === "userProfile") render();
 }
 
 const TRADER_CONFIRMATION_VERSION = `${LEGAL_POLICY_VERSION}:trader-traceability-v1`;
@@ -3355,6 +3635,7 @@ function renderView() {
     businessDashboard: renderBusinessDashboard,
     savedPlaces: renderSavedPlaces,
     publicProfile: renderPublicProfile,
+    userProfile: renderUserProfile,
     cityImport: () => `<section class="section-shell">${renderCityImport()}</section>`
   };
   return `<section class="view">${views[state.activeView]?.() || renderHome()}</section>`;
@@ -9368,8 +9649,279 @@ function renderProfile() {
   `;
 }
 
+/* ==========================================================================
+   Global-standard social identity + marketplace profile (renderUserProfile).
+   Reachable at /profile/:handle and /profile/:id (see openUserProfile,
+   currentDeepLinkId, syncStateFromUrl/syncUrlToState, 404.html). Every
+   field below is a real public_profiles/profile_follows/trust_scores/
+   profile_reviews/listings row — nothing here is fabricated, and the trust
+   score is never client-writable (see the migration's RLS policies).
+   ========================================================================== */
+
+function userProfileListingCategoryLabel(dbCategory) {
+  const hyphenated = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === dbCategory);
+  return hyphenated ? categoryLabel(hyphenated) : dbCategory;
+}
+
+const USER_PROFILE_LISTING_STATUS_LABEL = {
+  draft: "userProfile.listingStatus.draft",
+  published: "userProfile.listingStatus.active",
+  paused: "userProfile.listingStatus.paused",
+  sold: "userProfile.listingStatus.sold",
+  expired: "userProfile.listingStatus.expired"
+};
+
+function renderUserProfileListingCard(item, isOwn) {
+  const statusKey = USER_PROFILE_LISTING_STATUS_LABEL[item.status] || null;
+  return `
+    <article class="market-card visual-market-card profile-listing-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
+      <div class="market-photo profile-listing-photo">${renderCategoryPlaceholder({ type: userProfileListingCategoryLabel(item.category) })}</div>
+      <div class="market-card-body">
+        <span class="badge">${userProfileListingCategoryLabel(item.category)}</span>
+        ${statusKey ? `<span class="badge profile-listing-status profile-listing-status-${escapeHtml(item.status)}">${t(statusKey)}</span>` : ""}
+        <h3>${escapeHtml(item.title)}</h3>
+        <div class="price-row"><strong>${formatListingPrice(item.price_amount, item.price_period, item.price_currency)}</strong></div>
+        <div class="opportunity-actions market-actions">
+          ${isOwn
+            ? `<button type="button" data-view="createListing" data-edit-listing-id="${item.id}">${t("userProfile.editListingCta")}</button>`
+            : `<button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${t("common.contactSeller")}</button>`}
+          <a href="?view=listingDetail&id=${encodeURIComponent(item.id)}" data-view="listingDetail" data-listing-id="${item.id}">${t("common.viewDetails")}</a>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderUserProfileListingGrid(profile) {
+  if (profile.listingsStatus === "loading" || profile.listingsStatus === "idle") {
+    return `<div class="profile-listing-grid profile-listing-grid-loading" aria-busy="true">${[0, 1, 2, 3].map(() => '<div class="profile-listing-skeleton"></div>').join("")}</div>`;
+  }
+  if (profile.listingsStatus === "error") return renderEmptyState(t("userProfile.listingsError"), "search");
+  const items = profile.activeTab === "saved" ? [] : profile.listings;
+  if (!items.length) {
+    return renderEmptyState(profile.isOwn ? t("userProfile.noOwnListings") : t("userProfile.noPublicListings"), "shop");
+  }
+  return `<div class="profile-listing-grid">${items.map((item) => renderUserProfileListingCard(item, profile.isOwn)).join("")}</div>`;
+}
+
+function renderUserProfileReviews(profile) {
+  if (profile.reviewsStatus === "loading" || profile.reviewsStatus === "idle") return `<div class="profile-listing-grid-loading" aria-busy="true"></div>`;
+  if (profile.reviewsStatus === "error") return renderEmptyState(t("userProfile.reviewsError"), "search");
+  if (!profile.reviews.length) return renderEmptyState(t("userProfile.noReviews"), "star");
+  return `
+    <div class="profile-reviews-list">
+      ${profile.reviews.map((review) => `
+        <article class="profile-review-card">
+          <div class="profile-review-rating">${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)}</div>
+          ${review.body ? `<p>${escapeHtml(review.body)}</p>` : ""}
+          <span class="profile-review-date">${formatDate(review.created_at, { year: "numeric", month: "long", day: "numeric" })}</span>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+/** Real, verifiable activity only — listings created and reviews received,
+ * the same "no fabricated timeline" rule renderProfile's deriveRealActivity
+ * already follows. There is no generic per-user activity log in this app. */
+function renderUserProfileActivity(profile) {
+  const events = [
+    ...profile.listings.map((item) => ({ date: item.created_at, label: t("userProfile.activityListingCreated", { title: item.title }) })),
+    ...profile.reviews.map((review) => ({ date: review.created_at, label: t("userProfile.activityReviewReceived", { rating: review.rating }) }))
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!events.length) return renderEmptyState(t("userProfile.noActivity"), "search");
+  return `<div class="timeline-list">${events.slice(0, 10).map((event) => `<article><span>${formatDate(event.date, { day: "numeric", month: "short" })}</span><div><p>${event.label}</p></div></article>`).join("")}</div>`;
+}
+
+function renderUserProfileAbout(profile) {
+  const rows = [
+    profile.city ? { label: t("userProfile.aboutCity"), value: escapeHtml(profile.city) } : null,
+    profile.createdAt ? { label: t("userProfile.aboutMemberSince"), value: formatDate(profile.createdAt, { year: "numeric", month: "long" }) } : null
+  ].filter(Boolean);
+  return `
+    ${profile.bio ? `<p class="profile-about-bio">${escapeHtml(profile.bio)}</p>` : `<p class="settings-section-hint">${t("userProfile.noBio")}</p>`}
+    ${rows.length ? `<div class="business-detail-strip">${rows.map((row) => `<p class="business-detail-line"><strong>${row.label}:</strong> ${row.value}</p>`).join("")}</div>` : ""}
+  `;
+}
+
+function renderUserProfileTabPanel(profile) {
+  if (profile.activeTab === "listings" || profile.activeTab === "saved") return renderUserProfileListingGrid(profile);
+  if (profile.activeTab === "reviews") return renderUserProfileReviews(profile);
+  if (profile.activeTab === "activity") return renderUserProfileActivity(profile);
+  if (profile.activeTab === "about") return renderUserProfileAbout(profile);
+  return "";
+}
+
+const USER_PROFILE_TAB_LABEL = {
+  listings: "userProfile.tabListings",
+  saved: "userProfile.tabSaved",
+  reviews: "userProfile.tabReviews",
+  activity: "userProfile.tabActivity",
+  about: "userProfile.tabAbout"
+};
+
+function renderUserProfileTabs(profile) {
+  const tabs = currentUserProfileTabs();
+  return `
+    <div class="profile-tabs" role="tablist" aria-label="${t("userProfile.tabsLabel")}">
+      ${tabs.map((tab) => `
+        <button type="button" role="tab" id="profile-tab-${tab}" aria-selected="${profile.activeTab === tab}" aria-controls="profile-tabpanel" class="${profile.activeTab === tab ? "is-active" : ""}" data-user-profile-tab="${tab}">
+          ${t(USER_PROFILE_TAB_LABEL[tab])}
+        </button>
+      `).join("")}
+    </div>
+    <div id="profile-tabpanel" role="tabpanel" aria-labelledby="profile-tab-${profile.activeTab}" tabindex="0">
+      ${renderUserProfileTabPanel(profile)}
+    </div>
+  `;
+}
+
+function userProfileTrustStatusLabel(trust) {
+  if (!trust || trust.status === "provisional") return t("userProfile.trustProvisional");
+  return t("userProfile.trustCalculated");
+}
+
+function renderUserProfileMetrics(profile) {
+  return `
+    <div class="profile-social-metrics" role="group" aria-label="${t("userProfile.metricsLabel")}">
+      <button type="button" class="profile-metric" data-user-profile-dialog="following">
+        <strong>${profile.followCounts.following}</strong><span>${t("userProfile.followingLabel")}</span>
+      </button>
+      <button type="button" class="profile-metric" data-user-profile-dialog="followers">
+        <strong>${profile.followCounts.followers}</strong><span>${t("userProfile.followersLabel")}</span>
+      </button>
+      <button type="button" class="profile-metric" data-user-profile-dialog="trust">
+        <strong>${profile.trust ? profile.trust.score : "—"}</strong><span>${t("userProfile.trustScoreLabel")}</span>
+      </button>
+    </div>
+  `;
+}
+
+function renderUserProfileReputation(profile) {
+  const traderDisclosure = state.traderPublicProfiles[profile.userId];
+  const signals = [
+    profile.verificationStatus === "verified" ? { icon: "verify", label: t("userProfile.signalIdentityVerified") } : null,
+    traderDisclosure ? { icon: "verify", label: t("userProfile.signalTraderVerified") } : null,
+    profile.reviewsStatus === "loaded" && profile.reviews.length ? { icon: "star", label: t("userProfile.signalReviewCount", { count: profile.reviews.length }) } : null,
+    profile.createdAt ? { icon: "trust", label: t("userProfile.signalMemberSince", { date: formatDate(profile.createdAt, { year: "numeric", month: "long" }) }) } : null,
+    profile.listingsStatus === "loaded" ? { icon: "tag", label: t("userProfile.signalListingCount", { count: profile.listings.filter((item) => item.status === "sold" || item.status === "published").length }) } : null
+  ].filter(Boolean);
+  if (!signals.length) return "";
+  return `<div class="quote-list identity-badges profile-reputation-signals">${signals.map((signal) => `<span class="verified-chip">${icon(signal.icon)}${signal.label}</span>`).join("")}</div>`;
+}
+
+function renderUserProfileFollowListDialog(kind, dialog) {
+  const titleKey = kind === "following" ? "userProfile.followingDialogTitle" : "userProfile.followersDialogTitle";
+  let body;
+  if (!dialog || dialog.status === "loading") {
+    body = `<div class="profile-listing-grid-loading" aria-busy="true"></div>`;
+  } else if (dialog.status === "error") {
+    body = renderEmptyState(t("userProfile.followListError"), "search");
+  } else if (!dialog.items.length) {
+    body = renderEmptyState(kind === "following" ? t("userProfile.noFollowing") : t("userProfile.noFollowers"), "people");
+  } else {
+    body = `<ul class="profile-follow-list">${dialog.items.map((row) => `
+      <li>
+        <button type="button" class="my-business-row" data-user-profile-target="${escapeHtml(row.profile?.handle || row.userId)}">
+          <span class="avatar-frame public-profile-avatar">${row.profile?.avatar_url ? `<img class="profile-portrait" src="${escapeHtml(row.profile.avatar_url)}" alt="" />` : `<span class="public-profile-initials">${escapeHtml(initials(row.profile?.display_name || ""))}</span>`}</span>
+          <div><strong>${escapeHtml(row.profile?.display_name || t("userProfile.unknownMember"))}</strong>${row.profile?.handle ? `<span>@${escapeHtml(row.profile.handle)}</span>` : ""}</div>
+        </button>
+      </li>
+    `).join("")}</ul>`;
+  }
+  return `
+    <div class="report-dialog-backdrop" data-user-profile-dialog-backdrop="${kind}">
+      <div class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-${kind}-dialog-title">
+        <button type="button" class="back-button" data-user-profile-dialog-close="${kind}" aria-label="${t("common.close")}">${icon("arrow")}${t("common.close")}</button>
+        <h2 id="profile-${kind}-dialog-title">${t(titleKey)}</h2>
+        ${body}
+      </div>
+    </div>
+  `;
+}
+
+function renderUserProfileTrustDialog(profile) {
+  const trust = profile.trust;
+  const factors = trust?.factors || {};
+  const rows = [
+    factors.emailVerified !== undefined ? { label: t("userProfile.trustFactorEmail"), done: Boolean(factors.emailVerified) } : null,
+    factors.identityVerified !== undefined ? { label: t("userProfile.trustFactorIdentity"), done: Boolean(factors.identityVerified) } : null,
+    factors.traderVerified !== undefined ? { label: t("userProfile.trustFactorTrader"), done: Boolean(factors.traderVerified) } : null,
+    factors.listingCount !== undefined ? { label: t("userProfile.trustFactorListings", { count: factors.listingCount }), done: factors.listingCount > 0 } : null,
+    factors.reviewCount !== undefined ? { label: t("userProfile.trustFactorReviews", { count: factors.reviewCount }), done: factors.reviewCount > 0 } : null
+  ].filter(Boolean);
+  return `
+    <div class="report-dialog-backdrop" data-user-profile-dialog-backdrop="trust">
+      <div class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-trust-dialog-title">
+        <button type="button" class="back-button" data-user-profile-dialog-close="trust" aria-label="${t("common.close")}">${icon("arrow")}${t("common.close")}</button>
+        <h2 id="profile-trust-dialog-title">${t("userProfile.trustDialogTitle")}</h2>
+        <p class="trust-headline">${trust ? trust.score : "—"} · ${userProfileTrustStatusLabel(trust)}</p>
+        <p class="settings-section-hint">${trust && trust.status === "provisional" ? t("userProfile.trustProvisionalHint") : t("userProfile.trustDialogHint")}</p>
+        ${rows.length ? `<div class="identity-verification-steps">${rows.map((row) => `<article class="${row.done ? "is-complete" : ""}"><span>${row.done ? icon("check") : "–"}</span><div><strong>${row.label}</strong></div></article>`).join("")}</div>` : ""}
+        ${profile.isOwn ? `<button type="button" class="auth-link" data-user-profile-refresh-trust="true">${t("userProfile.trustRefreshCta")}</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderUserProfile() {
+  const profile = state.userProfile;
+  if (!profile || profile.status === "loading") {
+    return `<section class="section-shell profile-panel"><div class="profile-listing-grid-loading" aria-busy="true"></div></section>`;
+  }
+  if (profile.status === "notFound" || profile.status === "error") {
+    return `
+      <section class="section-shell profile-panel">
+        <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+        ${renderEmptyState(profile.status === "notFound" ? t("userProfile.notFound") : t("userProfile.loadError"), "search")}
+      </section>
+    `;
+  }
+
+  const canFollow = state.auth.status === "signedIn" && !profile.isOwn;
+  const isBlocked = profile.isBlocked;
+
+  return `
+    <section class="section-shell profile-panel user-profile-shell">
+      <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+
+      <div class="user-profile-cover ${profile.coverUrl ? "" : "user-profile-cover-fallback"}" style="${profile.coverUrl ? `background-image:url('${escapeHtml(profile.coverUrl)}')` : ""}"></div>
+
+      <div class="user-profile-identity">
+        <span class="avatar-frame user-profile-avatar">
+          ${profile.avatarUrl ? `<img class="profile-portrait" src="${escapeHtml(profile.avatarUrl)}" alt="" />` : `<span class="profile-portrait profile-portrait-fallback">${icon("profile")}</span>`}
+        </span>
+        <div class="user-profile-identity-text">
+          <h1>${escapeHtml(profile.displayName || t("userProfile.unknownMember"))}${profile.verificationStatus === "verified" ? verifiedCheck(t("status.verified")) : ""}</h1>
+          ${profile.handle ? `<p class="user-profile-handle">@${escapeHtml(profile.handle)}</p>` : ""}
+          <p class="identity-meta">${joinNonEmpty([escapeHtml(profile.city || ""), profile.createdAt ? t("profile.identity.memberSince", { date: formatDate(profile.createdAt, { year: "numeric", month: "long" }) }) : null])}</p>
+        </div>
+        <div class="user-profile-actions">
+          ${profile.isOwn
+            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>`
+            : `<button type="button" class="${profile.isFollowing ? "auth-link" : "auth-primary-button"}" data-user-profile-follow="true" ${!canFollow && state.auth.status === "signedIn" ? "disabled" : ""}>${profile.isFollowing ? t("userProfile.followingCta") : t("userProfile.followCta")}</button>
+               <button type="button" class="auth-link" data-user-profile-message="true">${t("common.messagePersonCta")}</button>
+               <div class="user-profile-more-menu">
+                 <button type="button" data-report-target="user" data-report-id="${escapeHtml(profile.userId)}">${t("userProfile.reportCta")}</button>
+                 <button type="button" data-user-profile-block="true">${isBlocked ? t("userProfile.unblockCta") : t("userProfile.blockCta")}</button>
+               </div>`}
+        </div>
+      </div>
+
+      ${renderUserProfileMetrics(profile)}
+      ${renderUserProfileReputation(profile)}
+      ${renderUserProfileTabs(profile)}
+
+      ${profile.followersDialog ? renderUserProfileFollowListDialog("followers", profile.followersDialog) : ""}
+      ${profile.followingDialog ? renderUserProfileFollowListDialog("following", profile.followingDialog) : ""}
+      ${profile.trustDialogOpen ? renderUserProfileTrustDialog(profile) : ""}
+    </section>
+  `;
+}
+
 function renderProfileQuickActions() {
   const actions = [
+    ["userProfile.viewProfileAction", "people", "userProfile"],
     ["profile.quickActions.editProfileAction", "verify", "completeProfile"],
     ["profile.quickActions.savedPlacesAction", "heart", "savedPlaces"],
     ...(ownedBusinesses().length ? [["profile.business.myBusinessesAction", "shop", "businessDashboard"]] : []),
@@ -9379,6 +9931,7 @@ function renderProfileQuickActions() {
   const attrsFor = (view) => {
     if (view === "completeProfile") return 'data-settings-edit-profile="true"';
     if (view === "signOut") return 'data-profile-signout="true"';
+    if (view === "userProfile") return `data-user-profile-target="${escapeHtml(state.auth.user?.publicProfile?.handle || state.auth.user?.id || "")}"`;
     return `data-view="${view}"`;
   };
   return `
@@ -11467,6 +12020,7 @@ function bindEvents() {
   bindOnboardingEvents();
   bindBusinessDashboardEvents();
   bindPublicProfileEvents();
+  bindUserProfileEvents();
 }
 
 /** render() rebuilds the *entire* #app subtree (see render(), below) — on a
@@ -11622,6 +12176,7 @@ function bindAuthEvents() {
   bindLiveField("reset-confirm", (value) => (state.auth.resetDraft.confirmPassword = value));
   bindLiveField("profile-name", (value) => (state.auth.profileDraft.name = value));
   bindLiveField("profile-role", (value) => (state.auth.profileDraft.role = value));
+  bindLiveField("profile-handle", (value) => (state.auth.profileDraft.handle = value.toLowerCase()));
 
   const form = document.querySelector("[data-auth-form]");
   if (!form) return;
@@ -11745,6 +12300,54 @@ function bindPublicProfileEvents() {
   document.querySelector('[data-person-action="block"]')?.addEventListener("click", () => {
     const name = state.publicProfile?.name;
     if (name && !state.blockedPeople.includes(name)) state.blockedPeople.push(name);
+    render();
+  });
+}
+
+function bindUserProfileEvents() {
+  document.querySelectorAll("[data-user-profile-target]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeUserProfileFollowDialog("followers");
+      closeUserProfileFollowDialog("following");
+      openUserProfile(element.dataset.userProfileTarget);
+    });
+  });
+
+  document.querySelectorAll("[data-user-profile-tab]").forEach((button) => {
+    button.addEventListener("click", () => switchUserProfileTab(button.dataset.userProfileTab));
+  });
+
+  document.querySelectorAll("[data-user-profile-dialog]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.userProfileDialog;
+      if (kind === "trust") toggleUserProfileTrustDialog(true);
+      else openUserProfileFollowDialog(kind);
+    });
+  });
+
+  document.querySelectorAll("[data-user-profile-dialog-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.userProfileDialogClose;
+      if (kind === "trust") toggleUserProfileTrustDialog(false);
+      else closeUserProfileFollowDialog(kind);
+    });
+  });
+
+  document.querySelectorAll("[data-user-profile-dialog-backdrop]").forEach((backdrop) => {
+    backdrop.addEventListener("click", (event) => {
+      if (event.target !== backdrop) return;
+      const kind = backdrop.dataset.userProfileDialogBackdrop;
+      if (kind === "trust") toggleUserProfileTrustDialog(false);
+      else closeUserProfileFollowDialog(kind);
+    });
+  });
+
+  document.querySelector('[data-user-profile-follow="true"]')?.addEventListener("click", toggleFollowUserProfile);
+  document.querySelector('[data-user-profile-block="true"]')?.addEventListener("click", toggleBlockUserProfilePerson);
+  document.querySelector('[data-user-profile-refresh-trust="true"]')?.addEventListener("click", refreshUserProfileTrustScore);
+  document.querySelector('[data-user-profile-message="true"]')?.addEventListener("click", () => {
+    state.activeView = "messages";
     render();
   });
 }

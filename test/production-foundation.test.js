@@ -177,6 +177,7 @@ test("deep-link allowlist protects launch-critical routes that already exist", a
     "settings",
     "auth",
     "publicProfile",
+    "userProfile",
     "businessDashboard"
   ];
 
