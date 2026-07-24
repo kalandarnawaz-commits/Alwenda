@@ -516,7 +516,13 @@ function openPublicProfileById(id) {
    Backed by real public_profiles/profile_follows/trust_scores/profile_reviews
    rows via supabase/migrations/202607240001_profile_social_identity.sql. */
 
-const OWN_USER_PROFILE_TABS = ["listings", "saved", "reviews", "activity", "about"];
+/* "Saved" is deliberately not a tab yet — there is no
+   fetchSavedListingsForUser function backing it, and shipping a visible
+   tab that always renders an unrelated empty state would be dishonest.
+   Add it back once a real owner-only saved-listings query exists. Own and
+   public tab sets are identical for now but kept as separate constants
+   since they're expected to diverge again once Saved is real. */
+const OWN_USER_PROFILE_TABS = ["listings", "reviews", "activity", "about"];
 const PUBLIC_USER_PROFILE_TABS = ["listings", "reviews", "activity", "about"];
 
 function currentUserProfileTabs() {
@@ -622,7 +628,7 @@ async function switchUserProfileTab(tab) {
 
 async function loadUserProfileTabData(userId, tab) {
   if (!state.userProfile || state.userProfile.userId !== userId) return;
-  if (tab === "listings" || tab === "saved") {
+  if (tab === "listings") {
     if (state.userProfile.listingsStatus === "loading" || state.userProfile.listingsStatus === "loaded") return;
     state.userProfile.listingsStatus = "loading";
     try {
@@ -658,6 +664,16 @@ async function toggleFollowUserProfile() {
     render();
     return;
   }
+  // Mirrors the DB's block check for immediate feedback on the direction
+  // the client can actually see ("I blocked them" — profile.isBlocked,
+  // from fetchBlockedUserIds()). Whether *they* blocked *me* is not
+  // something a client can query (user_blocks' RLS only ever shows a user
+  // their own blocks, by design — you can't enumerate who blocked you),
+  // so that direction relies on the profile_follows insert policy
+  // rejecting it; the catch below already reverts the optimistic update
+  // on any failure, so it fails safe either way. The database policy,
+  // not this check, is the actual source of truth.
+  if (!profile.isFollowing && profile.isBlocked) return;
   profile.followActionPending = true;
   const wasFollowing = profile.isFollowing;
   // Optimistic update, reconciled against the real count on failure — the
@@ -9697,7 +9713,7 @@ function renderUserProfileListingGrid(profile) {
     return `<div class="profile-listing-grid profile-listing-grid-loading" aria-busy="true">${[0, 1, 2, 3].map(() => '<div class="profile-listing-skeleton"></div>').join("")}</div>`;
   }
   if (profile.listingsStatus === "error") return renderEmptyState(t("userProfile.listingsError"), "search");
-  const items = profile.activeTab === "saved" ? [] : profile.listings;
+  const items = profile.listings;
   if (!items.length) {
     return renderEmptyState(profile.isOwn ? t("userProfile.noOwnListings") : t("userProfile.noPublicListings"), "shop");
   }
@@ -9745,7 +9761,7 @@ function renderUserProfileAbout(profile) {
 }
 
 function renderUserProfileTabPanel(profile) {
-  if (profile.activeTab === "listings" || profile.activeTab === "saved") return renderUserProfileListingGrid(profile);
+  if (profile.activeTab === "listings") return renderUserProfileListingGrid(profile);
   if (profile.activeTab === "reviews") return renderUserProfileReviews(profile);
   if (profile.activeTab === "activity") return renderUserProfileActivity(profile);
   if (profile.activeTab === "about") return renderUserProfileAbout(profile);
@@ -9754,7 +9770,6 @@ function renderUserProfileTabPanel(profile) {
 
 const USER_PROFILE_TAB_LABEL = {
   listings: "userProfile.tabListings",
-  saved: "userProfile.tabSaved",
   reviews: "userProfile.tabReviews",
   activity: "userProfile.tabActivity",
   about: "userProfile.tabAbout"

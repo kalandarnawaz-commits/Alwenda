@@ -77,14 +77,54 @@ create index if not exists profile_follows_followed_idx on public.profile_follow
 
 alter table public.profile_follows enable row level security;
 
+-- Checks whether either user has blocked the other, in either direction.
+-- user_blocks' own RLS only lets a user see blocks THEY created (not
+-- blocks made against them, which is intentional — you can't enumerate
+-- who blocked you by querying the table) — so a plain subquery inside the
+-- profile_follows insert policy below could only ever see "have I blocked
+-- them," never "have they blocked me." SECURITY DEFINER here is what lets
+-- this see both directions; it does not expose row contents to the
+-- caller, only a single boolean.
+create or replace function public.is_blocked_pair(user_a uuid, user_b uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_blocks b
+    where (b.blocker_user_id = user_a and b.blocked_user_id = user_b)
+       or (b.blocker_user_id = user_b and b.blocked_user_id = user_a)
+  );
+$$;
+
+-- Granted to anon too, not just authenticated: profile_follows' own select
+-- policy (below) is public — viewable without signing in, same as
+-- public_profiles/listings/profile_reviews — and now calls this function
+-- on every row, so a signed-out viewer needs execute rights on it as well
+-- or every follow-list read would fail outright for guests.
+revoke all on function public.is_blocked_pair(uuid, uuid) from public;
+grant execute on function public.is_blocked_pair(uuid, uuid) to anon, authenticated;
+
 -- Follow graphs are public by design (matches public_profiles' own "readable
 -- by anyone" policy) — follower/following counts and lists are meant to be
--- visible on any profile visibility permits viewing at all.
-create policy "Follow relationships are readable" on public.profile_follows for select using (true);
+-- visible on any profile visibility permits viewing at all, EXCEPT a row
+-- between a blocked pair, which is hidden from every viewer (not just the
+-- two people involved) for as long as the block exists. This is
+-- deliberately a read-time filter rather than deleting the row on block:
+-- non-destructive, and if the block is later lifted, a follow relationship
+-- that predates it simply becomes visible again without needing a
+-- destructive delete-on-block trigger.
+create policy "Follow relationships are readable" on public.profile_follows
+  for select using (not public.is_blocked_pair(follower_user_id, followed_user_id));
 -- A user may only ever create a relationship where THEY are the follower —
 -- the self-follow check above and this policy together make it impossible
--- to follow yourself or to create a relationship "as" another account.
-create policy "Users create own follow relationships" on public.profile_follows for insert with check (auth.uid() = follower_user_id);
+-- to follow yourself or to create a relationship "as" another account —
+-- and never where either side has blocked the other, in either direction.
+create policy "Users create own follow relationships" on public.profile_follows
+  for insert
+  with check (auth.uid() = follower_user_id and not public.is_blocked_pair(follower_user_id, followed_user_id));
 create policy "Users remove own follow relationships" on public.profile_follows for delete using (auth.uid() = follower_user_id);
 
 -- ---------------------------------------------------------------------
@@ -94,6 +134,19 @@ create policy "Users remove own follow relationships" on public.profile_follows 
 --    widening reviews' existing two-way business_id/listing_id CHECK
 --    constraint, since that constraint's exact auto-generated name
 --    cannot be safely altered without a live database to verify against.
+--
+--    Client write access is deliberately withheld in this migration —
+--    the table is read-only to every non-admin role. `listing_id` is
+--    nullable and there is no uniqueness constraint on
+--    (reviewer_user_id, reviewee_user_id), so an open insert policy here
+--    would let any authenticated user leave unlimited reviews of anyone
+--    with no evidence of an actual interaction, and reports.target_type
+--    (production_foundation.sql) does not yet include 'review', so there
+--    would be no way to report a bad one. Review creation will be
+--    enabled in a later migration once (a) a real completed-interaction
+--    reference can be required and deduplicated against, and (b) a
+--    review-specific report path exists. Reading is safe today — it's
+--    the writes that need that groundwork first.
 -- ---------------------------------------------------------------------
 
 create table if not exists public.profile_reviews (
@@ -119,9 +172,14 @@ alter table public.profile_reviews enable row level security;
 
 create policy "Published profile reviews are readable" on public.profile_reviews
   for select using (status = 'published' or auth.uid() = reviewer_user_id or auth.uid() = reviewee_user_id or public.is_trusted_admin());
-create policy "Authors manage own profile reviews" on public.profile_reviews
-  for all using (auth.uid() = reviewer_user_id or public.is_trusted_admin())
-  with check (auth.uid() = reviewer_user_id or public.is_trusted_admin());
+-- No insert/update/delete policy for authors on purpose — see the table
+-- comment above. Only a trusted admin can write this table for now
+-- (moderation status changes, or manually seeding a review once a real
+-- write path ships), matching the trust_scores pattern: the DB, not the
+-- client UI, is what actually withholds the capability.
+create policy "Only admins write profile reviews for now" on public.profile_reviews
+  for all using (public.is_trusted_admin())
+  with check (public.is_trusted_admin());
 
 -- ---------------------------------------------------------------------
 -- 4. trust_scores — server-owned. Deliberately has NO insert/update/delete
@@ -215,6 +273,16 @@ begin
   return jsonb_build_object('score', v_score, 'status', v_status, 'factors', v_factors);
 end;
 $$;
+
+-- compute_trust_score is SECURITY DEFINER (it needs to read auth.users,
+-- which client roles cannot query directly) but must never be callable
+-- directly by a client — only by refresh_trust_score below, which already
+-- executes as the definer once entered, so this revoke does not break
+-- that internal call. Without this, its default PUBLIC execute grant
+-- would let anon/authenticated call it directly for any user id and read
+-- auth.users.email_confirmed_at/created_at, bypassing the normal
+-- protection that table has from client roles.
+revoke all on function public.compute_trust_score(uuid) from public;
 
 -- The sole write path for trust_scores. Callable by an authenticated user
 -- only to refresh their OWN score (or by a trusted admin, for support

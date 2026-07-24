@@ -96,12 +96,58 @@ const checks = [
     }
   },
   {
-    name: "profile_follows prevents self-follow and only lets a user write relationships as themselves",
+    name: "compute_trust_score cannot be executed directly by any client role — refresh_trust_score is the only callable path",
+    source: profileIdentity,
+    ok: (profileIdentity) => {
+      const fnStart = profileIdentity.indexOf("create or replace function public.compute_trust_score");
+      const revokeIdx = profileIdentity.indexOf("revoke all on function public.compute_trust_score(uuid) from public;");
+      const refreshGrantIdx = profileIdentity.indexOf("grant execute on function public.refresh_trust_score(uuid) to authenticated;");
+      return (
+        fnStart !== -1 &&
+        revokeIdx > fnStart &&
+        // The revoke must exist and must not be immediately undone by a
+        // grant to anon/authenticated anywhere else in the file — if this
+        // string is present anywhere, someone re-opened direct access.
+        !/grant execute on function public\.compute_trust_score/.test(profileIdentity) &&
+        refreshGrantIdx !== -1
+      );
+    }
+  },
+  {
+    name: "both trust-score SECURITY DEFINER functions pin an explicit, safe search_path",
+    source: profileIdentity,
+    ok: (profileIdentity) => {
+      const computeFn = profileIdentity.slice(
+        profileIdentity.indexOf("create or replace function public.compute_trust_score"),
+        profileIdentity.indexOf("create or replace function public.refresh_trust_score")
+      );
+      const refreshFn = profileIdentity.slice(profileIdentity.indexOf("create or replace function public.refresh_trust_score"));
+      return (
+        /security definer\s*\nset search_path = public/.test(computeFn) &&
+        /security definer\s*\nset search_path = public/.test(refreshFn)
+      );
+    }
+  },
+  {
+    name: "profile_follows prevents self-follow, only lets a user write relationships as themselves, and rejects follows between a blocked pair in either direction",
     source: profileIdentity,
     ok: (profileIdentity) =>
       /check \(follower_user_id <> followed_user_id\)/.test(profileIdentity) &&
-      /create policy "Users create own follow relationships" on public\.profile_follows for insert with check \(auth\.uid\(\) = follower_user_id\)/.test(profileIdentity) &&
+      /create or replace function public\.is_blocked_pair\(user_a uuid, user_b uuid\)/.test(profileIdentity) &&
+      /b\.blocker_user_id = user_a and b\.blocked_user_id = user_b/.test(profileIdentity) &&
+      /b\.blocker_user_id = user_b and b\.blocked_user_id = user_a/.test(profileIdentity) &&
+      /create policy "Users create own follow relationships" on public\.profile_follows[\s\S]{0,120}with check \(auth\.uid\(\) = follower_user_id and not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/.test(profileIdentity) &&
+      /create policy "Follow relationships are readable" on public\.profile_follows[\s\S]{0,40}for select using \(not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/.test(profileIdentity) &&
       /create policy "Users remove own follow relationships" on public\.profile_follows for delete using \(auth\.uid\(\) = follower_user_id\)/.test(profileIdentity)
+  },
+  {
+    name: "profile_reviews has no client (non-admin) write policy of any kind",
+    source: profileIdentity,
+    ok: (profileIdentity) =>
+      /alter table public\.profile_reviews enable row level security/.test(profileIdentity) &&
+      /create policy "Published profile reviews are readable" on public\.profile_reviews/.test(profileIdentity) &&
+      !/create policy "Authors manage own profile reviews"/.test(profileIdentity) &&
+      /create policy "Only admins write profile reviews for now" on public\.profile_reviews\s*\n\s*for all using \(public\.is_trusted_admin\(\)\)\s*\n\s*with check \(public\.is_trusted_admin\(\)\)/.test(profileIdentity)
   },
   {
     name: "handles are unique case-insensitively and reserved words are blocked",

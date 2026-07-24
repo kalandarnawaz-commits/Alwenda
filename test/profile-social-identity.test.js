@@ -48,13 +48,38 @@ test("duplicate follows are rejected by the primary key, not application logic",
 
 test("a user may only ever write a follow relationship as themselves", async () => {
   const sql = await readRepoFile(MIGRATION_PATH);
-  assert.match(sql, /create policy "Users create own follow relationships" on public\.profile_follows for insert with check \(auth\.uid\(\) = follower_user_id\)/);
+  assert.match(sql, /create policy "Users create own follow relationships" on public\.profile_follows\s*\n\s*for insert\s*\n\s*with check \(auth\.uid\(\) = follower_user_id and not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/);
   assert.match(sql, /create policy "Users remove own follow relationships" on public\.profile_follows for delete using \(auth\.uid\(\) = follower_user_id\)/);
 });
 
-test("follow relationships and their counts are publicly readable (visibility)", async () => {
+test("follow relationships and their counts are publicly readable, except between a blocked pair", async () => {
   const sql = await readRepoFile(MIGRATION_PATH);
-  assert.match(sql, /create policy "Follow relationships are readable" on public\.profile_follows for select using \(true\)/);
+  assert.match(sql, /create policy "Follow relationships are readable" on public\.profile_follows\s*\n\s*for select using \(not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/);
+});
+
+test("blocking is checked in both directions — blocker cannot follow blocked user, and blocked user cannot follow blocker", async () => {
+  const sql = await readRepoFile(MIGRATION_PATH);
+  const fnStart = sql.indexOf("create or replace function public.is_blocked_pair");
+  const fnBody = sql.slice(fnStart, sql.indexOf("$$;", fnStart) + 3);
+  assert.notEqual(fnStart, -1, "is_blocked_pair must exist");
+  // Direction 1: user_a blocked user_b.
+  assert.match(fnBody, /b\.blocker_user_id = user_a and b\.blocked_user_id = user_b/);
+  // Direction 2: user_b blocked user_a — both must be present, joined by OR,
+  // so neither "the follower blocked the target" nor "the target blocked
+  // the follower" is missed.
+  assert.match(fnBody, /b\.blocker_user_id = user_b and b\.blocked_user_id = user_a/);
+  assert.match(fnBody, /security definer/);
+  assert.match(fnBody, /set search_path = public/);
+  // Both the insert (new follow) and select (existing follow visibility)
+  // policies must call it — a follow between a blocked pair must be both
+  // unwritable and, if it somehow predates the block, invisible.
+  assert.match(sql, /with check \(auth\.uid\(\) = follower_user_id and not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/);
+  assert.match(sql, /for select using \(not public\.is_blocked_pair\(follower_user_id, followed_user_id\)\)/);
+});
+
+test("is_blocked_pair is granted to anon and authenticated so guests and signed-in users can both read follow lists", async () => {
+  const sql = await readRepoFile(MIGRATION_PATH);
+  assert.match(sql, /grant execute on function public\.is_blocked_pair\(uuid, uuid\) to anon, authenticated;/);
 });
 
 test("trust_scores has no client/owner write policy — only the SECURITY DEFINER refresh function may write it", async () => {
@@ -63,6 +88,32 @@ test("trust_scores has no client/owner write policy — only the SECURITY DEFINE
   assert.match(sql, /create or replace function public\.refresh_trust_score/);
   assert.match(sql, /security definer/);
   assert.match(sql, /auth\.uid\(\) is distinct from p_user_id and not public\.is_trusted_admin\(\)/);
+});
+
+test("compute_trust_score cannot be executed directly by any client role", async () => {
+  const sql = await readRepoFile(MIGRATION_PATH);
+  // Must be revoked from PUBLIC (Postgres's default grant for a newly
+  // created function) — without this, SECURITY DEFINER would let
+  // anon/authenticated call it directly for any user id and read
+  // auth.users.email_confirmed_at/created_at, which client roles cannot
+  // otherwise query at all.
+  assert.match(sql, /revoke all on function public\.compute_trust_score\(uuid\) from public;/);
+  // And it must never be re-granted to a client role anywhere else in
+  // the file — only refresh_trust_score (which already runs as the
+  // definer once entered) may call it internally.
+  assert.doesNotMatch(sql, /grant execute on function public\.compute_trust_score/);
+  assert.match(sql, /grant execute on function public\.refresh_trust_score\(uuid\) to authenticated;/);
+});
+
+test("both trust-score SECURITY DEFINER functions pin an explicit search_path", async () => {
+  const sql = await readRepoFile(MIGRATION_PATH);
+  const computeFn = sql.slice(
+    sql.indexOf("create or replace function public.compute_trust_score"),
+    sql.indexOf("create or replace function public.refresh_trust_score")
+  );
+  const refreshFn = sql.slice(sql.indexOf("create or replace function public.refresh_trust_score"));
+  assert.match(computeFn, /security definer\s*\nset search_path = public/);
+  assert.match(refreshFn, /security definer\s*\nset search_path = public/);
 });
 
 test("handles are unique case-insensitively and reserved words are rejected", async () => {
@@ -97,17 +148,50 @@ test("toggleFollowUserProfile refuses to follow yourself or fire twice while pen
   assert.match(fn, /if \(!profile \|\| !profile\.userId \|\| profile\.isOwn \|\| profile\.followActionPending\) return;/);
 });
 
+test("toggleFollowUserProfile mirrors the block check client-side, but the database policy stays the source of truth", async () => {
+  const main = await readRepoFile("src/main.js");
+  const fn = extractFunction(main, "toggleFollowUserProfile");
+  // Client-visible direction: the viewer has blocked this profile.
+  assert.match(fn, /if \(!profile\.isFollowing && profile\.isBlocked\) return;/);
+  // The other direction (they blocked the viewer) isn't something the
+  // client can query — the existing catch block below must still revert
+  // the optimistic update on any failure, which is how that direction
+  // fails safe via the RLS rejection.
+  assert.match(fn, /catch \{\s*\n\s*profile\.isFollowing = wasFollowing;/);
+});
+
 test("follow counts come from a real fetchFollowCounts call, never computed client-side", async () => {
   const main = await readRepoFile("src/main.js");
   const fn = extractFunction(main, "loadUserProfileSocialData");
   assert.match(fn, /fetchFollowCounts\(userId\)/);
 });
 
-test("own profile shows Listings/Saved/Reviews/Activity/About; a public profile never exposes Saved", async () => {
+test("Saved is not a visible profile tab anywhere — there is no real saved-listings query backing it yet", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /const OWN_USER_PROFILE_TABS = \["listings", "saved", "reviews", "activity", "about"\];/);
+  assert.match(main, /const OWN_USER_PROFILE_TABS = \["listings", "reviews", "activity", "about"\];/);
   assert.match(main, /const PUBLIC_USER_PROFILE_TABS = \["listings", "reviews", "activity", "about"\];/);
-  assert.doesNotMatch(main, /const PUBLIC_USER_PROFILE_TABS = \[[^\]]*"saved"/);
+  // Neither the tab-switch/data-loading logic nor the listing-grid/tab-panel
+  // render logic references "saved" anymore — a dead tab that always shows
+  // an unrelated empty state must not ship. (Contribute's own, unrelated
+  // "saved places" activity row elsewhere in this file is out of scope and
+  // untouched — this checks only the userProfile functions.)
+  const loadTabData = extractFunction(main, "loadUserProfileTabData");
+  const listingGrid = extractFunction(main, "renderUserProfileListingGrid");
+  const tabPanel = extractFunction(main, "renderUserProfileTabPanel");
+  const tabLabelStart = main.indexOf("const USER_PROFILE_TAB_LABEL = {");
+  const tabLabelBlock = main.slice(tabLabelStart, main.indexOf("};", tabLabelStart));
+  for (const block of [loadTabData, listingGrid, tabPanel, tabLabelBlock]) {
+    assert.doesNotMatch(block, /"saved"/);
+  }
+});
+
+test("profile_reviews is read-only to normal client roles — only a trusted admin can write it", async () => {
+  const sql = await readRepoFile(MIGRATION_PATH);
+  assert.doesNotMatch(sql, /create policy "Authors manage own profile reviews"/);
+  assert.match(sql, /create policy "Only admins write profile reviews for now" on public\.profile_reviews\s*\n\s*for all using \(public\.is_trusted_admin\(\)\)\s*\n\s*with check \(public\.is_trusted_admin\(\)\)/);
+  // Reading stays open — published reviews (or your own, either side, or
+  // an admin) remain visible; only writing is withheld.
+  assert.match(sql, /create policy "Published profile reviews are readable" on public\.profile_reviews/);
 });
 
 test("own-profile actions differ from another account's actions on the hero", async () => {
