@@ -874,11 +874,11 @@
     "composer": {
       "composerPlaceholder": "Paklauskite Alwen bet ko...",
       "composerExamples": [
-        "Išversk šį pokalbį",
-        "Rask gydytoją netoliese",
-        "Savaitgalio planai",
-        "Palygink restoranus",
-        "Padėk paskelbti skelbimą"
+        "Išversk bet kokį pokalbį akimirksniu",
+        "Surask gydytoją netoliese, dabar",
+        "Suplanuok visą savaitgalį",
+        "Palygink restoranus netoliese",
+        "Paskelbk skelbimą per kelias sekundes"
       ],
       "composerSendLabel": "Siųsti Alwen"
     }

@@ -4032,6 +4032,26 @@ function clearRecentQueries() {
   writeLocalStorage(RECENT_QUERIES_KEY, null);
 }
 
+/** render(), but morphed in via the native View Transitions API instead of
+ * an abrupt innerHTML swap — used exactly once, below, for the single
+ * moment every "Tell Alwen" entry point (Home's composer, every other
+ * renderAiSearch() context, TYT, voice search, "Continue: ...") hands off
+ * into the real Alwen conversation, so that always feels like one
+ * continuous surface rather than a page change. Every other render() call
+ * in the app (typing, opening a sheet, switching tabs, ...) is untouched —
+ * animating those too would be constant, unwanted motion, not "continuous."
+ * Feature-detected + reduced-motion-aware with a plain render() fallback,
+ * same discipline as the voice input feature-detection elsewhere in this
+ * file — nothing is fabricated for browsers that don't support it. */
+function renderWithViewTransition() {
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  if (reducedMotion || typeof document.startViewTransition !== "function") {
+    render();
+    return;
+  }
+  document.startViewTransition(() => render());
+}
+
 function launchAlwenConversationWithQuery(rawText) {
   const trimmedQuery = String(rawText || "").trim();
   if (!trimmedQuery) return;
@@ -4040,7 +4060,7 @@ function launchAlwenConversationWithQuery(rawText) {
   state.query = "";
   state.activeView = "alwen";
   state.activeSheet = null;
-  render();
+  renderWithViewTransition();
   submitAlwenConversationMessage(trimmedQuery);
 }
 
@@ -11674,6 +11694,17 @@ function bindEvents() {
 
   document.querySelector('[data-action="home-voice-toggle"]')?.addEventListener("click", () => {
     startHomeVoiceSearch();
+  });
+
+  // The whole pill is the entry point, not just the input — tapping its
+  // icon, padding, or the (usually empty) space around the typewriter text
+  // focuses the input immediately, same as tapping a Spotlight/ChatGPT-
+  // style search box. The mic and send buttons keep their own click
+  // handlers untouched (registered above/below), so this only ever fires
+  // for the parts of the bar that aren't already interactive.
+  document.querySelector('[data-role="home-command-bar"]')?.addEventListener("click", (event) => {
+    if (event.target.closest(".home-command-bar-mic, .home-command-bar-send")) return;
+    document.getElementById("global-search")?.focus();
   });
 
   document.querySelector('[data-action="resume-recent-query"]')?.addEventListener("click", () => {

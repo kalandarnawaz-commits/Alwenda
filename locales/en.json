@@ -874,11 +874,11 @@
     "composer": {
       "composerPlaceholder": "Ask Alwen anything...",
       "composerExamples": [
-        "Translate this conversation",
-        "Find a doctor nearby",
-        "Weekend plans",
-        "Compare restaurants",
-        "Help me post a listing"
+        "Translate any conversation, instantly",
+        "Find a doctor near you, right now",
+        "Plan your whole weekend",
+        "Compare restaurants nearby",
+        "Post a listing in seconds"
       ],
       "composerSendLabel": "Send to Alwen"
     }

@@ -874,11 +874,11 @@
     "composer": {
       "composerPlaceholder": "Frag Alwen irgendetwas...",
       "composerExamples": [
-        "Übersetze dieses Gespräch",
-        "Finde einen Arzt in der Nähe",
-        "Wochenendpläne",
-        "Vergleiche Restaurants",
-        "Hilf mir, eine Anzeige zu veröffentlichen"
+        "Übersetze jedes Gespräch, sofort",
+        "Finde jetzt einen Arzt in deiner Nähe",
+        "Plane dein ganzes Wochenende",
+        "Vergleiche Restaurants in der Nähe",
+        "Veröffentliche eine Anzeige in Sekunden"
       ],
       "composerSendLabel": "An Alwen senden"
     }

@@ -1421,18 +1421,25 @@ body.has-open-sheet {
    onto its own row. This is a plain flex row instead of the old grid, so
    there is no equivalent "third column drops out" failure mode.
    ========================================================================== */
+/* Height is a single clamp() across the whole viewport range (44px at
+   phone widths up to 54px at desktop) instead of three discrete
+   breakpoint jumps — smoother, more "the same bar everywhere" than a
+   mobile/tablet/desktop each getting their own fixed height, and
+   noticeably shorter than the original 56–72px so the hero photo behind
+   it stays the dominant thing on screen, not the input. */
 .home-command-bar {
   display: flex;
   align-items: center;
   gap: 10px;
   width: min(100%, 640px);
-  min-height: 56px;
-  padding: 6px 8px 6px 14px;
+  min-height: clamp(44px, 40px + 1.1vw, 54px);
+  padding: 5px 6px 5px 12px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px);
   box-shadow: 0 12px 32px rgba(15, 23, 20, 0.18);
+  cursor: text;
   transition: box-shadow var(--motion-fast, 160ms) var(--ease, ease), transform var(--motion-fast, 160ms) var(--ease, ease), border-color var(--motion-fast, 160ms) var(--ease, ease);
 }
 
@@ -1448,16 +1455,16 @@ body.has-open-sheet {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: var(--accent);
   color: white;
 }
 
 .home-command-bar-icon .app-icon {
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
   filter: none;
   mix-blend-mode: normal;
 }
@@ -1527,9 +1534,9 @@ body.has-open-sheet {
 .home-command-bar-send {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -1574,8 +1581,8 @@ body.has-open-sheet {
 }
 
 .home-command-bar-send.is-visible {
-  width: 40px;
-  min-width: 40px;
+  width: 36px;
+  min-width: 36px;
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
@@ -1597,36 +1604,45 @@ body.has-open-sheet {
   }
 }
 
-@media (min-width: 640px) {
-  .home-command-bar {
-    min-height: 62px;
-    padding: 8px 10px 8px 18px;
-  }
-}
-
 @media (max-width: 480px) {
   .home-command-bar {
-    min-height: 52px;
-    padding: 4px 6px 4px 12px;
+    padding: 4px 5px 4px 10px;
     gap: 8px;
-  }
-
-  .home-command-bar-icon {
-    width: 28px;
-    height: 28px;
-  }
-
-  .home-command-bar-mic,
-  .home-command-bar-send.is-visible {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
   }
 }
 
 :root[data-theme="dark"] .home-command-bar {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.88);
+}
+
+/* Native View Transitions API hook for the Home → Alwen conversation
+   hand-off (renderWithViewTransition in main.js) — a soft cross-fade plus
+   a slight rise instead of the browser's default cross-fade, so leaving
+   Home feels like the composer expanding into the conversation rather
+   than an unrelated page swap. Reduced-motion and non-supporting browsers
+   simply skip document.startViewTransition() entirely (see main.js), so
+   no separate opt-out is needed here. */
+::view-transition-old(root) {
+  animation: homeToAlwenOut var(--motion, 260ms) var(--ease, ease) both;
+}
+
+::view-transition-new(root) {
+  animation: homeToAlwenIn var(--motion, 260ms) var(--ease, ease) both;
+}
+
+@keyframes homeToAlwenOut {
+  to {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+}
+
+@keyframes homeToAlwenIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .home-voice-status {
