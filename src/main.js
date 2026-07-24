@@ -91,6 +91,7 @@ import {
   fetchAlwenConversation,
   fetchAlwenMessages,
   createAlwenMessage,
+  deleteAlwenConversation,
   updateAlwenConversationMode,
   validateHandleFormat,
   fetchProfileByHandle,
@@ -4315,8 +4316,27 @@ async function playAlwenTranslationAudio(messageId) {
   }
 }
 
-function resetAlwenConversation() {
+/** Single source of truth for wiping the one active/continuing Alwen
+ * conversation (see fetchAlwenConversation()'s note — this app has no
+ * conversation list, just "the" most recent one). Both the Alwen screen's
+ * own "+ new conversation" button and Home's "Clear history" call this
+ * and nothing else, so there is exactly one reset path, never two partial
+ * ones that could disagree. Clears every layer the conversation is
+ * represented in:
+ *   - in-memory state.alwenConversation (messages, results, draft, ids)
+ *   - Home's "Continue: ..." nudge (state.recentQueries + its localStorage key)
+ *   - the persisted Supabase row (and its messages, via ON DELETE CASCADE)
+ * so a refresh can't resurrect it — loadAlwenConversation() would
+ * otherwise refetch the still-present "most recent" row on next load.
+ * `loaded` is set true (not left false) because there is now nothing left
+ * to load; deleteAlwenConversation() runs after the render so the reset
+ * feels instant, but it's still awaited (not fire-and-forget) so a caller
+ * that wants to confirm the delete actually happened before doing
+ * something else (e.g. a test) can. */
+async function clearActiveAlwenConversation() {
   const convo = state.alwenConversation;
+  const conversationId = convo.id;
+
   convo.id = null;
   convo.mode = "chat";
   convo.status = "idle";
@@ -4324,7 +4344,20 @@ function resetAlwenConversation() {
   convo.error = null;
   convo.draft = "";
   convo.partialTranscript = "";
+  convo.speechStatus = "idle";
+  convo.speechMessageId = null;
+  convo.fullScreenTranslationId = null;
+  convo.loaded = true;
+
+  clearRecentQueries();
   render();
+
+  if (!conversationId) return;
+  try {
+    await deleteAlwenConversation(conversationId);
+  } catch (error) {
+    logPilotEvent(OBSERVABILITY_EVENTS.ALWEN_FAILURE, { context: "clearActiveAlwenConversation", error }, { severity: "warning" });
+  }
 }
 
 /** Reconstructs one persisted alwen_messages row into the shape the
@@ -4365,11 +4398,18 @@ async function loadAlwenConversation() {
   if (!isSupabaseConfigured() || state.auth.status !== "signedIn") return;
   try {
     const conversation = await fetchAlwenConversation();
+    // clearActiveAlwenConversation() may have run while this was in
+    // flight (it sets loaded synchronously, before its own delete
+    // resolves) — without this check, a slow fetch that started just
+    // before a clear could land after it and resurrect the conversation
+    // the user just deleted.
+    if (convo.loaded) return;
     if (!conversation) {
       convo.loaded = true;
       return;
     }
     const rows = await fetchAlwenMessages(conversation.id);
+    if (convo.loaded) return;
     convo.id = conversation.id;
     convo.mode = conversation.mode === "liveTranslate" ? "liveTranslate" : "chat";
     convo.messages = rows.map(mapAlwenMessageRow);
@@ -11176,7 +11216,7 @@ function bindEvents() {
   });
 
   document.querySelector("[data-alwen-conversation-reset]")?.addEventListener("click", () => {
-    resetAlwenConversation();
+    clearActiveAlwenConversation();
   });
 
   document.querySelector("[data-alwen-toggle-live-translate]")?.addEventListener("click", () => {
@@ -11712,8 +11752,7 @@ function bindEvents() {
   });
 
   document.querySelector('[data-action="clear-recent-queries"]')?.addEventListener("click", () => {
-    clearRecentQueries();
-    render();
+    clearActiveAlwenConversation();
   });
 
   document.querySelectorAll('[data-action="share-profile"]').forEach((button) => {

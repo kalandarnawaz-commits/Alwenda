@@ -919,6 +919,19 @@ export async function createAlwenMessage({ conversationId, role, content, messag
   return data;
 }
 
+/** Deletes exactly the one conversation row named — never "all of this
+ * user's conversations" — so if the product ever grows a real saved/
+ * archived conversation list later, this can't accidentally take it out
+ * too. alwen_messages.conversation_id references this table with
+ * `on delete cascade` (see the production_foundation migration), so its
+ * messages are removed for free; RLS on both tables is already
+ * owner-scoped, so this can never touch another user's row. */
+export async function deleteAlwenConversation(conversationId) {
+  const supabase = await getClient();
+  const { error } = await supabase.from("alwen_conversations").delete().eq("id", conversationId);
+  if (error) throwIfError(error, "deleteAlwenConversation");
+}
+
 export async function updateAlwenConversationMode(conversationId, mode) {
   const supabase = await getClient();
   const { error } = await supabase.from("alwen_conversations").update({ mode }).eq("id", conversationId);
