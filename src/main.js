@@ -10273,8 +10273,6 @@ function renderClaimFlow() {
         <span class="claim-step-label">${t("business.claim.claimStep4")}</span>
         <button type="submit">${t("common.submitClaim")}</button>
       </div>
-
-      ${place ? "" : `<div class="request-list">${businessClaims.map((claim) => `<article class="request-card"><span class="badge">${escapeHtml(claim.status)}</span><h3>${escapeHtml(claim.ownerName)}</h3><p>${escapeHtml(claim.role)} · ${escapeHtml(claim.verificationMethod)} · ${escapeHtml(claim.documentUpload)}</p></article>`).join("")}</div>`}
     </form>
   `;
 }
