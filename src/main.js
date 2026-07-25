@@ -268,6 +268,11 @@ const state = {
   savedListingIds: [],
   reportedListings: [],
   hireCategory: null,
+  // Which TYT_ACTIONS tile (by its `type`) the user is currently arriving
+  // from, so a shared destination view can show action-specific copy —
+  // see LISTING_INTENT_COPY and the [data-view] click handler in
+  // bindEvents(), which is the only place this is ever written.
+  tytIntent: null,
   helpRequestDraft: { text: "", urgency: "flexible" },
   helpRequestPosted: null,
   helpRequestError: null,
@@ -2148,6 +2153,23 @@ function BrandHeader() {
   `;
 }
 
+/** The single shared "this is verified" badge — a small circular
+ * checkmark meant to sit immediately after a name/title with no markup-
+ * level spacing (the .verified-check rule in styles.css supplies its own
+ * margin). Used across profiles, community posts, marketplace seller
+ * rows, professional/pro cards, business headers, and inbox/conversation
+ * rows. Two other call sites used to hand-roll their own version of this
+ * exact badge (an unstyled raw "✓" character with no accessible label,
+ * and `.conversation-verified`, a bare colored glyph with no badge shape
+ * at all) — both now call this instead, so there is exactly one
+ * definition of what "verified" looks like. Always includes both
+ * aria-label and title, since the icon alone (icon("verify")) carries no
+ * accessible text of its own. Place cards' photo-overlay badge
+ * (`.badge.verified-badge`) and the profile identity/reputation chip row
+ * (`.verified-chip`) are deliberately not folded in here — a labeled
+ * pill sitting on a photo and a multi-signal settings-style chip list
+ * are different UI roles than a checkmark stamped next to a name, not
+ * the same badge reimplemented inconsistently. */
 function verifiedCheck(label = t("status.verified")) {
   return `<span class="verified-check" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${icon("verify")}</span>`;
 }
@@ -2977,28 +2999,14 @@ function renderShell() {
         <div class="bottom-nav-group">${navItems.slice(2).map(renderNavButton).join("")}</div>
       </nav>
       ${renderTytOrb()}
-      ${/* The Alwen conversation screen IS the Alwen experience now — the
-         dock is only a launcher into that same screen, so showing it while
-         already there would just be a redundant button to open itself.
-         Home also drops it now: the hero's own AI search bar (renderAiSearch
-         "home") already opens the exact same conversation inline, so the
-         floating dock would just be a second, redundant "ask Alwen" button
-         stacked on top of the one that's already the largest thing on
-         screen. Every other screen keeps the dock as the one consistent
-         entry point into the single canonical Alwen conversation. Note:
-         TYT (the centre orb above) is a separate, unrelated "Trade Your
-         Time" earn/help/sell hub — not a translation or Alwen-chat
-         surface — so it is deliberately NOT part of this noise cleanup
-         and stays visible on every screen including Home. */
-        state.activeView !== "alwen" && state.activeView !== "home" ? renderAlwenDock() : ""}
       ${/* Community deliberately drops this floating mic dock — with the
-         Alwen dock (bottom-right) and the TYT orb (bottom-centre) both
-         already on screen, a third floating circle was competing
-         directly with post cards/images for attention. Home drops it for
-         the same reason as the Alwen dock above: its own hero already has
-         a full AI input (with its own mic — see renderAiSearch/startHome-
-         VoiceSearch), so this second floating translate/mic affordance is
-         redundant there. Every other screen keeps it unchanged. */
+         TYT orb (bottom-centre) already on screen, a second floating
+         circle was competing directly with post cards/images for
+         attention. Home drops it for the same reason: its own hero
+         already has a full AI input (with its own mic — see
+         renderAiSearch/startHomeVoiceSearch), so a floating translate/mic
+         affordance would be redundant there. Every other screen keeps it
+         unchanged. */
         state.activeView !== "translate" && state.activeView !== "community" && state.activeView !== "home" ? renderQuickTranslateDock() : ""}
       ${renderSheet()}
       ${renderPersistentFooter()}
@@ -5249,18 +5257,37 @@ function renderAiSearchResults(limit = 6, context = "home") {
   `;
 }
 
-const TYT_ACTIONS = [
-  ["pay", "common.earnMoney", "contribute"],
-  ["help", "common.helpSomeoneAction", "community"],
-  ["service", "common.offerServiceAction", "hire"],
-  ["tag", "common.sellSomethingAction", "marketplace"],
-  ["chat", "common.shareKnowledge", "community"],
-  ["map", "common.findOpportunities", "contribute"],
-  ["heart", "common.volunteer", "community"],
-  ["contribute", "common.teach", "hire"],
-  ["vehicle", "common.deliver", "contribute"],
-  ["plus", "common.createListingAction", "create"]
-];
+/** Single source of truth for every TYT ("Trade Your Time") tile —
+ * explicit intent (supply: the user is offering something / demand: the
+ * user wants something from someone else), the specific type, a semantic
+ * route name, and the destination view. This is what the "Teach opens
+ * Hire Someone" bug actually was: TYT tiles used to carry only an icon,
+ * label, and view, with no classification at all, so a supply-side tile
+ * (Teach — the user offers to teach) could silently get pointed at
+ * "hire", a demand-side view (find/hire a professional) — nothing in the
+ * data shape made that distinction checkable. Several tiles here share a
+ * destination view (createListing / needHelp / contribute), same as
+ * different demand searches share the "hire" view — that's fine; what
+ * must never happen is a supply tile landing on a demand view or vice
+ * versa (see the "Supply actions remain supply" / "Demand actions remain
+ * demand" tests). `type` is threaded through as `data-intent` at render
+ * time and read back by the destination view (see LISTING_INTENT_COPY,
+ * state.tytIntent) to show action-appropriate copy instead of a generic
+ * fallback — e.g.
+ * Teach and Offer a Service both land on createListing with
+ * category "services", but with different hero titles and placeholders. */
+const TYT_ACTIONS = {
+  earnMoney: { icon: "pay", labelKey: "common.earnMoney", intent: "supply", type: "earn", route: "earn-money-hub", view: "contribute" },
+  getHelp: { icon: "help", labelKey: "common.getHelpAction", intent: "demand", type: "help", route: "get-help-request", view: "needHelp" },
+  offerService: { icon: "service", labelKey: "common.offerServiceAction", intent: "supply", type: "service", route: "service-offer", view: "createListing", category: "services" },
+  sellSomething: { icon: "tag", labelKey: "common.sellSomethingAction", intent: "supply", type: "sell", route: "sell-listing", view: "createListing", category: "buy-sell" },
+  shareKnowledge: { icon: "chat", labelKey: "common.shareKnowledge", intent: "supply", type: "knowledge", route: "share-knowledge-post", view: "community" },
+  findOpportunities: { icon: "map", labelKey: "common.findOpportunities", intent: "demand", type: "opportunities", route: "find-opportunities", view: "contribute" },
+  volunteer: { icon: "heart", labelKey: "common.volunteer", intent: "supply", type: "volunteer", route: "volunteer-help", view: "needHelp" },
+  teach: { icon: "contribute", labelKey: "common.teach", intent: "supply", type: "teaching", route: "teaching-offer", view: "createListing", category: "services" },
+  deliver: { icon: "vehicle", labelKey: "common.deliver", intent: "supply", type: "delivery", route: "delivery-offer", view: "createListing", category: "services" },
+  createListing: { icon: "plus", labelKey: "common.createListingAction", intent: "supply", type: "general", route: "create-listing-general", view: "create" }
+};
 
 function renderTytOrb() {
   return `
@@ -5292,29 +5319,15 @@ function renderTytSheet() {
           <button type="button" data-action="tyt-ai-search-submit">${t("common.tellAlwen")}</button>
         </div>
         <div class="tyt-action-grid">
-          ${TYT_ACTIONS.map(([iconName, labelKey, view]) => `
-            <button class="tyt-action-card" data-view="${view}">
-              <span class="tyt-action-icon">${icon(iconName)}</span>
-              <span>${t(labelKey)}</span>
+          ${Object.values(TYT_ACTIONS).map((action) => `
+            <button class="tyt-action-card" data-view="${action.view}" data-intent="${action.type}" ${action.category ? `data-category="${action.category}" data-target-view="${action.view}"` : ""}>
+              <span class="tyt-action-icon">${icon(action.icon)}</span>
+              <span>${t(action.labelKey)}</span>
             </button>
           `).join("")}
         </div>
       </section>
     </div>
-  `;
-}
-
-/** A pure launcher into the one canonical Alwen conversation (Alwen 2.0) —
- * it used to be its own mini-chat overlay with a duplicate single-turn
- * chat model, which meant two competing Alwen surfaces could be on
- * screen/reachable at once. Clicking the orb now just opens the same
- * alwenConversation screen renderHomeAiComposer() routes into, so there
- * is only ever one place Alwen conversations happen. */
-function renderAlwenDock() {
-  return `
-    <aside class="alwen-dock" aria-label="${t("common.tellAlwen")}">
-      <button class="alwen-orb" data-alwen-toggle aria-label="${t("common.tellAlwen")}" title="${t("common.tellAlwen")}">${brandIconMarkup("app-icon")}</button>
-    </aside>
   `;
 }
 
@@ -5728,9 +5741,15 @@ function renderCreate() {
     ["help", "common.requestHelp", "common.requestHelpHint", "needHelp"],
     ["city", "common.addBusiness", "common.addBusinessHint", "businessCreate"]
   ];
+  // "Offer a Service" is a supply-side action (the user is offering to do
+  // something) — it must land on createListing (category "services"),
+  // never on "hire" (a demand-side view for finding/hiring a
+  // professional). This is the same TYT_ACTIONS.offerService mapping,
+  // kept in sync here since this Create-hub entry is a second, separate
+  // entry point into the exact same action.
   const secondaryCreationActions = [
     ["message", "common.postCommunity", "common.postCommunityHint", "community"],
-    ["service", "common.offerService", "common.offerServiceHint", "hire"],
+    ["service", "common.offerService", "common.offerServiceHint", "createListing", "services", "service"],
     ["stay", "common.rentSomething", "common.rentSomethingHint", "createListing", "rentals"],
     ["calendar", "common.createEvent", "common.createEventHint", "community"],
     ["briefcase", "common.findWork", "common.findWorkHint", "contribute"]
@@ -5758,8 +5777,8 @@ function renderCreate() {
           `).join("")}
         </div>
         <div class="create-secondary-actions">
-          ${secondaryCreationActions.map(([iconName, titleKey, hintKey, view, category]) => `
-            <button class="create-secondary-action" data-view="${view}" ${category ? `data-category="${category}" data-target-view="${view}"` : ""}>
+          ${secondaryCreationActions.map(([iconName, titleKey, hintKey, view, category, intent]) => `
+            <button class="create-secondary-action" data-view="${view}" ${category ? `data-category="${category}" data-target-view="${view}"` : ""} ${intent ? `data-intent="${intent}"` : ""}>
               <span class="create-icon">${icon(iconName)}</span>
               <span class="create-action-copy">
                 <strong>${t(titleKey)}</strong>
@@ -6437,14 +6456,21 @@ function renderContributeIdentityCard(user) {
 }
 
 function renderContribute() {
+  // TYT_ACTIONS.findOpportunities also lands here (the same "browse how
+  // to earn" list further down the page) — same view, different headline,
+  // so it reads as "find opportunities" rather than the general earnings
+  // dashboard title.
+  const isFindOpportunitiesVisit = state.tytIntent === "opportunities";
+  const heroTitleKey = isFindOpportunitiesVisit ? "contribute.opportunitiesHeroTitle" : "contribute.economyTitle";
+  const heroSubtitleKey = isFindOpportunitiesVisit ? "contribute.opportunitiesHeroSubtitle" : "contribute.economyHeroSubtitle";
   if (state.auth.status !== "signedIn") {
     return `
       <section class="section-shell contribute-shell economy-shell">
         <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
           <div class="city-hero-copy">
             <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
-            <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
-            <p>${t("contribute.economyHeroSubtitle")}</p>
+            <h1 id="contribute-hero-title">${t(heroTitleKey)}</h1>
+            <p>${t(heroSubtitleKey)}</p>
           </div>
         </div>
         <div class="economy-signed-out">
@@ -6463,8 +6489,8 @@ function renderContribute() {
       <div class="city-hero page-hero economy-hero" aria-labelledby="contribute-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("contribute.economyEyebrow")}</p>
-          <h1 id="contribute-hero-title">${t("contribute.economyTitle")}</h1>
-          <p>${t("contribute.economyHeroSubtitle")}</p>
+          <h1 id="contribute-hero-title">${t(heroTitleKey)}</h1>
+          <p>${t(heroSubtitleKey)}</p>
         </div>
         ${renderAiSearch("contribute")}
       </div>
@@ -6515,16 +6541,31 @@ const LISTING_MAX_PHOTOS = 6;
  * one conversationally (see create_marketplace_listing in
  * supabase/functions/alwen-chat). Inserts directly into the listings table
  * via Supabase from the client, since nothing here needs a secret key. */
+/** Per-TYT-intent copy override for the createListing screen — headline
+ * plus title/description placeholders — keyed by TYT_ACTIONS' `type`.
+ * Falls back to the screen's existing generic copy for a direct visit
+ * (no intent) or an intent this screen doesn't recognize. */
+const LISTING_INTENT_COPY = {
+  service: { heroTitleKey: "createListing.intentServiceHeroTitle", titlePlaceholderKey: "createListing.intentServiceTitlePlaceholder", descriptionPlaceholderKey: "createListing.intentServiceDescriptionPlaceholder" },
+  sell: { heroTitleKey: "createListing.intentSellHeroTitle" },
+  teaching: { heroTitleKey: "createListing.intentTeachHeroTitle", titlePlaceholderKey: "createListing.intentTeachTitlePlaceholder", descriptionPlaceholderKey: "createListing.intentTeachDescriptionPlaceholder" },
+  delivery: { heroTitleKey: "createListing.intentDeliverHeroTitle", titlePlaceholderKey: "createListing.intentDeliverTitlePlaceholder", descriptionPlaceholderKey: "createListing.intentDeliverDescriptionPlaceholder" }
+};
+
 function renderCreateListingForm() {
   const draft = state.listingDraft;
   const isLoading = state.listingSubmitStatus === "loading";
+  const intentCopy = LISTING_INTENT_COPY[state.tytIntent] || null;
+  const heroTitle = intentCopy?.heroTitleKey ? t(intentCopy.heroTitleKey) : t("createListing.createListingTitle");
+  const titlePlaceholder = intentCopy?.titlePlaceholderKey ? t(intentCopy.titlePlaceholderKey) : t("createListing.titlePlaceholder");
+  const descriptionPlaceholder = intentCopy?.descriptionPlaceholderKey ? t(intentCopy.descriptionPlaceholderKey) : t("createListing.descriptionPlaceholder");
   if (state.auth.status !== "signedIn") {
     return `
       <section class="section-shell create-listing-shell">
         <button type="button" class="back-button" data-view="create">${icon("arrow")}${t("common.back")}</button>
         <div class="screen-heading">
           <p class="eyebrow">${t("nav.marketplace")}</p>
-          <h1>${t("createListing.createListingTitle")}</h1>
+          <h1>${heroTitle}</h1>
         </div>
         <div class="post-request-signin">
           <p>${t("createListing.signInHint")}</p>
@@ -6538,7 +6579,7 @@ function renderCreateListingForm() {
       <button type="button" class="back-button" data-view="create">${icon("arrow")}${t("common.back")}</button>
       <div class="screen-heading">
         <p class="eyebrow">${t("nav.marketplace")}</p>
-        <h1>${t("createListing.createListingTitle")}</h1>
+        <h1>${heroTitle}</h1>
         <p>${t("createListing.createListingHint")}</p>
       </div>
       <form class="claim-form create-listing-form" data-role="create-listing-form">
@@ -6556,7 +6597,7 @@ function renderCreateListingForm() {
         ${(state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified" ? `<div class="auth-error">Trader listings require current verification. <button type="button" class="auth-link" data-view="traderVerification">Open trader verification</button></div>` : ""}
         <div class="auth-field">
           <label for="listing-title">${t("field.title")}</label>
-          <input id="listing-title" name="title" value="${escapeHtml(draft.title)}" placeholder="${t("createListing.titlePlaceholder")}" maxlength="120" />
+          <input id="listing-title" name="title" value="${escapeHtml(draft.title)}" placeholder="${titlePlaceholder}" maxlength="120" />
         </div>
 
         <div class="auth-field">
@@ -6568,7 +6609,7 @@ function renderCreateListingForm() {
 
         <div class="auth-field">
           <label for="listing-description">${t("field.description")}</label>
-          <textarea id="listing-description" name="description" rows="3" maxlength="1000" placeholder="${t("createListing.descriptionPlaceholder")}">${escapeHtml(draft.description)}</textarea>
+          <textarea id="listing-description" name="description" rows="3" maxlength="1000" placeholder="${descriptionPlaceholder}">${escapeHtml(draft.description)}</textarea>
         </div>
 
         <div class="create-listing-price-row">
@@ -6819,7 +6860,7 @@ function renderMarketplaceListing(item) {
         <p>${listingMeta(item)}</p>
         ${item.aiPrice || item.aiMatch ? `<div class="ai-price-pill">${icon("spark")}<span>${joinNonEmpty([item.aiMatch, item.aiPrice])}</span></div>` : ""}
         ${item.popularity || item.aiInsight ? `<div class="trust-row visual-trust">${item.popularity ? `<span>${item.popularity}</span>` : ""}${item.aiInsight ? `<span>${item.aiInsight}</span>` : ""}</div>` : ""}
-        ${item.verifiedSeller || item.sellerReputation ? `<div class="opportunity-trust">${item.verifiedSeller ? `<span>✓ ${t("common.verifiedSeller")}</span>` : ""}${item.sellerReputation ? `<span>★ ${(item.sellerReputation / 20).toFixed(1)}</span>` : ""}</div>` : ""}
+        ${item.sellerReputation ? `<div class="opportunity-trust"><span>★ ${(item.sellerReputation / 20).toFixed(1)}</span></div>` : ""}
         ${item.pickupAvailable || item.deliveryAvailable ? `<div class="opportunity-tags">${item.pickupAvailable ? `<span>${t("createListing.pickupAvailableLabel")}</span>` : ""}${item.deliveryAvailable ? `<span>${t("createListing.deliveryAvailableLabel")}</span>` : ""}</div>` : ""}
         <div class="opportunity-actions market-actions"><button type="button" data-action="start-listing-conversation" data-listing-id="${item.id}">${item.type === "jobs" ? t("common.apply") : t("common.contactSeller")}</button><a href="?view=listingDetail&id=${encodeURIComponent(item.id)}" data-view="listingDetail" data-listing-id="${item.id}">${t("common.viewDetails")}</a></div>
       </div>
@@ -6972,14 +7013,18 @@ function renderNeedHelp() {
   const requests = filteredHelpRequests();
   const intent = NEED_HELP_INTENTS.find((item) => item.id === state.needHelpDetectedIntentId) || null;
   const posted = state.helpRequestPosted;
+  // TYT_ACTIONS.volunteer also lands here (browse and respond to real
+  // requests below, rather than post one) — same view, different
+  // headline, so it reads as "volunteer your time" and not "I need help".
+  const isVolunteerVisit = state.tytIntent === "volunteer";
 
   return `
     <section class="section-shell help-shell">
       ${renderTransactionSafetyNotice()}
       <div class="opportunities-hero need-help-hero">
         <p class="eyebrow">${t("common.activeMarketplace")}</p>
-        <h1>${t("needHelp.conversationalHeroTitle")}</h1>
-        <p>${t("needHelp.conversationalHeroHint")}</p>
+        <h1>${isVolunteerVisit ? t("needHelp.volunteerHeroTitle") : t("needHelp.conversationalHeroTitle")}</h1>
+        <p>${isVolunteerVisit ? t("needHelp.volunteerHeroHint") : t("needHelp.conversationalHeroHint")}</p>
         ${
           posted
             ? ""
@@ -7857,6 +7902,12 @@ async function submitListingForm() {
 
     applyCreatedListing(created);
     state.listingSubmitStatus = "success";
+    // Not part of listingDraft itself, but this success path (unlike every
+    // other exit from this form) sets state.activeView directly rather
+    // than through a [data-view] click, so it's the one place that
+    // wouldn't otherwise clear a stale intent before the user's next
+    // visit to this same form.
+    state.tytIntent = null;
     state.listingDraft = {
       title: "",
       description: "",
@@ -8396,7 +8447,7 @@ function renderConversationRow(thread) {
       </div>
       <div class="conversation-body">
         <div class="conversation-top">
-          <h3>${escapeHtml(thread.participant)}${thread.verified ? `<span class="conversation-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</h3>
+          <h3>${escapeHtml(thread.participant)}${thread.verified ? verifiedCheck(t("messages.verified")) : ""}</h3>
           <span class="conversation-time">${t(thread.timeKey)}</span>
         </div>
         <p class="conversation-preview">${escapeHtml(thread.preview)}</p>
@@ -8498,7 +8549,7 @@ function renderConversationDetail() {
           ${thread.type === "alwen" ? brandIconMarkup("app-icon") : `<span>${escapeHtml(initials)}</span>`}
         </div>
         <div class="conversation-detail-identity">
-          <h2>${escapeHtml(thread.participant)}${thread.verified ? `<span class="conversation-verified" title="${t("messages.verified")}">${icon("verify")}</span>` : ""}</h2>
+          <h2>${escapeHtml(thread.participant)}${thread.verified ? verifiedCheck(t("messages.verified")) : ""}</h2>
           <span class="conversation-type-tag">${meta.emoji} ${t(meta.labelKey)}</span>
         </div>
       </div>
@@ -11136,6 +11187,13 @@ function bindEvents() {
       if (button.dataset.view === "createListing" && button.dataset.category) {
         state.listingDraft.category = button.dataset.category;
       }
+      // Set by TYT tiles (and the matching Create-hub actions) that carry
+      // data-intent, so their shared destination view (createListing,
+      // needHelp, contribute) can show action-specific copy instead of
+      // its generic default — see LISTING_INTENT_COPY. Cleared by any
+      // other [data-view] click app-wide (this line always runs), so it
+      // can never leak into an unrelated later visit to that same view.
+      state.tytIntent = button.dataset.intent || null;
       // Retries on every visit rather than relying solely on the one
       // fire-and-forget call at sign-in, which left "My Listings" — and any
       // real listing created in an earlier session — silently stuck empty
@@ -12846,10 +12904,22 @@ function openPhotoZoom(url) {
  * any card's own bubble-phase "open detail sheet" listener, so tapping a
  * photo opens the zoom viewer instead of navigating — but only once a
  * real photo is actually found; otherwise the event is left alone and
- * the card's normal tap-to-open behaviour proceeds untouched. */
+ * the card's normal tap-to-open behaviour proceeds untouched.
+ *
+ * Every page hero (Marketplace, Community, Hire, Businesses,
+ * Reservations, ...) uses a `*-photo` background class on its own
+ * `<section>` — e.g. `.marketplace-hero-photo` — with the search/Tell
+ * Alwen composer nested directly inside it. `[class*="-photo"]` matches
+ * that ancestor for *any* click inside the hero, including clicks
+ * straight on the search input, so without this exclusion the composer
+ * was unreachable: every tap opened the hero's own background photo in
+ * the zoom viewer instead of focusing the input. Real form controls
+ * (input/textarea/select) and the composer containers themselves are
+ * therefore excluded up front, the same way buttons and links already
+ * were — search interaction must always win over the hero's photo. */
 function bindPhotoZoom() {
   document.addEventListener("click", (event) => {
-    if (event.target.closest("button, a[href]")) return;
+    if (event.target.closest('button, a[href], input, textarea, select, .ai-search, .home-command-bar, .tyt-ai-search')) return;
     const photoEl = event.target.closest('[class*="-photo"]');
     if (!photoEl) return;
     const bg = getComputedStyle(photoEl).backgroundImage;

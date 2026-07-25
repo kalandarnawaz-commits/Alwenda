@@ -2608,6 +2608,15 @@ body.has-open-sheet {
   min-width: 0;
 }
 
+/* Single shared verified-badge component (see verifiedCheck() in main.js)
+ * — every call site places this immediately adjacent to a name/title in
+ * the markup with no separating space, relying entirely on this rule's
+ * own margin for breathing room; without it the badge sits flush against
+ * the preceding text (the "overlaps names" bug). One canonical size
+ * everywhere it appears — a second, conflicting 19px override used to
+ * exist elsewhere in this file and win by cascade order alone, which was
+ * the actual cause of "different sizing across screens"; that override
+ * has been removed, not merged, so there is exactly one definition. */
 .verified-check {
   display: inline-grid !important;
   place-items: center;
@@ -2616,6 +2625,7 @@ body.has-open-sheet {
   height: 20px !important;
   min-width: 20px;
   min-height: 20px;
+  margin-left: 6px !important;
   padding: 0 !important;
   border: 0 !important;
   border-radius: 999px !important;
@@ -5321,10 +5331,6 @@ select:focus-visible,
   transform: translateY(-1px);
 }
 
-.alwen-orb:hover {
-  transform: translateY(-3px) scale(1.03);
-}
-
 @media (max-width: 760px) {
   .living-rail,
   .community-preview {
@@ -5862,13 +5868,6 @@ select:focus-visible,
 .visual-market-card.market-card > div:last-child {
   gap: var(--sp-8);
   padding: var(--sp-16);
-}
-
-.verified-check {
-  width: 19px !important;
-  height: 19px !important;
-  min-width: 19px;
-  min-height: 19px;
 }
 
 .selection-sheet {
@@ -6981,15 +6980,6 @@ select:focus-visible,
   background: transparent !important;
 }
 
-/* An earlier .alwen-dock rule (position/display/width/height/right/bottom/
-   z-index: 60/pointer-events) used to live here — every one of those
-   properties is redeclared !important further down (the real, active
-   .alwen-dock rule, z-index 65), so it had zero effect and was dead
-   code. Keeping .alwen-orb's position: relative, which nothing else sets. */
-.alwen-orb {
-  position: relative !important;
-}
-
 @media (max-width: 430px) {
   .bottom-nav {
     left: 8px !important;
@@ -7018,12 +7008,6 @@ select:focus-visible,
 
   .bottom-nav button span:not(.icon):not(.brand-icon-swap) {
     font-size: 0.6rem !important;
-  }
-
-  .alwen-dock {
-    right: 12px !important;
-    bottom: calc(90px + env(safe-area-inset-bottom)) !important;
-    width: calc(100vw - 24px) !important;
   }
 }
 
@@ -7137,55 +7121,6 @@ body {
   box-shadow: 0 8px 22px rgba(28, 25, 20, 0.06);
 }
 
-.alwen-dock {
-  position: fixed !important;
-  right: max(16px, calc((100vw - 1200px) / 2 + 16px)) !important;
-  bottom: calc(92px + env(safe-area-inset-bottom)) !important;
-  z-index: 65 !important;
-  display: grid !important;
-  justify-items: end !important;
-  width: min(380px, calc(100vw - 24px)) !important;
-  height: 58px !important;
-  pointer-events: none !important;
-}
-
-/* A static emerald aura (no animation — see motion guidance against
-   continuous pulsing) is the only thing distinguishing this from a
-   generic black FAB; it ties the orb to the brand accent used for
-   Alwen elsewhere without competing with the TYT orb's motion. */
-.alwen-orb {
-  display: grid !important;
-  place-items: center !important;
-  width: 58px !important;
-  height: 58px !important;
-  border-radius: 999px !important;
-  background: #111111 !important;
-  color: white !important;
-  box-shadow:
-    0 18px 48px rgba(17, 17, 17, 0.24),
-    0 0 0 3px rgba(52, 211, 153, 0.24) !important;
-  pointer-events: auto !important;
-}
-
-@media (max-width: 480px) {
-  .alwen-orb {
-    width: 52px !important;
-    height: 52px !important;
-  }
-
-  .alwen-orb .app-icon-frame {
-    width: 28px !important;
-    height: 28px !important;
-  }
-}
-
-.alwen-orb .app-icon-frame {
-  width: 32px !important;
-  height: 32px !important;
-  background: transparent !important;
-  padding: 0 !important;
-}
-
 .alwen-status-dot {
   width: 7px;
   height: 7px;
@@ -7204,10 +7139,9 @@ body {
   }
 }
 
-/* Real-time voice translate shortcut — same fixed-FAB-plus-popover pattern
-   as .alwen-dock/.alwen-orb/.alwen-panel above, just pinned top right (below
-   the header) instead of bottom right, and the panel drops down instead of
-   up since there's no room above it. */
+/* Real-time voice translate shortcut — a fixed-FAB-plus-popover pattern,
+   pinned top right (below the header) instead of bottom right, with the
+   panel dropping down instead of up since there's no room above it. */
 .quick-translate-dock {
   position: fixed;
   top: calc(80px + env(safe-area-inset-top));
@@ -7891,18 +7825,12 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .alwen-dock {
-    right: 16px !important;
-    bottom: calc(86px + env(safe-area-inset-bottom)) !important;
-    width: calc(100vw - 32px) !important;
-  }
-
   /* No mobile-specific z-index bump here anymore — it used to push
-     .bottom-nav to 80, above .tyt-orb (75) and .alwen-dock/
-     .quick-translate-dock (65), inverting the desktop stacking order
-     (nav 70 < orb 75) and letting the nav bar's own background render
-     over those floating buttons wherever they overlap on narrow
-     screens. Falls back to the base rule's z-index: 70 instead. */
+     .bottom-nav to 80, above .tyt-orb (75) and .quick-translate-dock
+     (65), inverting the desktop stacking order (nav 70 < orb 75) and
+     letting the nav bar's own background render over those floating
+     buttons wherever they overlap on narrow screens. Falls back to the
+     base rule's z-index: 70 instead. */
 }
 
 /* Create page command centre polish. */
@@ -8424,18 +8352,6 @@ body {
   flex: 0 1 auto;
   max-width: 100%;
   white-space: nowrap;
-}
-
-/* Fixed-tone icon contexts: .alwen-orb's background is an unconditional
-   dark emerald circle, which doesn't change with header scroll state, so
-   its icon choice must be pinned regardless of which header-theme class
-   happens to be an ancestor at the time. */
-.alwen-orb .brand-dark {
-  display: none !important;
-}
-
-.alwen-orb .brand-light {
-  display: block !important;
 }
 
 .alwen-mini .brand-dark {
@@ -11739,8 +11655,7 @@ strong:has(> .verified-check) {
 /* Desktop hover reveals the secondary action a little more strongly —
    the mobile swipe affordance's desktop equivalent per the brief. */
 @media (hover: hover) {
-  .notification-secondary-action,
-  .conversation-row .conversation-verified {
+  .notification-secondary-action {
     opacity: 0.85;
     transition: opacity 180ms ease;
   }
@@ -11813,11 +11728,6 @@ strong:has(> .verified-check) {
 
 .conversation-row.is-unread .conversation-top h3 {
   font-weight: 900;
-}
-
-.conversation-verified {
-  color: var(--emerald-text);
-  font-size: 0.8rem;
 }
 
 .conversation-time {
