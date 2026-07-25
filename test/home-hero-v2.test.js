@@ -182,19 +182,16 @@ test("selectHomeIntentChips re-ranks chips upward when their real signal is pres
    3. Home-only floating dock visibility (renderShell)
 --------------------------------------------------------------------- */
 
-test("renderShell hides the Alwen dock and Quick Translate dock on Home (in addition to their existing screens); the TYT orb stays unconditional everywhere including Home", () => {
+test("renderShell hides the Quick Translate dock on Home (in addition to its existing screens); the TYT orb stays unconditional everywhere including Home; the floating Alwen dock is gone entirely, not just view-gated", () => {
   const shell = extractFunction(main, "renderShell");
   assert.match(shell, /\$\{renderTytOrb\(\)\}/, "TYT orb must render with no surrounding view guard");
-  assert.match(
-    shell,
-    /state\.activeView !== "alwen" && state\.activeView !== "home" \? renderAlwenDock\(\) : ""/,
-    "Alwen dock must be hidden on both the Alwen screen and Home"
-  );
   assert.match(
     shell,
     /state\.activeView !== "translate" && state\.activeView !== "community" && state\.activeView !== "home" \? renderQuickTranslateDock\(\) : ""/,
     "Quick Translate dock must be hidden on Translate, Community, and Home"
   );
+  assert.doesNotMatch(shell, /renderAlwenDock/, "the floating Alwen dock must have no call site left in renderShell — it was removed globally, not just view-gated");
+  assert.doesNotMatch(main, /function renderAlwenDock\(/, "renderAlwenDock's definition must be fully removed, not just unused");
 });
 
 /* ---------------------------------------------------------------------

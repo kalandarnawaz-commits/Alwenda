@@ -456,6 +456,4 @@ test("no duplicate legacy mini-chat surface remains anywhere in the app", () => 
   assert.doesNotMatch(main, /data-alwen-chat-form/, "the legacy mini-chat form must no longer be rendered or bound");
   assert.doesNotMatch(main, /class="alwen-panel"/, "the floating dock must no longer render its own chat panel");
   assert.doesNotMatch(main, /alwenOpen/, "the open/closed dock-panel state must be fully removed, not just unused");
-  const dock = extractFunction(main, "renderAlwenDock");
-  assert.doesNotMatch(dock, /alwen-chat-form|alwen-chat-compose|submitAlwenChat/, "renderAlwenDock must be a pure launcher, not a second chat surface");
 });
