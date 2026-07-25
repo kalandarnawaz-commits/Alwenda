@@ -10882,9 +10882,31 @@ strong:has(> .verified-check) {
    (renderUserProfile) — cover + avatar hero, Following/Followers/Trust
    metrics, reputation signals, tabs, a responsive listing grid, and the
    followers/following/trust dialogs (which reuse .report-dialog-backdrop/
-   .report-dialog, styled above, rather than a new dialog shell). === */
+   .report-dialog, styled above, rather than a new dialog shell).
+   Profile 2.0 compression pass: cover/avatar/actions/stats/reputation are
+   all resized/reflowed to take meaningfully less vertical space before the
+   tabs/listing grid start — measured via the live browser (375x812) in
+   the PR evidence package rather than assumed. Nothing shown is removed,
+   only resized/reflowed; see renderUserProfileReputation's own comment for
+   the one genuine duplicate (member since) that was dropped. */
+.user-profile-shell {
+  /* .section-shell's shared 18px gap (styles.css ~5820) is a sensible
+     default for most screens, but on Profile it applies between every one
+     of the 5 stacked blocks (cover/identity/metrics/reputation/tabs) —
+     scoped down here rather than touching the shared rule everyone else
+     also uses. */
+  gap: 8px;
+}
+
+.user-profile-shell .profile-tabs {
+  /* .profile-tabs' own margin-top (var(--space-4)) stacks on top of the
+     shell gap above rather than being absorbed by it (flex gap doesn't
+     collapse with a child's own margin) — scoped down for the same reason. */
+  margin-top: 8px;
+}
+
 .user-profile-cover {
-  height: clamp(120px, 22vw, 200px);
+  height: clamp(56px, 12vw, 90px);
   margin: -20px -20px 0;
   border-radius: var(--radius-lg, 24px) var(--radius-lg, 24px) 0 0;
   background-position: center;
@@ -10907,8 +10929,8 @@ strong:has(> .verified-check) {
 .user-profile-avatar,
 .user-profile-avatar .profile-portrait,
 .user-profile-avatar .profile-portrait-fallback {
-  width: 96px;
-  height: 96px;
+  width: 84px;
+  height: 84px;
 }
 
 .user-profile-avatar {
@@ -10917,28 +10939,28 @@ strong:has(> .verified-check) {
      never gets dragged up underneath the cover image (see the identical
      .user-profile-identity-text rule below, which intentionally has no
      negative margin). */
-  margin-top: -48px;
-  border: 4px solid var(--surface);
+  margin-top: -36px;
+  border: 3px solid var(--surface);
   background: var(--surface);
 }
 
 .user-profile-identity-text {
   flex: 1;
   min-width: 180px;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .user-profile-identity-text h1 {
-  margin: 4px 0 0;
-  font-size: clamp(1.3rem, 4vw, 1.7rem);
+  margin: 2px 0 0;
+  font-size: clamp(1.15rem, 3.4vw, 1.5rem);
   line-height: 1.15;
 }
 
 .user-profile-handle {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--muted);
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
 }
 
 .user-profile-actions {
@@ -10946,7 +10968,7 @@ strong:has(> .verified-check) {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .user-profile-more-menu {
@@ -10967,12 +10989,12 @@ strong:has(> .verified-check) {
   .user-profile-avatar,
   .user-profile-avatar .profile-portrait,
   .user-profile-avatar .profile-portrait-fallback {
-    width: 76px;
-    height: 76px;
+    width: 64px;
+    height: 64px;
   }
 
   .user-profile-avatar {
-    margin-top: -40px;
+    margin-top: -30px;
   }
 
   .user-profile-actions {
@@ -10985,23 +11007,28 @@ strong:has(> .verified-check) {
   }
 }
 
+/* Profile 2.0: one compact inline line ("128 Following · 54 Followers ·
+   Trust 4.9") replacing the old padded 3-up card grid — same 3 buttons,
+   same dialogs, no card background/border. min-height/padding keep each
+   button's tap target >=44px tall even though the visual text is small. */
 .profile-social-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  margin-top: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md, 16px);
-  background: var(--line);
-  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 6px;
 }
 
 .profile-metric {
-  display: grid;
-  gap: 2px;
-  padding: 12px 8px;
-  background: var(--surface);
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 2px;
+  background: transparent;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.86rem;
+  color: var(--muted);
 }
 
 .profile-metric:hover,
@@ -11010,19 +11037,21 @@ strong:has(> .verified-check) {
 }
 
 .profile-metric strong {
-  font-size: 1.15rem;
-}
-
-.profile-metric span {
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  font-size: 0.95rem;
+  color: var(--ink, inherit);
 }
 
 .profile-reputation-signals {
-  margin-top: var(--space-2);
+  margin-top: 2px;
+}
+
+/* Denser than the shared .quote-list span chip size (used broadly
+   elsewhere in the app) — scoped to this one section only, part of the
+   Profile 2.0 compression pass. */
+.profile-reputation-signals .verified-chip {
+  padding: 3px 8px !important;
+  font-size: 0.78rem !important;
+  gap: 4px !important;
 }
 
 .profile-tabs {
@@ -14180,6 +14209,154 @@ strong:has(> .verified-check) {
   }
   .explore-hub-card:hover {
     transform: none;
+  }
+}
+
+/* === Category hub cards (Earn Today / Live Around You / category-detail
+   picker) — generalizes .explore-hub-card's "destination card with real
+   count metadata" pattern to the CATEGORY_CONFIG taxonomy. Same design
+   tokens (surface/mint/gold/sky/rose, radius, shadow), own class names so
+   the two never collide. === */
+.category-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.category-hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  position: relative;
+  min-height: 44px;
+  padding: 16px;
+  border-radius: var(--radius-lg, 24px);
+  text-align: left;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.category-hub-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgba(15, 31, 27, 0.12);
+}
+
+.category-hub-card:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.08);
+}
+
+.category-hub-card:focus-visible {
+  outline: 2px solid var(--emerald-text, #0f7a5c);
+  outline-offset: 2px;
+}
+
+.category-hub-card.tone-mint {
+  background: linear-gradient(160deg, var(--mint), var(--surface) 70%);
+}
+
+.category-hub-card.tone-gold {
+  background: linear-gradient(160deg, var(--gold), var(--surface) 70%);
+}
+
+.category-hub-card.tone-sky {
+  background: linear-gradient(160deg, var(--sky), var(--surface) 70%);
+}
+
+.category-hub-card.tone-rose {
+  background: linear-gradient(160deg, var(--rose), var(--surface) 70%);
+}
+
+/* Zero-count categories still render (fixed navigation surface, not
+   filtered by data) but visually deprioritized rather than hidden. */
+.category-hub-card.is-empty {
+  opacity: 0.72;
+}
+
+.category-hub-card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.category-hub-card-name {
+  font-size: 0.94rem;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.category-hub-card-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.category-hub-card-arrow {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.category-hub-demo-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.opportunities-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.real-opportunity-card .real-opportunity-category-chip {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* Skeleton loading — reuses the same shimmer as the rest of the app
+   (.profile-listing-grid-loading) rather than a new pattern; the category
+   grid itself just needs the grid shell while data loads. */
+.category-hub-grid:empty {
+  min-height: 88px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-hub-card {
+    transition: none;
+  }
+  .category-hub-card:hover,
+  .category-hub-card:active {
+    transform: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .category-hub-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .category-hub-card {
+    padding: 12px;
+    min-height: 44px;
+  }
+  .category-hub-card-icon {
+    font-size: 1.3rem;
   }
 }
 
