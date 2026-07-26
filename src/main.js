@@ -1190,6 +1190,17 @@ function currentDeepLinkId() {
   return null;
 }
 
+/** Resets exactly the state this router itself owns — activeView plus the
+ * liveOpportunities filter it round-trips through the URL — back to their
+ * Home defaults. Deliberately narrow: it must never touch auth/session
+ * state, loaded data, or a per-view "selected" id (those are already
+ * rebuilt from scratch by their own open*() function whenever that view is
+ * genuinely re-entered, same as every other view in this router). */
+function resetToHomeFromUrl() {
+  state.activeView = "home";
+  state.opportunityFilter = { categoryId: "all", surface: "earn", intent: "all", status: "active", distance: "all" };
+}
+
 /** Reads `view` (+ `id` for the views that need one) from the current URL
  * into state. Shared by boot and by the popstate handler below, so a
  * refresh and a Back/Forward tap both resolve the same way. */
@@ -1210,7 +1221,16 @@ function syncStateFromUrl() {
   // as legalPathViews above.
   const profilePathMatch = window.location.pathname.match(/^\/profile\/([^/]+)\/?$/);
   const view = legalPathViews[window.location.pathname] || (profilePathMatch ? "userProfile" : null) || searchParams.get("view");
-  if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
+  // A bare "/" (no ?view= at all — e.g. Back/Forward landing on the URL
+  // syncUrlToState() writes for Home, which never gets a ?view= param of
+  // its own) and an unrecognised/invalid ?view= both used to hit this
+  // branch and return without touching state.activeView, leaving whatever
+  // deep-linked view was previously active rendered under the wrong URL.
+  // Both cases now explicitly resolve to Home instead of silently no-op'ing.
+  if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) {
+    resetToHomeFromUrl();
+    return;
+  }
   state.activeView = view;
   syncOpportunityFilterFromUrl(searchParams);
   // A direct/refreshed/back-forward load of ?view=profile for a signed-in
