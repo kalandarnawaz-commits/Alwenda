@@ -1554,8 +1554,7 @@
       "callOpensPhone": "Opens your Phone app",
       "shareCopied": "Link copied",
       "reportedConfirmation": "Reported — thanks for flagging this",
-      "savedConfirmation": "Saved to your list",
-      "limitedProfileNote": "Seller contact details aren't available from this view yet — open Marketplace to browse and message sellers directly."
+      "savedConfirmation": "Saved to your list"
     }
   },
   "needHelp": {

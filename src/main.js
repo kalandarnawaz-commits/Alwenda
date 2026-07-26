@@ -83,6 +83,7 @@ import {
   fetchMyHelpRequests,
   fetchOpenHelpRequests,
   fetchPublicListings,
+  fetchListingById,
   fetchCommunityPosts,
   recordLegalAcceptance,
   createModerationReport,
@@ -112,7 +113,7 @@ import {
   blockUser,
   unblockUser,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=home-feed-1";
+} from "./services/auth/supabaseClient.js?v=home-feed-2";
 import {
   orderedCategoryIds,
   orderedStarterCategoryIds,
@@ -248,6 +249,13 @@ const state = {
   },
   selectedBusinessId: null,
   selectedListingId: null,
+  /* Full real listing record for a listing not in the local `listings`
+     pool (i.e. someone else's published listing, reached from the Home
+     Feed or a direct link) — see renderRemoteListingDetail(). id tracks
+     which listing the cached item/status belongs to, so navigating to a
+     different listing correctly re-fetches instead of showing stale
+     data. status: "idle" | "loading" | "loaded" | "notFound" | "error". */
+  remoteListingDetail: { status: "idle", id: null, item: null },
   selectedPlaceId: null,
   selectedOpportunityId: null,
   selectedEventId: null,
@@ -6915,9 +6923,46 @@ function renderMarketplaceListing(item) {
  * family rather than a one-off layout. Deep-linkable via WP0's routing
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
+/** Resolves state.selectedListingId to an item and renders it through the
+ * ONE canonical body below — the local `listings` pool (mock seed data +
+ * the current user's own real listings, always fully shaped and
+ * available synchronously) is checked first; anything not found there
+ * (any other user's real, published listing — e.g. reached from the Home
+ * Feed) falls through to an async full-record fetch via
+ * refreshRemoteListingDetail(), cached in state.remoteListingDetail so a
+ * re-render while loading doesn't re-fetch. Both paths render through the
+ * exact same renderListingDetailBody() — there is no separate reduced
+ * view for real listings. */
 function renderListingDetail() {
-  const { item, isReal } = findListingRecordById(state.selectedListingId);
-  if (!item) {
+  const localItem = listings.find((listing) => String(listing.id) === String(state.selectedListingId));
+  if (localItem) return renderListingDetailBody(localItem);
+  return renderRemoteListingDetail();
+}
+
+function renderRemoteListingDetail() {
+  const id = state.selectedListingId;
+  const cache = state.remoteListingDetail;
+  const cacheMatchesId = String(cache.id) === String(id);
+
+  if (!cacheMatchesId || cache.status === "idle") refreshRemoteListingDetail(id);
+
+  if (cacheMatchesId && cache.status === "loaded" && cache.item) return renderListingDetailBody(cache.item);
+
+  if (cacheMatchesId && cache.status === "error") {
+    return `
+      <section class="section-shell listing-detail-shell">
+        <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
+        ${renderEmptyState(t("opportunities.loadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-listing-detail">${t("alwen.alwenChatRetry")}</button>
+      </section>
+    `;
+  }
+
+  // notFound (genuinely no such published listing) or the brief window
+  // before the async fetch above resolves — both render the same honest
+  // empty state; there's nothing meaningful to distinguish them on yet
+  // (a "not found" only becomes knowable once the fetch settles).
+  if (cacheMatchesId && cache.status === "notFound") {
     return `
       <section class="section-shell listing-detail-shell">
         <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
@@ -6925,9 +6970,28 @@ function renderListingDetail() {
       </section>
     `;
   }
-  if (isReal) return renderRealListingDetail(item);
 
-  const gallery = item.gallery && item.gallery.length ? item.gallery : [item.image];
+  return `
+    <section class="section-shell listing-detail-shell">
+      <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
+      <div class="profile-listing-grid-loading" aria-busy="true"></div>
+    </section>
+  `;
+}
+
+/** THE single listing-detail implementation, shared by every entry point
+ * (Marketplace's own cards, the Home Feed's Marketplace card, deep links).
+ * Takes an already-shaped item — either a local `listings` row (mock seed
+ * data or the current user's own real listing) or a remote real listing
+ * mapped by shapeRemoteListingForDisplay — and renders identically either
+ * way, since both are shaped into the same fields. See renderListingDetail()
+ * above for how the item is resolved. */
+function renderListingDetailBody(item) {
+  // item.gallery is the source of truth when present (already includes the
+  // primary photo, see shapeListingForDisplay/shapeRemoteListingForDisplay);
+  // item.image is only a fallback for older mock records with a single
+  // cover photo and no gallery array at all.
+  const galleryPhotos = (item.gallery && item.gallery.length ? item.gallery : [item.image]).filter(Boolean);
   const isSaved = state.savedListingIds.includes(String(item.id));
   const sellerAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   const hasFulfilment = item.pickupAvailable || item.deliveryAvailable;
@@ -6939,13 +7003,13 @@ function renderListingDetail() {
       <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
 
       ${
-        gallery.filter(Boolean).length
-          ? `<div class="business-gallery-rail listing-gallery-rail">${gallery
-              .filter(Boolean)
+        galleryPhotos.length
+          ? `<div class="business-gallery-rail listing-gallery-rail">${galleryPhotos
               .map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`)
               .join("")}</div>`
-          : `<p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>`
+          : `<div class="business-gallery-rail listing-gallery-rail"><div class="business-gallery-photo listing-gallery-placeholder" aria-hidden="true">${icon("image")}</div></div>`
       }
+      ${galleryPhotos.length === 1 ? `<p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>` : ""}
 
       <div class="screen-heading">
         <span class="badge category-chip">${categoryLabel(item.type)}</span>
@@ -6997,42 +7061,6 @@ function renderListingDetail() {
         <button type="button" class="${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}">${t("common.favourite")}</button>
         <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
         <button type="button" data-report-target="listing" data-report-id="${item.id}">Report listing</button>
-      </div>
-    </section>
-  `;
-}
-
-/** Honest detail view for a real Supabase listing that isn't in the local
- * `listings` pool (i.e. published by someone other than the current
- * viewer) — reached from the Unified Home Feed's Marketplace "Open"
- * action. fetchPublicListings() only selects a handful of public-safe
- * columns (no seller identity, no photos, no reputation), so this
- * deliberately does NOT reuse renderListingDetail's full template above —
- * that would render broken images and "undefined" seller rows for every
- * field this pool doesn't carry. Every line here maps directly to a real
- * column; nothing is fabricated or defaulted to a placeholder. */
-function renderRealListingDetail(item) {
-  const categoryId = normalizeOpportunityCategory(item);
-  const categoryLabelText = t(categoryConfigFor(categoryId).labelKey);
-  const priceLabel = item.price_amount != null ? formatCurrency(item.price_amount, item.price_currency || "EUR") : null;
-  const locationLabel = item.neighbourhood || item.location_label || null;
-  const postedLabel = item.created_at ? formatDate(item.created_at, { dateStyle: "medium" }) : null;
-  return `
-    <section class="section-shell listing-detail-shell">
-      <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
-      <p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>
-      <div class="screen-heading">
-        <span class="badge category-chip">${escapeHtml(categoryLabelText)}</span>
-        <h1>${escapeHtml(item.title || "")}</h1>
-        ${priceLabel ? `<p class="price-row"><strong>${priceLabel}</strong></p>` : ""}
-      </div>
-      <div class="business-detail-strip">
-        <p class="business-detail-line">${joinNonEmpty([locationLabel ? escapeHtml(locationLabel) : null, postedLabel])}</p>
-      </div>
-      ${item.description ? `<div class="section-title"><h2>${t("marketplace.listingDetail.aboutListing")}</h2></div><p>${escapeHtml(item.description)}</p>` : ""}
-      <p class="settings-section-hint">${t("marketplace.listingDetail.limitedProfileNote")}</p>
-      <div class="business-profile-actions listing-detail-actions">
-        <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
       </div>
     </section>
   `;
@@ -7268,6 +7296,64 @@ function findListingRecordById(id) {
   const real = state.opportunityFeed.listings.find((listing) => String(listing.id) === String(id));
   if (real) return { item: real, isReal: true };
   return { item: null, isReal: false };
+}
+
+/** Maps fetchListingById()'s full raw record (listings row + real photos +
+ * owner's public profile) into the EXACT same shape shapeListingForDisplay
+ * produces for a mock/own listing — so renderListingDetailBody() (the one
+ * canonical template) renders either source identically. Every field
+ * traces to a real column; nothing genuinely unavailable is fabricated:
+ * sellerPhone stays null (private contact info is never queried here,
+ * same as shapeListingForDisplay's own convention for a fresh listing),
+ * sellerResponseTime stays null (no response-time tracking exists for any
+ * listing, real or mock), distance stays "" (no real coordinates flow
+ * into this record). */
+function shapeRemoteListingForDisplay(raw) {
+  const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === raw.category) || "buy-sell";
+  const metadata = raw.metadata || {};
+  const images = (raw.images || []).map((img) => img.publicUrl);
+  return {
+    id: raw.id,
+    sellerId: raw.owner_user_id,
+    type: uiCategory,
+    title: raw.title,
+    meta: raw.description || "",
+    description: raw.description || "",
+    area: raw.neighbourhood || raw.location_label || "",
+    price: formatListingPrice(raw.price_amount, raw.price_period, raw.price_currency),
+    condition: metadata.condition || null,
+    image: images[0] || "",
+    gallery: images,
+    seller: raw.owner?.display_name || "",
+    sellerAvatar: raw.owner?.avatar_url || "",
+    sellerPhone: null,
+    sellerResponseTime: null,
+    sellerReputation: raw.owner?.reputation_score ?? null,
+    pickupAvailable: Boolean(metadata.pickupAvailable),
+    deliveryAvailable: Boolean(metadata.deliveryAvailable),
+    offerorStatus: raw.offeror_status || "private",
+    verifiedSeller: raw.owner?.verification_status === "verified",
+    distance: "",
+    isRealRecord: true
+  };
+}
+
+/** Fire-and-forget full-record fetch for a real listing not in the local
+ * `listings` pool — same idle/loading/loaded/error state-machine
+ * convention as refreshOpportunityFeed/refreshCommunityFeed. "notFound" is
+ * a distinct terminal state from "error" (a genuinely missing/unpublished
+ * listing vs. a real query failure), so renderRemoteListingDetail() can
+ * show the right one instead of conflating them. */
+async function refreshRemoteListingDetail(id) {
+  state.remoteListingDetail = { status: "loading", id, item: null };
+  try {
+    const raw = await fetchListingById(id);
+    state.remoteListingDetail = { status: raw ? "loaded" : "notFound", id, item: raw ? shapeRemoteListingForDisplay(raw) : null };
+  } catch (error) {
+    console.warn("[remoteListingDetail] Failed to load real listing.", error);
+    state.remoteListingDetail = { status: "error", id, item: null };
+  }
+  if (state.activeView === "listingDetail" && String(state.selectedListingId) === String(id)) render();
 }
 
 /* -----------------------------------------------------------------------
@@ -8877,7 +8963,9 @@ function openGeneratedConversation({ type, participant, verified = false, previe
 }
 
 function startListingConversation(listingId) {
-  const item = listings.find((listing) => String(listing.id) === String(listingId));
+  const item =
+    listings.find((listing) => String(listing.id) === String(listingId)) ||
+    (String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null);
   if (!item) return;
   const title = listingTitle(item);
   openGeneratedConversation({
@@ -12265,6 +12353,11 @@ function bindEvents() {
   });
   document.querySelectorAll('[data-action="retry-opportunity-feed"]').forEach((button) => button.addEventListener("click", () => {
     refreshOpportunityFeed();
+  }));
+
+  document.querySelectorAll('[data-action="retry-listing-detail"]').forEach((button) => button.addEventListener("click", () => {
+    refreshRemoteListingDetail(state.selectedListingId);
+    render();
   }));
 
   document.querySelectorAll('[data-action="toggle-save"]').forEach((button) => {

@@ -2861,6 +2861,18 @@ body.has-open-sheet {
   box-shadow: var(--shadow-soft);
 }
 
+/* One intentional placeholder tile for a listing with genuinely no
+   photos — reuses .business-gallery-photo's exact sizing so the layout
+   never jumps between a photographed and unphotographed listing. */
+.business-gallery-photo.listing-gallery-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 2rem;
+}
+
 /* Category, address, and phone were already on every business record
    but never actually shown anywhere on the profile — address/phone only
    existed as hidden hrefs behind the Directions/Call buttons. Surfacing

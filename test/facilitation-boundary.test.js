@@ -70,8 +70,14 @@ test("the out-of-scope Hotels/Food & Drink reservations flow (common.bookNow, re
 });
 
 test("Marketplace listing detail/card (Rentals, Property included) offer contact actions only — no booking or price-setting language", async () => {
+  // renderListingDetail() (the router) was split from renderListingDetailBody()
+  // (the actual canonical template with the contact actions) so a real
+  // listing reached from anywhere — Marketplace's own cards, the Home
+  // Feed, a direct link — renders through the exact same body instead of
+  // a separate reduced view. The contact-actions assertion below now
+  // targets that body function.
   const main = await readRepoFile("src/main.js");
-  const listingDetailFn = main.slice(main.indexOf("function renderListingDetail()"));
+  const listingDetailFn = main.slice(main.indexOf("function renderListingDetailBody("));
   const listingDetailBody = listingDetailFn.slice(0, listingDetailFn.indexOf("\nfunction "));
   assert.doesNotMatch(listingDetailBody, /confirmBooking|bookNow|data-role="confirm-booking"/i);
   assert.match(listingDetailBody, /common\.message|common\.call|common\.favourite|common\.share/);

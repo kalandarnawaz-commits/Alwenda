@@ -1035,6 +1035,39 @@ export async function fetchPublicListings({ dbCategories = null, limit = PUBLIC_
   return data || [];
 }
 
+/** The full canonical listing record by id — every public-safe column
+ * (unlike fetchPublicListings' lightweight card columns above), its real
+ * photos, and the owner's public profile, so main.js's ONE listing-detail
+ * template (renderListingDetailBody) can render a listing reached from
+ * anywhere (Marketplace's own cards, the Home Feed, a direct link)
+ * identically. Published-only: a signed-in owner's own listings are
+ * already available synchronously from the local client-side `listings`
+ * cache (see refreshMyListings/applyCreatedListing in main.js), so this
+ * path only ever needs to reach OTHER users' published listings. Never
+ * selects owner-private contact fields (phone/email live in
+ * private_profiles, never queried here) — offeror_status is genuinely
+ * public (it's what the canonical template's trader-vs-private badge and
+ * disclosure block already key off). Two more queries after the row
+ * itself, same two-step pattern as fetchCommunityPosts above: real
+ * photos via fetchListingImages, owner identity via fetchProfilesByIds —
+ * neither is a join, for the same live-verified schema-cache reason. */
+export async function fetchListingById(id) {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("listings")
+    .select(
+      "id, owner_user_id, title, description, category, status, price_amount, price_currency, price_period, location_label, neighbourhood, tags, metadata, offeror_status, published_at, created_at"
+    )
+    .eq("id", id)
+    .eq("status", "published")
+    .maybeSingle();
+  if (error) throwIfError(error, "fetchListingById");
+  if (!data) return null;
+  const [images, profiles] = await Promise.all([fetchListingImages(data.id), fetchProfilesByIds([data.owner_user_id])]);
+  return { ...data, images, owner: profiles[0] || null };
+}
+
 /** Public "what's live right now" feed over Community posts — real,
  * published posts from any author (RLS: "Published community posts are
  * readable", 202607150001_production_foundation.sql — `status =
@@ -1135,13 +1168,16 @@ export async function fetchFollowCounts(userId) {
  * without a live database in this environment (confirmed live for
  * fetchCommunityPosts above: community_posts and public_profiles have no
  * direct FK PostgREST can auto-detect, only independent FKs to
- * auth.users). verification_status is included so callers like
- * fetchCommunityPosts can show a real verified badge without a second
- * round-trip. */
+ * auth.users). verification_status/reputation_score are included so
+ * callers like fetchCommunityPosts/fetchListingById can show a real
+ * verified badge and reputation without a second round-trip. */
 async function fetchProfilesByIds(userIds) {
   if (!userIds.length) return [];
   const supabase = await getClient();
-  const { data, error } = await supabase.from("public_profiles").select("user_id, display_name, avatar_url, handle, verification_status").in("user_id", userIds);
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .select("user_id, display_name, avatar_url, handle, verification_status, reputation_score")
+    .in("user_id", userIds);
   if (error) throwIfError(error, "fetchProfilesByIds");
   return data || [];
 }
