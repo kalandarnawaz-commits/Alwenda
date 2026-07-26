@@ -21,6 +21,7 @@ const evidence = await readIfExists("supabase/migrations/202607180002_business_c
 const edgeFunction = await readIfExists("supabase/functions/alwen-chat/index.ts");
 const envExample = await readIfExists("env.example.js");
 const profileIdentity = await readIfExists("supabase/migrations/202607240001_profile_social_identity.sql");
+const computeTrustScoreHotfix = await readIfExists("supabase/migrations/202607250002_restrict_compute_trust_score.sql");
 
 const checks = [
   {
@@ -112,6 +113,22 @@ const checks = [
         refreshGrantIdx !== -1
       );
     }
+  },
+  {
+    // The check above only proves the migration's own text revokes from
+    // PUBLIC — that alone was proven insufficient live: this repo's
+    // default-privileges migration (202607180005) grants EXECUTE on every
+    // function created afterward directly to anon/authenticated/
+    // service_role, a standing rule that a PUBLIC-only revoke does not
+    // touch. This check requires the explicit hotfix migration's
+    // per-role revokes to exist, so the actual closed gap can't quietly
+    // reopen if a future edit only restores the (insufficient) PUBLIC
+    // revoke pattern.
+    name: "compute_trust_score's EXECUTE grant is explicitly revoked from anon and authenticated by name (not just PUBLIC) — closes the default-privileges override",
+    source: computeTrustScoreHotfix,
+    ok: (computeTrustScoreHotfix) =>
+      /revoke execute on function public\.compute_trust_score\(uuid\) from anon;/.test(computeTrustScoreHotfix) &&
+      /revoke execute on function public\.compute_trust_score\(uuid\) from authenticated;/.test(computeTrustScoreHotfix)
   },
   {
     name: "both trust-score SECURITY DEFINER functions pin an explicit, safe search_path",
