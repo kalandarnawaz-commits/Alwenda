@@ -55,7 +55,17 @@ export const ANALYTICS_EVENTS = Object.freeze({
   ALWEN_TRANSLATION_COMPLETED: "alwen_translation_completed",
   ALWEN_STRUCTURED_RESULT_OPENED: "alwen_structured_result_opened",
   ALWEN_CONTEXTUAL_ACTION_SELECTED: "alwen_contextual_action_selected",
-  ALWEN_FAILURE_SHOWN: "alwen_failure_shown"
+  ALWEN_FAILURE_SHOWN: "alwen_failure_shown",
+  // Category architecture (CATEGORY_CONFIG) — categoryId is always the
+  // canonical taxonomy id, never a translated label or a legacy free-text
+  // category string.
+  CATEGORY_HUB_VIEWED: "category_hub_viewed",
+  CATEGORY_SELECTED: "category_selected",
+  OPPORTUNITY_FILTER_APPLIED: "opportunity_filter_applied",
+  OPPORTUNITY_EMPTY_STATE_VIEWED: "opportunity_empty_state_viewed",
+  CATEGORY_POST_STARTED: "category_post_started",
+  CATEGORY_POST_SUBMITTED: "category_post_submitted",
+  CATEGORY_CLASSIFIED_BY_ALWEN: "category_classified_by_alwen"
 });
 
 const SCHEMA = {
@@ -95,7 +105,14 @@ const SCHEMA = {
   [ANALYTICS_EVENTS.ALWEN_TRANSLATION_COMPLETED]: { fromLanguage: "string", toLanguage: "string" },
   [ANALYTICS_EVENTS.ALWEN_STRUCTURED_RESULT_OPENED]: { resultType: "string", resultCount: "number" },
   [ANALYTICS_EVENTS.ALWEN_CONTEXTUAL_ACTION_SELECTED]: { actionType: "string", resultType: "string?" },
-  [ANALYTICS_EVENTS.ALWEN_FAILURE_SHOWN]: { errorCategory: "string" }
+  [ANALYTICS_EVENTS.ALWEN_FAILURE_SHOWN]: { errorCategory: "string" },
+  [ANALYTICS_EVENTS.CATEGORY_HUB_VIEWED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.CATEGORY_SELECTED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.OPPORTUNITY_FILTER_APPLIED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.OPPORTUNITY_EMPTY_STATE_VIEWED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.CATEGORY_POST_STARTED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.CATEGORY_POST_SUBMITTED]: { categoryId: "string", surface: "string" },
+  [ANALYTICS_EVENTS.CATEGORY_CLASSIFIED_BY_ALWEN]: { categoryId: "string", surface: "string" }
 };
 
 export class AnalyticsSchemaError extends Error {

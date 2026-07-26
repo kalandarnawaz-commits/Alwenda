@@ -398,6 +398,27 @@
       "profDelivery": "delivery",
       "profItSupport": "IT support",
       "profComputerRepair": "computer repair"
+    },
+    "life": {
+      "delivery": "Delivery",
+      "transport": "Transport",
+      "petCare": "Pet Care",
+      "teaching": "Teaching",
+      "shopping": "Shopping",
+      "technology": "Technology",
+      "cleaning": "Cleaning",
+      "homeRepairs": "Home Repairs",
+      "gardening": "Gardening",
+      "fitness": "Fitness",
+      "food": "Food",
+      "creative": "Creative",
+      "business": "Business Help",
+      "childcare": "Childcare",
+      "elderCare": "Elder Care",
+      "events": "Events",
+      "legal": "Legal",
+      "medical": "Medical",
+      "other": "Other"
     }
   },
   "auth": {
@@ -1078,7 +1099,8 @@
     "suggestionIncompleteProfile": "Because your profile isn't complete yet",
     "suggestionIncompleteProfileDetail": "A complete profile helps professionals trust you faster.",
     "suggestionCompleteCta": "Complete profile",
-    "suggestionViewCta": "View"
+    "suggestionViewCta": "View",
+    "categoryStartersLabel": "Or start with a category"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Done-for-you workflows",
@@ -2424,7 +2446,27 @@
         "tag2": "2 hours",
         "action": "Accept"
       }
-    }
+    },
+    "loadError": "Couldn't load live opportunities right now.",
+    "demoDataLabel": "Demo data",
+    "clearFilter": "Clear filter",
+    "activeCount": "{count} active",
+    "noActiveYet": "No active opportunities yet.",
+    "beFirstToPost": "Be the first to post in this category.",
+    "openRequestsCount": "{count} open requests",
+    "noActiveRequests": "No active requests",
+    "offerYourHelp": "Offer your help",
+    "requestOfferSplit": "{requests} requests · {offers} offers",
+    "nothingLiveYet": "Nothing live yet",
+    "exploreOrPost": "Explore categories or post something",
+    "latestPrefix": "Latest: {title}",
+    "urgentCount": "{count} urgent",
+    "viewOpportunities": "View opportunities",
+    "helpAndEarn": "Help & earn",
+    "seeOpenRequests": "See open requests",
+    "liveActivityHeading": "What's happening nearby",
+    "liveActivityHint": "Real activity from people and businesses nearby.",
+    "browseByCategory": "Browse by category"
   },
   "events": {
     "items": {
@@ -2633,5 +2675,89 @@
     "handleTaken": "That username is already taken.",
     "handleSaveError": "Your profile saved, but the username couldn't be updated. Try again.",
     "accountAction": "Account & settings"
+  },
+  "categoryConfig": {
+    "delivery": {
+      "titlePlaceholder": "Deliver a package across town",
+      "aiPrompt": "I can deliver packages nearby.",
+      "starterPrompt": "I need help with a delivery"
+    },
+    "transport": {
+      "titlePlaceholder": "Give someone a ride or pickup",
+      "aiPrompt": "I can drive you or pick something up.",
+      "starterPrompt": "I need a ride or pickup"
+    },
+    "petCare": {
+      "titlePlaceholder": "Walk or look after a pet",
+      "aiPrompt": "I can walk or look after your pet.",
+      "starterPrompt": "I need help with my pet"
+    },
+    "teaching": {
+      "aiPrompt": "I can teach English.",
+      "starterPrompt": "I'm looking for a tutor"
+    },
+    "shopping": {
+      "titlePlaceholder": "Pick up groceries or run an errand",
+      "aiPrompt": "I can pick up groceries or run an errand.",
+      "starterPrompt": "I need help with shopping"
+    },
+    "technology": {
+      "titlePlaceholder": "Fix a computer or set up wifi",
+      "aiPrompt": "I can help with computers or wifi.",
+      "starterPrompt": "I need tech help"
+    },
+    "cleaning": {
+      "titlePlaceholder": "Clean an apartment or office",
+      "aiPrompt": "I can clean your apartment or office."
+    },
+    "homeRepairs": {
+      "titlePlaceholder": "Assemble furniture or fix something",
+      "aiPrompt": "I can assemble IKEA furniture or fix things around the house.",
+      "starterPrompt": "I need something repaired"
+    },
+    "gardening": {
+      "titlePlaceholder": "Tidy a garden or lawn",
+      "aiPrompt": "I can help with gardening or lawn care."
+    },
+    "fitness": {
+      "titlePlaceholder": "Offer personal training or a workout plan",
+      "aiPrompt": "I can offer personal training sessions."
+    },
+    "food": {
+      "titlePlaceholder": "Cook a meal or cater an event",
+      "aiPrompt": "I can cook a meal or cater a small event."
+    },
+    "creative": {
+      "titlePlaceholder": "Offer photography or design work",
+      "aiPrompt": "I can photograph your event or help with design."
+    },
+    "business": {
+      "titlePlaceholder": "Offer accounting or business support",
+      "aiPrompt": "I can help with bookkeeping or business support."
+    },
+    "childcare": {
+      "titlePlaceholder": "Babysit or look after children",
+      "aiPrompt": "I can babysit or look after your children."
+    },
+    "elderCare": {
+      "titlePlaceholder": "Offer companionship or care for an elderly person",
+      "aiPrompt": "I can help care for or keep company with an elderly person."
+    },
+    "events": {
+      "titlePlaceholder": "Help organise or work an event",
+      "aiPrompt": "I can help organise or work at your event."
+    },
+    "legal": {
+      "titlePlaceholder": "Offer legal advice or document help",
+      "aiPrompt": "I can help with legal advice or documents."
+    },
+    "medical": {
+      "titlePlaceholder": "Offer health-related help nearby",
+      "aiPrompt": "I need help finding a pharmacy or clinic."
+    },
+    "other": {
+      "titlePlaceholder": "Describe what you need or can offer",
+      "aiPrompt": "I can help with something else."
+    }
   }
 }

@@ -21,23 +21,33 @@ function extractFunction(source, name) {
   throw new Error(`Could not find end of function ${name}`);
 }
 
-test("home live cards route to matching live opportunity detail records", () => {
-  const homeRail = extractFunction(main, "renderLiveAroundYou");
-  assert.match(main, /const HOME_LIVE_OPPORTUNITY_IDS = \["airport-pickup", "babysitter", "photo-event", "language-help"\]/);
-  assert.match(homeRail, /opportunityForHomeLiveItem\(item\)/);
-  assert.match(homeRail, /<a class="live-card" href="\$\{liveOpportunityHref\(opportunity\.id\)\}"/);
-  assert.match(homeRail, /data-view="liveOpportunityDetail"/);
-  assert.match(homeRail, /data-opportunity-id="\$\{opportunity\.id\}"/);
-  assert.match(homeRail, /aria-label="\$\{escapeHtml/);
+// Category architecture sprint (see test/category-architecture.test.js):
+// renderLiveAroundYou/renderEarnToday were rewritten from hand-picked
+// mock-item rails into CATEGORY_CONFIG-driven category hub grids. The
+// underlying id-based routing infrastructure asserted below
+// (HOME_LIVE_OPPORTUNITY_IDS/HOME_EARN_OPPORTUNITY_IDS, findOpportunityById,
+// openLiveOpportunityDetail, the bindEvents click delegation) deliberately
+// stays in the file — it now backs the fixture-fallback path
+// (fixtureOpportunitiesForSurface) instead of the home rails directly, per
+// the "no premature deletion" rule for this branch.
+test("home rails are category hubs, not individual mock cards", () => {
+  const liveRail = extractFunction(main, "renderLiveAroundYou");
+  const earnRail = extractFunction(main, "renderEarnToday");
+  assert.match(liveRail, /categoryHubIdsSortedByCount\("live"\)/);
+  assert.match(liveRail, /renderCategoryHubGrid\(categoryIds, "live"\)/);
+  assert.match(earnRail, /categoryHubIdsSortedByCount\("earn"\)/);
+  assert.match(earnRail, /renderCategoryHubGrid\(categoryIds, "earn"\)/);
+  // Neither rail renders individual opportunity cards directly anymore.
+  assert.doesNotMatch(liveRail, /<a class="live-card"/);
+  assert.doesNotMatch(earnRail, /<a class="earn-card"/);
 });
 
-test("earn today cards route to their exact task detail records", () => {
-  const earnRail = extractFunction(main, "renderEarnToday");
+test("HOME_LIVE_OPPORTUNITY_IDS/HOME_EARN_OPPORTUNITY_IDS still back the fixture-fallback split", () => {
+  assert.match(main, /const HOME_LIVE_OPPORTUNITY_IDS = \["airport-pickup", "babysitter", "photo-event", "language-help"\]/);
   assert.match(main, /const HOME_EARN_OPPORTUNITY_IDS = \["deliver-package", "help-move-sofa", "translate-document", "dog-walk", "teach-english", "furniture"\]/);
-  assert.match(earnRail, /opportunityForHomeEarnItem\(item\)/);
-  assert.match(earnRail, /<a class="earn-card" href="\$\{liveOpportunityHref\(opportunity\.id\)\}"/);
-  assert.match(earnRail, /data-view="liveOpportunityDetail"/);
-  assert.match(earnRail, /data-opportunity-id="\$\{opportunity\.id\}"/);
+  const fixtureSplit = extractFunction(main, "fixtureOpportunitiesForSurface");
+  assert.match(fixtureSplit, /HOME_EARN_OPPORTUNITY_IDS/);
+  assert.match(fixtureSplit, /HOME_LIVE_OPPORTUNITY_IDS/);
   assert.match(main, /id: "deliver-package", title: "Deliver package"/);
   assert.match(main, /id: "help-move-sofa", title: "Help move sofa"/);
   assert.match(main, /id: "translate-document", title: "Translate document"/);

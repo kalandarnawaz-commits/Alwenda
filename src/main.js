@@ -83,6 +83,8 @@ import {
   fetchListingsByOwner,
   createHelpRequest,
   fetchMyHelpRequests,
+  fetchOpenHelpRequests,
+  fetchPublicListings,
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
@@ -111,7 +113,14 @@ import {
   blockUser,
   unblockUser,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=profile-identity-1";
+} from "./services/auth/supabaseClient.js?v=category-taxonomy-1";
+import {
+  orderedCategoryIds,
+  orderedStarterCategoryIds,
+  categoryConfigFor,
+  classifyTextToCategory,
+  normalizeOpportunityCategory
+} from "./data/categoryConfig.js?v=category-taxonomy-2";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { ALWEN_INTENTS, classifyAlwenIntent, wantsOpenNowOnly } from "./services/alwen/intentRouter.js?v=alwen-2-0-1";
 import {
@@ -186,9 +195,25 @@ const state = {
   cookieSettingsOpen: false,
   reportTarget: null,
   reportNotice: null,
-  opportunityFilter: "nearby",
-  opportunityCategory: "all",
-  opportunityDistance: "all",
+  /* Sort/highlight chips on the liveOpportunities browse screen (nearby /
+     today / highest / urgent / verified) — a different concept from the
+     structured opportunityFilter object below, so it keeps its own field
+     rather than colliding with it. */
+  opportunitySort: "nearby",
+  /* categoryId: a CATEGORY_CONFIG id or "all". surface: "earn" | "live" —
+     which home-rail/hub this filter view was entered from, since Earn
+     Today and Live Around You query different real data (see Part 4).
+     status/intent are reserved for future narrowing, not yet read by any
+     filter predicate. distance folds in the browse screen's old standalone
+     distance select. Round-tripped to the URL by syncUrlToState/the
+     popstate hydrator so back/forward restores it (see Part 5). */
+  opportunityFilter: { categoryId: "all", surface: "earn", intent: "all", status: "active", distance: "all" },
+  /* Real Supabase data backing Earn Today / Live Around You / the
+     category-detail screen. status: "idle" | "loading" | "loaded" | "error"
+     — deliberately distinct from "loaded with zero records", so the UI
+     never renders a false empty state while still loading or after a
+     genuine query failure (see refreshOpportunityFeed()). */
+  opportunityFeed: { status: "idle", helpRequests: [], listings: [], loadedAt: null },
   headerSolid: false,
   quickTranslateOpen: false,
   localWeather: null,
@@ -273,7 +298,7 @@ const state = {
   // see LISTING_INTENT_COPY and the [data-view] click handler in
   // bindEvents(), which is the only place this is ever written.
   tytIntent: null,
-  helpRequestDraft: { text: "", urgency: "flexible" },
+  helpRequestDraft: { text: "", urgency: "flexible", categoryId: null },
   helpRequestPosted: null,
   helpRequestError: null,
   helpRequestSubmitStatus: "idle",
@@ -283,6 +308,7 @@ const state = {
     title: "",
     description: "",
     category: "buy-sell",
+    categoryId: null,
     priceAmount: "",
     pricePeriod: "one_time",
     neighbourhood: "",
@@ -1186,6 +1212,7 @@ function syncStateFromUrl() {
   const view = legalPathViews[window.location.pathname] || (profilePathMatch ? "userProfile" : null) || searchParams.get("view");
   if (!view || !(DEEP_LINK_VIEWS.has(view) || INTERNAL_URL_VIEWS.has(view))) return;
   state.activeView = view;
+  syncOpportunityFilterFromUrl(searchParams);
   // A direct/refreshed/back-forward load of ?view=profile for a signed-in
   // user resolves to their own social profile, same as clicking the header
   // avatar (see the [data-view] click handler) — "profile" only ever
@@ -1208,20 +1235,53 @@ function syncStateFromUrl() {
   else if (view === "eventDetail") state.selectedEventId = id;
 }
 
+/** liveOpportunities has no single ?id= (it's a filtered list, not a
+ * single-item detail) so its round-trip lives outside the id-based
+ * dispatch above — category/surface/intent/status are read back into
+ * opportunityFilter whenever the URL names this view, restoring the
+ * selected category on refresh and on browser Back/Forward (Part 5). */
+function syncOpportunityFilterFromUrl(searchParams) {
+  if (searchParams.get("view") !== "liveOpportunities") return;
+  const categoryId = searchParams.get("category");
+  const surface = searchParams.get("surface");
+  const intent = searchParams.get("intent");
+  const status = searchParams.get("status");
+  const categoryIsValid = categoryId === "all" || (categoryId && orderedCategoryIds().includes(categoryId));
+  state.opportunityFilter = {
+    categoryId: categoryIsValid ? categoryId : state.opportunityFilter.categoryId,
+    surface: surface === "earn" || surface === "live" ? surface : state.opportunityFilter.surface,
+    intent: intent || state.opportunityFilter.intent,
+    status: status || state.opportunityFilter.status,
+    distance: state.opportunityFilter.distance
+  };
+}
+
 /** Keeps the address bar in sync with in-app navigation so browser Back/
  * Forward and page refresh both work, and item-level views (a listing, a
  * profile, a claim) are shareable. Called once at the end of every
  * render() — comparing against the last-pushed key means it's a no-op on
  * renders that don't actually change the "page" (typing in search, etc). */
+/** liveOpportunities has no single id, but a category-filter change is
+ * still a real "page" for Back/Forward purposes (Part 5) — folded into the
+ * dedup key so switching category while already on this view still pushes
+ * a new history entry instead of being treated as a no-op. Shared by both
+ * branches of syncUrlToState() below so a popstate-triggered render and a
+ * normal render always compute the same key for the same state. */
+function urlSyncKey() {
+  const id = currentDeepLinkId();
+  const opportunityFilterKey = state.activeView === "liveOpportunities" ? `:${state.opportunityFilter.categoryId}:${state.opportunityFilter.surface}` : "";
+  return `${state.activeView}:${id || ""}${opportunityFilterKey}`;
+}
+
 function syncUrlToState() {
   if (suppressNextUrlPush) {
     suppressNextUrlPush = false;
-    lastPushedUrlKey = `${state.activeView}:${currentDeepLinkId() || ""}`;
+    lastPushedUrlKey = urlSyncKey();
     return;
   }
   if (!DEEP_LINK_VIEWS.has(state.activeView)) return;
   const id = currentDeepLinkId();
-  const key = `${state.activeView}:${id || ""}`;
+  const key = urlSyncKey();
   if (key === lastPushedUrlKey) return;
   lastPushedUrlKey = key;
   const legalViewPaths = { legalTerms: "/terms", legalPrivacy: "/privacy", legalCookies: "/cookies", legalSafety: "/safety" };
@@ -1236,6 +1296,13 @@ function syncUrlToState() {
   const params = new URLSearchParams();
   params.set("view", state.activeView);
   if (id) params.set("id", id);
+  if (state.activeView === "liveOpportunities") {
+    const filter = state.opportunityFilter;
+    if (filter.categoryId !== "all") params.set("category", filter.categoryId);
+    params.set("surface", filter.surface);
+    if (filter.intent !== "all") params.set("intent", filter.intent);
+    if (filter.status !== "active") params.set("status", filter.status);
+  }
   history.pushState({ view: state.activeView, id }, "", `${window.location.pathname}?${params.toString()}`);
 }
 
@@ -3725,6 +3792,19 @@ function alwenMessageId() {
  * state.* and take no args, so the search state is saved and restored
  * around the call — an Alwen search must never permanently change what
  * the user sees when they later open Explore/Hire themselves. */
+/** Additional deterministic signal on top of the free-text query match
+ * below (Part 8) — narrows Explore's own CITY_ENTITY_CATEGORIES taxonomy
+ * via CATEGORY_CONFIG's cityEntityCategory mapping when the query
+ * confidently classifies to a life category that has one. Categories with
+ * no sensible Explore mapping (cityEntityCategory: null) leave the search
+ * unnarrowed, exactly as before — this never makes a search worse, only
+ * sometimes more targeted. */
+function exploreCategoryForQuery(rawQuery) {
+  const categoryId = classifyTextToCategory(rawQuery);
+  if (!categoryId) return "All";
+  return categoryConfigFor(categoryId).cityEntityCategory || "All";
+}
+
 function searchAlwenPlaces(rawQuery) {
   const previousQuery = state.query;
   const previousArea = state.area;
@@ -3737,7 +3817,7 @@ function searchAlwenPlaces(rawQuery) {
   const previousSort = state.exploreSort;
   try {
     state.query = rawQuery;
-    state.exploreCategory = "All";
+    state.exploreCategory = exploreCategoryForQuery(rawQuery);
     state.exploreCuisine = "All";
     state.exploreStars = "All";
     state.exploreOpenNowOnly = wantsOpenNowOnly(rawQuery);
@@ -3758,13 +3838,24 @@ function searchAlwenPlaces(rawQuery) {
   }
 }
 
+/** Same narrowing idea as exploreCategoryForQuery, mapped into Hire's
+ * professionalCategories values via CATEGORY_CONFIG.hireCategoryValues
+ * instead. Only the first mapped value is used — hireCategoryMatches/
+ * filteredProfessionals take one category at a time, and free-text
+ * state.query still does the actual matching regardless. */
+function hireCategoryForQuery(rawQuery) {
+  const categoryId = classifyTextToCategory(rawQuery);
+  if (!categoryId) return null;
+  return categoryConfigFor(categoryId).hireCategoryValues[0] || null;
+}
+
 function searchAlwenProfessionals(rawQuery) {
   const previousQuery = state.query;
   const previousArea = state.area;
   const previousCategory = state.hireCategory;
   try {
     state.query = rawQuery;
-    state.hireCategory = null;
+    state.hireCategory = hireCategoryForQuery(rawQuery);
     return filteredProfessionals().slice(0, 5);
   } finally {
     state.query = previousQuery;
@@ -3785,6 +3876,33 @@ function alwenLanguageLabel(code) {
  * placeholder for something unbuilt. */
 const ALWEN_CONVERSATION_EXAMPLES = ["alwen.examplePlace", "alwen.exampleHire", "alwen.exampleTranslate", "alwen.exampleLiveTranslate"];
 
+/** Round 2, Part 5 — proactive category starters shown before the user
+ * types anything. Deliberately a small, curated row (orderedStarterCategoryIds,
+ * 7 categories), not the full CATEGORY_CONFIG grid — "conversation
+ * starters, not another full category browser". Reuses the existing
+ * ALWEN_CONVERSATION_EXAMPLES click convention (submitAlwenConversationMessage
+ * immediately, same as the 4 capability examples above) rather than a new
+ * pattern. Naturally collapses once the conversation begins:
+ * renderAlwenConversationEmptyState() (and everything in it) only ever
+ * renders when convo.messages.length === 0 — see its one call site. */
+function renderAlwenCategoryStarterRow() {
+  const ids = orderedStarterCategoryIds();
+  return `
+    <div class="alwen-category-starters">
+      <p class="alwen-category-starters-label">${t("alwen.categoryStartersLabel")}</p>
+      <div class="alwen-category-starter-row" role="list">
+        ${ids.map((id) => {
+          const config = categoryConfigFor(id);
+          return `<button type="button" class="alwen-category-starter" data-alwen-category-starter="${id}" aria-label="${escapeHtml(t(config.labelKey))}">
+            <span aria-hidden="true">${config.icon}</span>
+            <span>${escapeHtml(t(config.labelKey))}</span>
+          </button>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderAlwenConversationEmptyState() {
   return `
     <div class="alwen-conversation-empty">
@@ -3794,6 +3912,7 @@ function renderAlwenConversationEmptyState() {
       <div class="alwen-example-row">
         ${ALWEN_CONVERSATION_EXAMPLES.map((key) => `<button type="button" data-alwen-example-prompt="${key}">${t(key)}</button>`).join("")}
       </div>
+      ${renderAlwenCategoryStarterRow()}
     </div>
   `;
 }
@@ -4182,6 +4301,8 @@ async function submitAlwenStructuredSearchTurn(trimmed, intent) {
     }
     convo.status = "idle";
     trackEvent("alwen_structured_result_opened", { resultType, resultCount: results.length });
+    const classifiedCategoryId = classifyTextToCategory(trimmed);
+    if (classifiedCategoryId) trackEvent("category_classified_by_alwen", { categoryId: classifiedCategoryId, surface: "alwen" });
     persistAlwenStructuredSearchTurn(convo, trimmed, resultType, results, target?.text || "");
   } catch {
     const target = convo.messages.find((item) => item.id === pendingId);
@@ -4735,29 +4856,44 @@ function renderLivingSection(titleKey, hintKey, view, body, seeAllCategory = nul
   `;
 }
 
+/** Category hub, not individual mock request cards (Part 4). Live Around
+ * You is the broader "what's happening nearby" pulse — real help_requests
+ * AND published listings together (surface "live", see
+ * realOpportunityRecordsForSurface) — deliberately different data from
+ * Earn Today below, not two views over the same pool. Lazily kicks off
+ * refreshOpportunityFeed() on first render; the idle-status guard keeps
+ * repeated renders from re-triggering it. */
+/** Shown above a home rail's category grid — demo-data label when
+ * fixtures are active, or a retry affordance when the real feed genuinely
+ * failed to load (never silently shown as "0 active" everywhere, which
+ * would look like real empty data rather than a failed request). Empty
+ * string when the feed is loading or genuinely loaded-empty-on-production
+ * — those cases are already honestly represented by each card's own "0
+ * active" count, no extra banner needed. */
+function renderOpportunityFeedStatusNote(usingFixtures) {
+  if (usingFixtures) return `<p class="category-hub-demo-note">${t("opportunities.demoDataLabel")}</p>`;
+  if (state.opportunityFeed.status === "error") {
+    return `<p class="category-hub-demo-note">${t("opportunities.loadError")} <button type="button" class="auth-link" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button></p>`;
+  }
+  return "";
+}
+
+/** Round 2: Live Around You leads with a compact recent-activity feed
+ * (real records, most-recent-first, across every category) before the
+ * category grid — so this reads as a live city activity surface, not a
+ * second copy of Earn Today's category menu. The grid itself stays (Part
+ * 4 explicitly keeps category grouping), just demoted to "browse by
+ * category" underneath the activity feed. */
 function renderLiveAroundYou() {
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+  const usingFixtures = shouldUseFixtureOpportunities();
+  const categoryIds = categoryHubIdsSortedByCount("live");
+  const activityFeed = renderRecentActivityFeed();
   return renderLivingSection(
     "home.rail.liveAroundYou",
     "home.rail.liveAroundYouHint",
     "liveOpportunities",
-    renderCarousel(
-      "liveAroundYou",
-      "living-rail live-rail",
-      liveAroundYou.map((item) => {
-        const opportunity = opportunityForHomeLiveItem(item);
-        return `
-        <a class="live-card" href="${liveOpportunityHref(opportunity.id)}" aria-label="${escapeHtml(`${t(item.titleKey)} ${item.value}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${opportunity.id}">
-          <div class="card-photo" style="background-image: url('${item.image}')"></div>
-          <span class="floating-card-actions" aria-hidden="true"><span class="card-favourite-dot">${icon("heart")}</span></span>
-          <span class="live-status-pill">${t("status.live")}</span>
-          <h3>${t(item.titleKey)}</h3>
-          <strong>${item.value}</strong>
-          <p>${item.area} · ${t(item.urgencyKey)}</p>
-          <small>${t(item.signalKey)}</small>
-        </a>
-      `;
-      }).join("")
-    )
+    `${renderOpportunityFeedStatusNote(usingFixtures)}${activityFeed}${activityFeed ? `<p class="live-activity-browse-label">${t("opportunities.browseByCategory")}</p>` : ""}${renderCategoryHubGrid(categoryIds, "live")}`
   );
 }
 
@@ -4775,31 +4911,19 @@ function renderTrendingMarketplace() {
   );
 }
 
+/** Category hub, not individual mock job cards (Part 4). Earn Today is the
+ * narrower, earn-focused surface — real help_requests only ("someone needs
+ * X, come earn by doing it"), surface "earn". See renderLiveAroundYou
+ * above for the deliberately different "live" surface. */
 function renderEarnToday() {
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+  const usingFixtures = shouldUseFixtureOpportunities();
+  const categoryIds = categoryHubIdsSortedByCount("earn");
   return renderLivingSection(
     "home.rail.earnToday",
     "home.rail.earnTodayHint",
     "liveOpportunities",
-    renderCarousel(
-      "earnToday",
-      "living-rail earn-rail",
-      earnToday.map((item) => {
-        const opportunity = opportunityForHomeEarnItem(item);
-        return `
-        <a class="earn-card" href="${liveOpportunityHref(opportunity.id)}" aria-label="${escapeHtml(`${t(item.titleKey)} ${item.value}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${opportunity.id}">
-          <div class="earn-image" style="background-image: url('${item.image}')"></div>
-          <div class="earn-body">
-            <span>${item.time}</span>
-            <h3>${t(item.titleKey)}</h3>
-            <strong>${item.value}</strong>
-            <p>${item.area} · ${t(item.fitKey)}</p>
-          </div>
-        </a>
-      `;
-      }).join("")
-    ),
-    null,
-    "today"
+    `${renderOpportunityFeedStatusNote(usingFixtures)}${renderCategoryHubGrid(categoryIds, "earn")}`
   );
 }
 
@@ -6556,9 +6680,21 @@ function renderCreateListingForm() {
   const draft = state.listingDraft;
   const isLoading = state.listingSubmitStatus === "loading";
   const intentCopy = LISTING_INTENT_COPY[state.tytIntent] || null;
+  // Falls back to CATEGORY_CONFIG's posting defaults (Part 7) when arriving
+  // from a category-hub tap rather than a TYT tile — LISTING_INTENT_COPY
+  // itself is untouched, still the source of truth for TYT's 4 intents.
+  const categoryPosting = !intentCopy && draft.categoryId ? categoryConfigFor(draft.categoryId).posting : null;
   const heroTitle = intentCopy?.heroTitleKey ? t(intentCopy.heroTitleKey) : t("createListing.createListingTitle");
-  const titlePlaceholder = intentCopy?.titlePlaceholderKey ? t(intentCopy.titlePlaceholderKey) : t("createListing.titlePlaceholder");
-  const descriptionPlaceholder = intentCopy?.descriptionPlaceholderKey ? t(intentCopy.descriptionPlaceholderKey) : t("createListing.descriptionPlaceholder");
+  const titlePlaceholder = intentCopy?.titlePlaceholderKey
+    ? t(intentCopy.titlePlaceholderKey)
+    : categoryPosting?.titlePlaceholderKey
+      ? t(categoryPosting.titlePlaceholderKey)
+      : t("createListing.titlePlaceholder");
+  const descriptionPlaceholder = intentCopy?.descriptionPlaceholderKey
+    ? t(intentCopy.descriptionPlaceholderKey)
+    : categoryPosting?.aiPromptKey
+      ? t(categoryPosting.aiPromptKey)
+      : t("createListing.descriptionPlaceholder");
   if (state.auth.status !== "signedIn") {
     return `
       <section class="section-shell create-listing-shell">
@@ -7068,17 +7204,284 @@ const LIVE_OPPORTUNITIES = [
   { id: "moving-boxes", title: "Help moving boxes", category: "Moving", price: 75, priceLabel: "€75", distance: 3.6, time: "Today · 15:00", requester: "Verified homeowner", trust: 4.9, urgent: true, today: true, description: "Move packed boxes from a second-floor flat into a waiting van.", tags: ["Physical task", "2 hours"], action: "Accept", image: "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1200&q=82" }
 ];
 
+/** Final-cleanup note (category architecture sprint): these two id lists
+ * used to pair 1:1 with the liveAroundYou/earnToday mock arrays to look up
+ * each home-rail card's matching LIVE_OPPORTUNITIES detail record
+ * (opportunityForHomeLiveItem/opportunityForHomeEarnItem, both removed —
+ * the home rails are category hub grids now, not individual cards). The
+ * id lists themselves stay: fixtureOpportunitiesForSurface() reuses them
+ * to keep Earn Today/Live Around You's fixture-fallback data distinct per
+ * surface. liveAroundYou/earnToday (the mock arrays) also stay — they're
+ * still read by buildTodayDigest()'s greeting line and
+ * selectHomeIntentChips()'s hasEarnInventory check, unrelated to this
+ * sprint. */
 const HOME_LIVE_OPPORTUNITY_IDS = ["airport-pickup", "babysitter", "photo-event", "language-help"];
 const HOME_EARN_OPPORTUNITY_IDS = ["deliver-package", "help-move-sofa", "translate-document", "dog-walk", "teach-english", "furniture"];
 
-function opportunityForHomeLiveItem(item) {
-  const index = liveAroundYou.indexOf(item);
-  return LIVE_OPPORTUNITIES.find((opportunity) => opportunity.id === HOME_LIVE_OPPORTUNITY_IDS[index]) || LIVE_OPPORTUNITIES[0];
+/** Runtime substitute for a build-mode flag — this app has no bundler
+ * (`npm run build` is a plain file copy, see package.json), so there is no
+ * import.meta.env.PROD to gate on. alwenda.com is the only real production
+ * deployment; every other host (localhost, the preview mirror, a PR
+ * preview) is treated as non-production for the fixture-fallback decision
+ * below. */
+function isProductionHost() {
+  return typeof window !== "undefined" && Boolean(window.location) && window.location.hostname === "alwenda.com";
 }
 
-function opportunityForHomeEarnItem(item) {
-  const index = earnToday.indexOf(item);
-  return LIVE_OPPORTUNITIES.find((opportunity) => opportunity.id === HOME_EARN_OPPORTUNITY_IDS[index]) || LIVE_OPPORTUNITIES[0];
+const OPPORTUNITY_FEED_FETCH_LIMIT = 30;
+
+/** Fire-and-forget, same convention as refreshMyListings()/
+ * refreshMyHelpRequests() — but unauthenticated (help_requests/listings
+ * browse is public RLS, no sign-in required), so unlike those two it is
+ * not gated behind hydrateSupabaseAuth(). The synchronous status flip to
+ * "loading" (before the first await) is what lets callers safely guard
+ * with `if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();`
+ * inside a render function without ever double-triggering. */
+async function refreshOpportunityFeed() {
+  state.opportunityFeed = { ...state.opportunityFeed, status: "loading" };
+  try {
+    const [realHelpRequests, realListings] = await Promise.all([
+      fetchOpenHelpRequests({ limit: OPPORTUNITY_FEED_FETCH_LIMIT }),
+      fetchPublicListings({ limit: OPPORTUNITY_FEED_FETCH_LIMIT })
+    ]);
+    state.opportunityFeed = { status: "loaded", helpRequests: realHelpRequests, listings: realListings, loadedAt: Date.now() };
+  } catch (error) {
+    console.warn("[opportunityFeed] Failed to load real opportunity data.", error);
+    state.opportunityFeed = { status: "error", helpRequests: [], listings: [], loadedAt: state.opportunityFeed.loadedAt };
+  }
+  if (["home", "liveOpportunities"].includes(state.activeView)) render();
+}
+
+/** Earn Today is help_requests only — real demand postings from other
+ * users the viewer could fulfil and earn from. Live Around You is the
+ * broader combined pulse (help_requests + published listings, both
+ * requests and offers) — deliberately different underlying data per
+ * surface, not two views over the same array (see CATEGORY_CONFIG plan
+ * Part 4). */
+function realOpportunityRecordsForSurface(surface) {
+  const feed = state.opportunityFeed;
+  if (surface === "live") return [...feed.helpRequests, ...feed.listings];
+  return feed.helpRequests;
+}
+
+/** Fixtures only appear once the real feed has actually finished loading
+ * AND is completely empty across every category, and only outside
+ * production — never on alwenda.com, never while still loading, never
+ * after a failed fetch (which renders its own retry state instead). A
+ * category with zero matching real records while other categories DO have
+ * real data does not fall back to fixtures for that one category — see
+ * the honest per-category empty state in renderLiveOpportunities(). */
+function shouldUseFixtureOpportunities() {
+  const feed = state.opportunityFeed;
+  if (feed.status !== "loaded") return false;
+  if (feed.helpRequests.length > 0 || feed.listings.length > 0) return false;
+  return !isProductionHost();
+}
+
+/** Even in fixture/demo fallback, Earn Today and Live Around You must stay
+ * distinct data, not two grids over the identical pool (Part 4) — reuses
+ * the same curated ID splits the original hand-picked home rails used
+ * (HOME_EARN_OPPORTUNITY_IDS / HOME_LIVE_OPPORTUNITY_IDS), rather than
+ * showing all 12 LIVE_OPPORTUNITIES under both surfaces. */
+function fixtureOpportunitiesForSurface(surface) {
+  const ids = surface === "earn" ? HOME_EARN_OPPORTUNITY_IDS : surface === "live" ? HOME_LIVE_OPPORTUNITY_IDS : null;
+  if (!ids) return LIVE_OPPORTUNITIES;
+  return ids.map((id) => findOpportunityById(id)).filter(Boolean);
+}
+
+/** categoryId "all" returns every record for the surface, unfiltered. Both
+ * real records and the LIVE_OPPORTUNITIES fixtures are classified through
+ * the same normalizeOpportunityCategory(), so category filtering behaves
+ * identically regardless of which source is active. */
+function opportunityRecordsForCategory(categoryId, surface) {
+  const records = shouldUseFixtureOpportunities() ? fixtureOpportunitiesForSurface(surface) : realOpportunityRecordsForSurface(surface);
+  if (categoryId === "all") return records;
+  return records.filter((record) => normalizeOpportunityCategory(record) === categoryId);
+}
+
+function opportunityCountForCategory(categoryId, surface) {
+  return opportunityRecordsForCategory(categoryId, surface).length;
+}
+
+/** Real activity floats to the top of the grid; ties keep CATEGORY_ORDER's
+ * stable order (Array#sort is stable), same convention as
+ * sortedExploreHubCategories(). */
+function categoryHubIdsSortedByCount(surface) {
+  const ids = orderedCategoryIds();
+  const counts = new Map(ids.map((id) => [id, opportunityCountForCategory(id, surface)]));
+  return [...ids].sort((a, b) => counts.get(b) - counts.get(a));
+}
+
+function truncateForCard(text, max = 42) {
+  const trimmed = String(text || "").trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+/** One real record's display title, reused from renderRealOpportunityCard's
+ * own helper — works identically for a real listing (has .title), a real
+ * help_request (falls back to its own description), and a LIVE_OPPORTUNITIES
+ * fixture item (also has .title, so the isListing branch applies). */
+function categoryHubRecordTitle(record) {
+  const isListing = "title" in record && Boolean(record.title);
+  return realOpportunityCardTitle(record, isListing);
+}
+
+/** Live Around You's recent-activity feed (Part 4) — a handful of the
+ * most recent real records across every category, combined and re-sorted
+ * by created_at (realOpportunityRecordsForSurface concatenates
+ * help_requests then listings, each already sorted individually by the
+ * SQL query, but the concatenation itself isn't chronological — this
+ * fixes that for display purposes only, no mutation of the source
+ * arrays). Fixture mode has no created_at to sort by, so it just takes
+ * the curated subset's own order. Every field shown (category label,
+ * title/description) is already publicly selected and displayed
+ * elsewhere (renderRealOpportunityCard) — no new field exposure, no
+ * addresses/contact info/owner-only data. */
+function recentLiveActivityItems(limit = 3) {
+  const usingFixtures = shouldUseFixtureOpportunities();
+  const records = usingFixtures ? fixtureOpportunitiesForSurface("live") : realOpportunityRecordsForSurface("live");
+  if (usingFixtures) return records.slice(0, limit);
+  return [...records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, limit);
+}
+
+function renderRecentActivityFeedItem(record) {
+  const categoryId = normalizeOpportunityCategory(record);
+  const categoryLabel = t(categoryConfigFor(categoryId).labelKey);
+  const title = truncateForCard(categoryHubRecordTitle(record), 52);
+  return `<li class="live-activity-feed-item"><span class="live-activity-feed-category">${escapeHtml(categoryLabel)}</span><span class="live-activity-feed-title">${escapeHtml(title)}</span></li>`;
+}
+
+/** Empty string (not an empty-state message) when there's nothing to
+ * show — the category grid right below already carries the honest
+ * "Nothing live yet" messaging per card; a second empty state here would
+ * be redundant. */
+function renderRecentActivityFeed() {
+  const items = recentLiveActivityItems(3);
+  if (!items.length) return "";
+  return `
+    <ul class="live-activity-feed" aria-label="${t("home.rail.liveAroundYou")}">
+      ${items.map(renderRecentActivityFeedItem).join("")}
+    </ul>
+  `;
+}
+
+/** Every number here traces to opportunityRecordsForCategory()'s real
+ * array (or the labelled fixture fallback) — never invented. requestCount/
+ * offerCount only differ from `count` on the "live" surface, which mixes
+ * help_requests (isListing false) and listings (isListing true); on
+ * "earn" every record is already help_requests-only, so offerCount is
+ * always 0 there (Part 3: Earn Today never mixes in service offers).
+ * urgentCount is 0 unless the record set actually carries urgency==="today"
+ * — never shown when the source doesn't genuinely represent it. */
+function categoryHubCardSummary(categoryId, surface) {
+  const records = opportunityRecordsForCategory(categoryId, surface);
+  let offerCount = 0;
+  let urgentCount = 0;
+  for (const record of records) {
+    const isListing = "title" in record && Boolean(record.title);
+    if (isListing) offerCount += 1;
+    if (record.urgency === "today") urgentCount += 1;
+  }
+  const requestCount = records.length - offerCount;
+  return {
+    count: records.length,
+    requestCount,
+    offerCount,
+    urgentCount,
+    latestTitle: records.length ? truncateForCard(categoryHubRecordTitle(records[0])) : null
+  };
+}
+
+/** Generalizes renderExploreHubCard's "destination card with real count
+ * metadata" pattern (main.js, renderExploreHubCard) to the CATEGORY_CONFIG
+ * taxonomy — same CATEGORY_TILE_TONES cycling, same real-emoji register as
+ * renderCategoryTileGrid, its own .category-hub-card/.category-hub-grid CSS
+ * (referencing the same design tokens as .explore-hub-card, not a copy).
+ * Round 2: cards now surface a real activity summary (open-request count,
+ * or a request/offer split on the "live" surface, plus the latest real
+ * record's title) instead of a bare count, so the grid reads as live city
+ * activity rather than a plain navigation menu. A zero-count category
+ * still renders (fixed navigation surface, not filtered by data) with an
+ * honest empty-state line — never hidden, never an invented number. */
+function renderCategoryHubCard(categoryId, surface, index) {
+  const config = categoryConfigFor(categoryId);
+  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
+  const label = t(config.labelKey);
+  const summary = categoryHubCardSummary(categoryId, surface);
+  const isEmpty = summary.count === 0;
+
+  let primaryLine;
+  let secondaryLine = null;
+  if (surface === "live") {
+    primaryLine = isEmpty ? t("opportunities.nothingLiveYet") : t("opportunities.requestOfferSplit", { requests: summary.requestCount, offers: summary.offerCount });
+    secondaryLine = isEmpty ? t("opportunities.exploreOrPost") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
+  } else {
+    primaryLine = isEmpty ? t("opportunities.noActiveRequests") : t("opportunities.openRequestsCount", { count: summary.requestCount });
+    secondaryLine = isEmpty ? t("opportunities.offerYourHelp") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
+  }
+  const urgentBadge = !isEmpty && summary.urgentCount > 0 ? `<span class="category-hub-card-urgent">${escapeHtml(t("opportunities.urgentCount", { count: summary.urgentCount }))}</span>` : "";
+  const accessibleLabel = [label, primaryLine, secondaryLine].filter(Boolean).join(" — ");
+
+  return `
+    <button type="button" class="category-hub-card tone-${tone} ${isEmpty ? "is-empty" : ""}" data-category-hub-card="${categoryId}" data-category-hub-surface="${surface}" aria-label="${escapeHtml(accessibleLabel)}">
+      <span class="category-hub-card-icon" aria-hidden="true">${config.icon}</span>
+      <span class="category-hub-card-name">${escapeHtml(label)}</span>
+      <span class="category-hub-card-meta" aria-hidden="true">
+        <span class="category-hub-card-primary">${escapeHtml(primaryLine)}</span>
+        ${secondaryLine ? `<span class="category-hub-card-secondary">${escapeHtml(secondaryLine)}</span>` : ""}
+        ${urgentBadge}
+      </span>
+      <span class="category-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
+    </button>
+  `;
+}
+
+function renderCategoryHubGrid(categoryIds, surface) {
+  return `
+    <div class="category-hub-grid" role="list">
+      ${categoryIds.map((id, index) => renderCategoryHubCard(id, surface, index)).join("")}
+    </div>
+  `;
+}
+
+/** Real-record card — deliberately distinct from renderOpportunityCard
+ * (below), which renders the LIVE_OPPORTUNITIES fixture shape only. A real
+ * help_requests/listings row never has a fabricated distance, price, trust
+ * score, photo, or urgency claim it doesn't actually carry — every field
+ * shown here is read directly off the record or omitted. `isListing`
+ * distinguishes the two real shapes (listings have title/price_amount,
+ * help_requests have neither — their "title" is their own description,
+ * truncated). */
+function realOpportunityCardTitle(record, isListing) {
+  if (isListing) return record.title;
+  const description = String(record.description || "").trim();
+  return description.length > 80 ? `${description.slice(0, 77)}…` : description;
+}
+
+function renderRealOpportunityCard(record) {
+  const isListing = "title" in record && Boolean(record.title);
+  const categoryId = normalizeOpportunityCategory(record);
+  const categoryLabel = t(categoryConfigFor(categoryId).labelKey);
+  const title = realOpportunityCardTitle(record, isListing);
+  const locationLabel = isListing ? record.neighbourhood || record.location_label : record.area;
+  const priceLabel = isListing && record.price_amount != null ? formatCurrency(record.price_amount, record.price_currency || "EUR") : null;
+  const urgencyOption = !isListing ? HELP_URGENCY_OPTIONS.find(([value]) => value === record.urgency) : null;
+  const postedLabel = record.created_at ? formatDate(record.created_at, { dateStyle: "medium" }) : null;
+  // Informational only, deliberately not click-through: the existing
+  // listingDetail screen reads from the mock `listings` array
+  // (renderListingDetail, ~main.js:6904), not real Supabase rows, and
+  // help_requests has no detail/contact screen at all yet. Wiring a real
+  // detail + contact flow for these Supabase-backed records is future
+  // work, not part of this taxonomy sprint — a broken or misleading link
+  // would be worse than an honest, non-interactive card.
+  return `<article class="opportunity-card real-opportunity-card" aria-label="${escapeHtml(title)}" data-opportunity-record-id="${escapeHtml(String(record.id))}" data-opportunity-record-type="${isListing ? "listing" : "helpRequest"}">
+    <div class="opportunity-body">
+      <div class="opportunity-price-row"><span class="chip real-opportunity-category-chip">${escapeHtml(categoryLabel)}</span>${priceLabel ? `<b>${priceLabel}</b>` : ""}</div>
+      <h2>${escapeHtml(title)}</h2>
+      ${isListing && record.description ? `<p>${escapeHtml(record.description)}</p>` : ""}
+      <p class="opportunity-meta">${[locationLabel ? escapeHtml(locationLabel) : null, postedLabel, urgencyOption ? t(urgencyOption[1]) : null].filter(Boolean).join(" · ")}</p>
+    </div>
+  </article>`;
 }
 
 function findOpportunityById(id) {
@@ -7098,14 +7501,19 @@ function openLiveOpportunityDetail(id) {
   render();
 }
 
+/** Fixture-only filterer — feeds renderOpportunityCard's LIVE_OPPORTUNITIES
+ * shape, used exclusively when shouldUseFixtureOpportunities() is true.
+ * Category matching goes through normalizeOpportunityCategory() (not a raw
+ * string compare) so a fixture's legacy `category` string and the new
+ * categoryId filter agree on the same classification. */
 function filteredLiveOpportunities() {
   let items = LIVE_OPPORTUNITIES.filter((item) => {
-    const categoryMatch = state.opportunityCategory === "all" || item.category === state.opportunityCategory;
-    const distanceMatch = state.opportunityDistance === "all" || item.distance <= Number(state.opportunityDistance);
-    const filterMatch = state.opportunityFilter === "nearby" || (state.opportunityFilter === "today" && item.today) || (state.opportunityFilter === "urgent" && item.urgent) || state.opportunityFilter === "verified" || state.opportunityFilter === "highest";
-    return categoryMatch && distanceMatch && filterMatch;
+    const categoryMatch = state.opportunityFilter.categoryId === "all" || normalizeOpportunityCategory(item) === state.opportunityFilter.categoryId;
+    const distanceMatch = state.opportunityFilter.distance === "all" || item.distance <= Number(state.opportunityFilter.distance);
+    const sortFilterMatch = state.opportunitySort === "nearby" || (state.opportunitySort === "today" && item.today) || (state.opportunitySort === "urgent" && item.urgent) || state.opportunitySort === "verified" || state.opportunitySort === "highest";
+    return categoryMatch && distanceMatch && sortFilterMatch;
   });
-  if (state.opportunityFilter === "highest") items = [...items].sort((a, b) => b.price - a.price);
+  if (state.opportunitySort === "highest") items = [...items].sort((a, b) => b.price - a.price);
   else items = [...items].sort((a, b) => a.distance - b.distance);
   return items;
 }
@@ -7193,27 +7601,84 @@ function renderLiveOpportunityDetail() {
   </section>`;
 }
 
+/** The shared category-detail destination (Part 5) — reached either
+ * directly ("See all" on the old opportunities entry point, category
+ * "all") or from an Earn Today / Live Around You category tap, which
+ * presets state.opportunityFilter.categoryId/surface before navigating
+ * here. Real data (help_requests/listings, via opportunityRecordsForCategory)
+ * is used whenever it's available at all; the LIVE_OPPORTUNITIES fixture
+ * grid and its own sort/distance chips only ever appear when
+ * shouldUseFixtureOpportunities() is true (Part 3) — visibly labelled so
+ * it's never mistaken for real activity. Loading and error are distinct,
+ * explicit states, never rendered as a false "0 results" empty state. */
+/** render() re-runs on every state change, so a naive trackEvent() call
+ * inside renderLiveOpportunities() would fire once per re-render (typing
+ * in an unrelated field, a timer tick, etc.), not once per genuine empty
+ * state a user actually saw — dedup by category+surface, same discipline
+ * as syncUrlToState()'s lastPushedUrlKey, so it fires once per distinct
+ * empty view rather than flooding analytics. */
+let lastTrackedOpportunityEmptyKey = null;
+function trackOpportunityEmptyStateOnce(categoryId, surface) {
+  const key = `${categoryId}:${surface}`;
+  if (key === lastTrackedOpportunityEmptyKey) return;
+  lastTrackedOpportunityEmptyKey = key;
+  trackEvent("opportunity_empty_state_viewed", { categoryId, surface });
+}
+
 function renderLiveOpportunities() {
-  const items = filteredLiveOpportunities();
-  const categories = [...new Set(LIVE_OPPORTUNITIES.map((item) => item.category))];
-  const earnings = LIVE_OPPORTUNITIES.filter((item) => item.today).reduce((sum, item) => sum + item.price, 0);
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+  const filter = state.opportunityFilter;
+  const usingFixtures = shouldUseFixtureOpportunities();
+  const categoryId = filter.categoryId;
+  const activeCategoryConfig = categoryId === "all" ? null : categoryConfigFor(categoryId);
+  const heroTitle = activeCategoryConfig ? t(activeCategoryConfig.labelKey) : t("common.liveOpportunitiesTitle");
+  const heroIcon = activeCategoryConfig ? activeCategoryConfig.icon : null;
+
+  if (!usingFixtures && state.opportunityFeed.status === "loading") {
+    return `<section class="section-shell opportunities-shell">
+      ${renderTransactionSafetyNotice()}
+      <header class="opportunities-hero"><p class="eyebrow">${t("common.liveRequests")} · ${currentAreaLabel()}</p><h1>${heroIcon ? `<span aria-hidden="true">${heroIcon}</span> ` : ""}${heroTitle}</h1></header>
+      <div class="profile-listing-grid-loading" aria-busy="true"></div>
+    </section>`;
+  }
+
+  if (!usingFixtures && state.opportunityFeed.status === "error") {
+    return `<section class="section-shell opportunities-shell">
+      ${renderTransactionSafetyNotice()}
+      <header class="opportunities-hero"><p class="eyebrow">${t("common.liveRequests")} · ${currentAreaLabel()}</p><h1>${heroIcon ? `<span aria-hidden="true">${heroIcon}</span> ` : ""}${heroTitle}</h1></header>
+      ${renderEmptyState(t("opportunities.loadError"), "search")}
+      <button type="button" class="opportunity-primary" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button>
+    </section>`;
+  }
+
+  const items = usingFixtures ? filteredLiveOpportunities() : opportunityRecordsForCategory(categoryId, filter.surface);
+  const count = items.length;
+  if (!count) trackOpportunityEmptyStateOnce(categoryId, filter.surface);
+
   return `<section class="section-shell opportunities-shell">
     ${renderTransactionSafetyNotice()}
-    <header class="opportunities-hero"><p class="eyebrow">Alwenda marketplace · ${currentAreaLabel()}</p><h1>${t("common.liveOpportunitiesTitle")}</h1><p>${t("common.liveOpportunitiesSubtitle")}</p>
-      <div class="opportunity-stats"><article><strong>${LIVE_OPPORTUNITIES.length}</strong><span>${t("common.activeOpportunitiesNearby")}</span></article><article><strong>€${earnings}</strong><span>${t("common.estimatedEarningsToday")}</span></article></div>
+    <header class="opportunities-hero">
+      <p class="eyebrow">${t("common.liveRequests")} · ${currentAreaLabel()}</p>
+      <h1>${heroIcon ? `<span aria-hidden="true">${heroIcon}</span> ` : ""}${heroTitle}</h1>
+      ${usingFixtures ? `<span class="chip opportunities-demo-badge">${t("opportunities.demoDataLabel")}</span>` : ""}
     </header>
-    <div class="opportunity-toolbar" aria-label="Opportunity filters"><div class="chip-row explore-category-row opportunity-filter-row">
-      ${[["nearby",t("common.nearby")],["today",t("common.today")],["highest",t("common.highestPaying")],["urgent",t("common.urgentLabel")],["verified",t("common.verified")]].map(([value,label]) => `<button type="button" class="${state.opportunityFilter === value ? "is-active" : ""}" data-opportunity-filter="${value}">${label}</button>`).join("")}
-      <label>${t("common.category")}<select data-opportunity-category><option value="all">${t("common.allCategoriesLabel")}</option>${categories.map((category) => {
-        const match = LIVE_OPPORTUNITIES.find((item) => item.category === category);
-        const label = match ? opportunityText(match, "category", category) : category;
-        return `<option value="${category}" ${state.opportunityCategory === category ? "selected" : ""}>${label}</option>`;
-      }).join("")}</select></label>
-      <label>${t("common.distance")}<select data-opportunity-distance><option value="all">${t("common.anyDistance")}</option>${[1,2,5].map((distance) => `<option value="${distance}" ${state.opportunityDistance === String(distance) ? "selected" : ""}>${t("common.withinDistance", { distance })}</option>`).join("")}</select></label>
-    </div></div>
-    <div class="opportunity-feed-heading"><div><h2>${t("common.whatCanYouEarnToday")}</h2><p>${t("common.freshVerifiedRequests")}</p></div><span>${t("common.matches", { count: items.length })}</span></div>
-    <div class="opportunity-feed">${items.map(renderOpportunityCard).join("") || renderEmptyState(t("common.noOpportunitiesMatch"))}</div>
-    <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t("common.postYourOwnRequestHint")}</p><button type="button" data-view="needHelp">${t("common.createRequest")}</button></section>
+    <div class="opportunity-toolbar" aria-label="${t("common.category")}">
+      <div class="chip-row explore-category-row opportunity-filter-row">
+        <label class="sr-only" for="opportunity-filter-category">${t("common.category")}</label>
+        <select id="opportunity-filter-category" data-opportunity-filter-category>
+          <option value="all" ${categoryId === "all" ? "selected" : ""}>${t("common.allCategoriesLabel")}</option>
+          ${orderedCategoryIds().map((id) => `<option value="${id}" ${categoryId === id ? "selected" : ""}>${escapeHtml(t(categoryConfigFor(id).labelKey))}</option>`).join("")}
+        </select>
+        ${categoryId !== "all" ? `<button type="button" class="chip" data-action="clear-opportunity-category-filter">${t("opportunities.clearFilter")}</button>` : ""}
+      </div>
+      ${usingFixtures ? `<div class="chip-row explore-category-row opportunity-filter-row">
+        ${[["nearby", t("common.nearby")], ["today", t("common.today")], ["highest", t("common.highestPaying")], ["urgent", t("common.urgentLabel")], ["verified", t("common.verified")]].map(([value, label]) => `<button type="button" class="${state.opportunitySort === value ? "is-active" : ""}" data-opportunity-sort="${value}">${label}</button>`).join("")}
+        <label>${t("common.distance")}<select data-opportunity-distance><option value="all" ${filter.distance === "all" ? "selected" : ""}>${t("common.anyDistance")}</option>${[1, 2, 5].map((distance) => `<option value="${distance}" ${filter.distance === String(distance) ? "selected" : ""}>${t("common.withinDistance", { distance })}</option>`).join("")}</select></label>
+      </div>` : ""}
+    </div>
+    <div class="opportunity-feed-heading"><div><h2>${filter.surface === "live" ? t("opportunities.liveActivityHeading") : t("common.whatCanYouEarnToday")}</h2><p>${filter.surface === "live" ? t("opportunities.liveActivityHint") : t("common.freshVerifiedRequests")}</p></div><span>${t("opportunities.activeCount", { count })}</span></div>
+    <div class="opportunity-feed">${count ? (usingFixtures ? items.map(renderOpportunityCard).join("") : items.map(renderRealOpportunityCard).join("")) : renderEmptyState(t(categoryId === "all" ? "common.noOpportunitiesMatch" : "opportunities.noActiveYet"))}</div>
+    <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t(count ? "common.postYourOwnRequestHint" : "opportunities.beFirstToPost")}</p><button type="button" data-view="needHelp" ${categoryId !== "all" ? `data-category-id="${categoryId}"` : ""}>${filter.surface === "earn" ? t("opportunities.helpAndEarn") : t("common.createRequest")}</button></section>
   </section>`;
 }
 
@@ -7719,6 +8184,7 @@ async function submitHelpRequest() {
   try {
     const created = await createHelpRequest({
       category: state.hireCategory || "general",
+      categoryId: draft.categoryId,
       description: text,
       urgency: draft.urgency,
       area: state.area === "All" ? null : state.area,
@@ -7727,6 +8193,7 @@ async function submitHelpRequest() {
     const request = applyCreatedHelpRequest(created);
     state.helpRequestPosted = request;
     state.helpRequestSubmitStatus = "idle";
+    if (draft.categoryId) trackEvent("category_post_submitted", { categoryId: draft.categoryId, surface: state.opportunityFilter.surface });
   } catch (error) {
     state.helpRequestSubmitStatus = "idle";
     state.helpRequestError = error?.message || t("needHelp.postError");
@@ -7736,7 +8203,7 @@ async function submitHelpRequest() {
 
 function resetHelpRequestDraft() {
   stopNeedHelpTypewriter(false);
-  state.helpRequestDraft = { text: "", urgency: "flexible" };
+  state.helpRequestDraft = { text: "", urgency: "flexible", categoryId: null };
   state.helpRequestPosted = null;
   state.helpRequestError = null;
   state.hireCategory = null;
@@ -7874,6 +8341,7 @@ async function submitListingForm() {
       title,
       description: draft.description.trim(),
       category: LISTING_CATEGORY_TO_DB[draft.category] || "buy_sell",
+      categoryId: draft.categoryId,
       priceAmount: draft.priceAmount ? Number(draft.priceAmount) : null,
       pricePeriod: draft.priceAmount ? draft.pricePeriod : null,
       neighbourhood: draft.neighbourhood.trim(),
@@ -7902,6 +8370,7 @@ async function submitListingForm() {
 
     applyCreatedListing(created);
     state.listingSubmitStatus = "success";
+    if (draft.categoryId) trackEvent("category_post_submitted", { categoryId: draft.categoryId, surface: state.opportunityFilter.surface });
     // Not part of listingDraft itself, but this success path (unlike every
     // other exit from this form) sets state.activeView directly rather
     // than through a [data-view] click, so it's the one place that
@@ -7912,6 +8381,7 @@ async function submitListingForm() {
       title: "",
       description: "",
       category: "buy-sell",
+      categoryId: null,
       priceAmount: "",
       pricePeriod: "one_time",
       neighbourhood: "",
@@ -9974,29 +10444,39 @@ function userProfileTrustStatusLabel(trust) {
   return t("userProfile.trustCalculated");
 }
 
+/** Profile 2.0: the same 3 stats, same 3 dialog-opening buttons, just laid
+ * out as one compact inline line (LinkedIn-style "128 followers · 54
+ * following · Trust 4.9") instead of a padded 3-up card row — this is the
+ * single biggest space saving in the compression pass. Each button keeps
+ * a full-sentence aria-label (count + label together) since the visual
+ * text is now terse punctuation-joined fragments, not a labeled card. */
 function renderUserProfileMetrics(profile) {
+  const trustScore = profile.trust ? profile.trust.score : "—";
   return `
     <div class="profile-social-metrics" role="group" aria-label="${t("userProfile.metricsLabel")}">
-      <button type="button" class="profile-metric" data-user-profile-dialog="following">
-        <strong>${profile.followCounts.following}</strong><span>${t("userProfile.followingLabel")}</span>
+      <button type="button" class="profile-metric" data-user-profile-dialog="following" aria-label="${escapeHtml(`${profile.followCounts.following} ${t("userProfile.followingLabel")}`)}">
+        <strong>${profile.followCounts.following}</strong> ${t("userProfile.followingLabel")}
       </button>
-      <button type="button" class="profile-metric" data-user-profile-dialog="followers">
-        <strong>${profile.followCounts.followers}</strong><span>${t("userProfile.followersLabel")}</span>
+      <button type="button" class="profile-metric" data-user-profile-dialog="followers" aria-label="${escapeHtml(`${profile.followCounts.followers} ${t("userProfile.followersLabel")}`)}">
+        <strong>${profile.followCounts.followers}</strong> ${t("userProfile.followersLabel")}
       </button>
-      <button type="button" class="profile-metric" data-user-profile-dialog="trust">
-        <strong>${profile.trust ? profile.trust.score : "—"}</strong><span>${t("userProfile.trustScoreLabel")}</span>
+      <button type="button" class="profile-metric" data-user-profile-dialog="trust" aria-label="${escapeHtml(`${t("userProfile.trustScoreLabel")} ${trustScore}`)}">
+        ${t("userProfile.trustScoreLabel")} <strong>${trustScore}</strong>
       </button>
     </div>
   `;
 }
 
+/** "Member since" is deliberately omitted here — it's already shown once
+ * in identity-meta (renderUserProfile's <p class="identity-meta">), and
+ * Profile 2.0's compression pass explicitly removes duplicated information
+ * rather than showing the same fact twice across two sections. */
 function renderUserProfileReputation(profile) {
   const traderDisclosure = state.traderPublicProfiles[profile.userId];
   const signals = [
     profile.verificationStatus === "verified" ? { icon: "verify", label: t("userProfile.signalIdentityVerified") } : null,
     traderDisclosure ? { icon: "verify", label: t("userProfile.signalTraderVerified") } : null,
     profile.reviewsStatus === "loaded" && profile.reviews.length ? { icon: "star", label: t("userProfile.signalReviewCount", { count: profile.reviews.length }) } : null,
-    profile.createdAt ? { icon: "trust", label: t("userProfile.signalMemberSince", { date: formatDate(profile.createdAt, { year: "numeric", month: "long" }) }) } : null,
     profile.listingsStatus === "loaded" ? { icon: "tag", label: t("userProfile.signalListingCount", { count: profile.listings.filter((item) => item.status === "sold" || item.status === "published").length }) } : null
   ].filter(Boolean);
   if (!signals.length) return "";
@@ -10076,7 +10556,10 @@ function renderUserProfile() {
 
   return `
     <section class="section-shell profile-panel user-profile-shell">
-      <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+      <div class="user-profile-header-row">
+        <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+        ${profile.isOwn ? `<button type="button" class="user-profile-settings-icon" data-view="account" aria-label="${t("userProfile.accountAction")}" title="${t("userProfile.accountAction")}">${icon("settings")}</button>` : ""}
+      </div>
 
       <div class="user-profile-cover ${profile.coverUrl ? "" : "user-profile-cover-fallback"}" style="${profile.coverUrl ? `background-image:url('${escapeHtml(profile.coverUrl)}')` : ""}"></div>
 
@@ -10091,8 +10574,7 @@ function renderUserProfile() {
         </div>
         <div class="user-profile-actions">
           ${profile.isOwn
-            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>
-               <button type="button" class="auth-link" data-view="account">${t("userProfile.accountAction")}</button>`
+            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>`
             : `<button type="button" class="${profile.isFollowing ? "auth-link" : "auth-primary-button"}" data-user-profile-follow="true" ${!canFollow && state.auth.status === "signedIn" ? "disabled" : ""}>${profile.isFollowing ? t("userProfile.followingCta") : t("userProfile.followCta")}</button>
                <button type="button" class="auth-link" data-user-profile-message="true">${t("common.messagePersonCta")}</button>
                <div class="user-profile-more-menu">
@@ -11194,6 +11676,16 @@ function bindEvents() {
       // other [data-view] click app-wide (this line always runs), so it
       // can never leak into an unrelated later visit to that same view.
       state.tytIntent = button.dataset.intent || null;
+      // Same self-cleaning convention as tytIntent above, but for a
+      // category-hub "post in this category" tap (Part 7) rather than a
+      // TYT tile — set on createListing/needHelp, cleared by any other
+      // [data-view] click. The two never collide (TYT tiles don't carry
+      // data-category-id; category-hub CTAs don't carry data-intent).
+      if (button.dataset.categoryId) {
+        if (button.dataset.view === "createListing") state.listingDraft.categoryId = button.dataset.categoryId;
+        else if (button.dataset.view === "needHelp") state.helpRequestDraft.categoryId = button.dataset.categoryId;
+        trackEvent("category_post_started", { categoryId: button.dataset.categoryId, surface: state.opportunityFilter.surface });
+      }
       // Retries on every visit rather than relying solely on the one
       // fire-and-forget call at sign-in, which left "My Listings" — and any
       // real listing created in an earlier session — silently stuck empty
@@ -11255,6 +11747,16 @@ function bindEvents() {
   document.querySelectorAll("[data-alwen-example-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       submitAlwenConversationMessage(t(button.dataset.alwenExamplePrompt));
+    });
+  });
+
+  document.querySelectorAll("[data-alwen-category-starter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const categoryId = button.dataset.alwenCategoryStarter;
+      const config = categoryConfigFor(categoryId);
+      const promptKey = config.posting?.starterPromptKey;
+      trackEvent("category_selected", { categoryId, surface: "alwenStarter" });
+      submitAlwenConversationMessage(promptKey ? t(promptKey) : t(config.labelKey));
     });
   });
 
@@ -11570,18 +12072,43 @@ function bindEvents() {
     render();
   }));
 
-  document.querySelectorAll("[data-opportunity-filter]").forEach((button) => button.addEventListener("click", () => {
-    state.opportunityFilter = button.dataset.opportunityFilter;
+  document.querySelectorAll("[data-opportunity-sort]").forEach((button) => button.addEventListener("click", () => {
+    state.opportunitySort = button.dataset.opportunitySort;
+    trackEvent("opportunity_filter_applied", { categoryId: state.opportunityFilter.categoryId, surface: state.opportunityFilter.surface });
     render();
   }));
-  document.querySelector("[data-opportunity-category]")?.addEventListener("change", (event) => {
-    state.opportunityCategory = event.target.value;
+  /* Earn Today / Live Around You category tap — presets the shared
+     opportunityFilter (Part 5) before navigating into the category-detail
+     screen (renderLiveOpportunities), matching the "category becomes the
+     landing page" requirement. category_hub_viewed marks arriving at a
+     category via a hub tap; category_selected (below) is reserved for
+     changing category while already on the screen, so the two never
+     double-fire for the same action. */
+  document.querySelectorAll("[data-category-hub-card]").forEach((card) => card.addEventListener("click", () => {
+    const categoryId = card.dataset.categoryHubCard;
+    const surface = card.dataset.categoryHubSurface;
+    state.opportunityFilter = { categoryId, surface, intent: "all", status: "active", distance: "all" };
+    state.activeView = "liveOpportunities";
+    trackEvent("category_hub_viewed", { categoryId, surface });
+    render();
+  }));
+  document.querySelector("[data-opportunity-filter-category]")?.addEventListener("change", (event) => {
+    state.opportunityFilter = { ...state.opportunityFilter, categoryId: event.target.value };
+    trackEvent("category_selected", { categoryId: event.target.value, surface: state.opportunityFilter.surface });
     render();
   });
   document.querySelector("[data-opportunity-distance]")?.addEventListener("change", (event) => {
-    state.opportunityDistance = event.target.value;
+    state.opportunityFilter = { ...state.opportunityFilter, distance: event.target.value };
+    trackEvent("opportunity_filter_applied", { categoryId: state.opportunityFilter.categoryId, surface: state.opportunityFilter.surface });
     render();
   });
+  document.querySelector('[data-action="clear-opportunity-category-filter"]')?.addEventListener("click", () => {
+    state.opportunityFilter = { ...state.opportunityFilter, categoryId: "all" };
+    render();
+  });
+  document.querySelectorAll('[data-action="retry-opportunity-feed"]').forEach((button) => button.addEventListener("click", () => {
+    refreshOpportunityFeed();
+  }));
 
   document.querySelectorAll('[data-action="toggle-save"]').forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -11951,7 +12478,32 @@ function bindEvents() {
     window.clearTimeout(needHelpDetectTimer);
     needHelpDetectTimer = window.setTimeout(() => {
       const intent = matchNeedHelpIntent(state.helpRequestDraft.text);
-      if (intent && intent.id !== state.needHelpDetectedIntentId) startNeedHelpTypewriter(intent);
+      if (intent && intent.id !== state.needHelpDetectedIntentId) {
+        startNeedHelpTypewriter(intent);
+        return;
+      }
+      // Fallback when none of the 10 curated NEED_HELP_INTENTS match (Part
+      // 8) — classifies via the shared CATEGORY_CONFIG keyword list instead
+      // (covers phrases like "walk my dog" that aren't in the curated
+      // list). Deliberately does NOT trigger the typewriter sentence
+      // expansion like a curated-intent match does: there's no hand-
+      // written demand-framed sentence per category to expand into (the
+      // per-category copy that exists, CATEGORY_CONFIG's aiPromptKey, is
+      // written as a supply-side "I can help with X" example for Ask Alwen,
+      // not a "I need X" request) — fabricating one would be worse than
+      // just leaving the user's own words as-is. Only sets the category
+      // for matching/posting purposes (state.hireCategory,
+      // helpRequestDraft.categoryId).
+      if (!intent) {
+        const categoryId = classifyTextToCategory(state.helpRequestDraft.text);
+        if (categoryId && categoryId !== state.helpRequestDraft.categoryId) {
+          const config = categoryConfigFor(categoryId);
+          state.helpRequestDraft.categoryId = categoryId;
+          state.hireCategory = config.hireCategoryValues[0] || state.hireCategory;
+          trackEvent("category_classified_by_alwen", { categoryId, surface: "needHelp" });
+          render();
+        }
+      }
     }, NEED_HELP_DETECT_IDLE_MS);
   });
 

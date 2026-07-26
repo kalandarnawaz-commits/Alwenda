@@ -398,6 +398,27 @@
       "profDelivery": "pristatymas",
       "profItSupport": "IT pagalba",
       "profComputerRepair": "kompiuterių remontas"
+    },
+    "life": {
+      "delivery": "Pristatymas",
+      "transport": "Transportas",
+      "petCare": "Gyvūnų priežiūra",
+      "teaching": "Mokymas",
+      "shopping": "Apsipirkimas",
+      "technology": "Technologijos",
+      "cleaning": "Valymas",
+      "homeRepairs": "Namų remontas",
+      "gardening": "Sodininkystė",
+      "fitness": "Fitnesas",
+      "food": "Maistas",
+      "creative": "Kūryba",
+      "business": "Verslo pagalba",
+      "childcare": "Vaikų priežiūra",
+      "elderCare": "Senjorų priežiūra",
+      "events": "Renginiai",
+      "legal": "Teisinė pagalba",
+      "medical": "Sveikata",
+      "other": "Kita"
     }
   },
   "auth": {
@@ -1078,7 +1099,8 @@
     "suggestionIncompleteProfile": "Nes jūsų profilis dar nebaigtas",
     "suggestionIncompleteProfileDetail": "Baigtas profilis padeda specialistams greičiau jumis pasitikėti.",
     "suggestionCompleteCta": "Užbaigti profilį",
-    "suggestionViewCta": "Peržiūrėti"
+    "suggestionViewCta": "Peržiūrėti",
+    "categoryStartersLabel": "Arba pradėkite nuo kategorijos"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Procesai už jus",
@@ -2424,7 +2446,27 @@
         "tag2": "2 valandos",
         "action": "Priimti"
       }
-    }
+    },
+    "loadError": "Nepavyko įkelti gyvų galimybių.",
+    "demoDataLabel": "Bandomieji duomenys",
+    "clearFilter": "Išvalyti filtrą",
+    "activeCount": "{count} aktyvūs",
+    "noActiveYet": "Kol kas šioje kategorijoje aktyvių pasiūlymų nėra.",
+    "beFirstToPost": "Būkite pirmas, paskelbęs šioje kategorijoje.",
+    "openRequestsCount": "{count} atviri prašymai",
+    "noActiveRequests": "Kol kas aktyvių prašymų nėra",
+    "offerYourHelp": "Pasiūlykite pagalbą",
+    "requestOfferSplit": "{requests} prašymai · {offers} pasiūlymai",
+    "nothingLiveYet": "Kol kas nieko gyvo",
+    "exploreOrPost": "Naršykite kategorijas arba paskelbkite patys",
+    "latestPrefix": "Naujausia: {title}",
+    "urgentCount": "{count} skubūs",
+    "viewOpportunities": "Peržiūrėti galimybes",
+    "helpAndEarn": "Padėkite ir uždirbkite",
+    "seeOpenRequests": "Žiūrėti atvirus prašymus",
+    "liveActivityHeading": "Kas vyksta netoliese",
+    "liveActivityHint": "Reali veikla iš žmonių ir įmonių netoliese.",
+    "browseByCategory": "Naršyti pagal kategoriją"
   },
   "events": {
     "items": {
@@ -2633,5 +2675,89 @@
     "handleTaken": "Šis vartotojo vardas jau užimtas.",
     "handleSaveError": "Profilis išsaugotas, bet vartotojo vardo atnaujinti nepavyko. Bandykite dar kartą.",
     "accountAction": "Paskyra ir nustatymai"
+  },
+  "categoryConfig": {
+    "delivery": {
+      "titlePlaceholder": "Pristatyti siuntinį per miestą",
+      "aiPrompt": "Galiu pristatyti siuntinius netoliese.",
+      "starterPrompt": "Man reikia pagalbos su pristatymu"
+    },
+    "transport": {
+      "titlePlaceholder": "Pavežti ar paimti kažką",
+      "aiPrompt": "Galiu pavežti arba ką nors paimti.",
+      "starterPrompt": "Man reikia pavežimo ar paėmimo"
+    },
+    "petCare": {
+      "titlePlaceholder": "Pavedžioti ar prižiūrėti gyvūną",
+      "aiPrompt": "Galiu pavedžioti arba prižiūrėti jūsų augintinį.",
+      "starterPrompt": "Man reikia pagalbos su augintiniu"
+    },
+    "teaching": {
+      "aiPrompt": "Galiu mokyti anglų kalbos.",
+      "starterPrompt": "Ieškau korepetitoriaus"
+    },
+    "shopping": {
+      "titlePlaceholder": "Atnešti prekes ar atlikti pavedimą",
+      "aiPrompt": "Galiu atnešti prekes arba atlikti pavedimą.",
+      "starterPrompt": "Man reikia pagalbos apsiperkant"
+    },
+    "technology": {
+      "titlePlaceholder": "Sutvarkyti kompiuterį ar wifi",
+      "aiPrompt": "Galiu padėti su kompiuteriu ar wifi.",
+      "starterPrompt": "Man reikia pagalbos su technika"
+    },
+    "cleaning": {
+      "titlePlaceholder": "Išvalyti butą ar biurą",
+      "aiPrompt": "Galiu išvalyti jūsų butą ar biurą."
+    },
+    "homeRepairs": {
+      "titlePlaceholder": "Surinkti baldus ar ką nors pataisyti",
+      "aiPrompt": "Galiu surinkti IKEA baldus ar pataisyti namų daiktus.",
+      "starterPrompt": "Man reikia ką nors sutaisyti"
+    },
+    "gardening": {
+      "titlePlaceholder": "Sutvarkyti sodą ar veją",
+      "aiPrompt": "Galiu padėti sodininkystės ar vejos priežiūros darbuose."
+    },
+    "fitness": {
+      "titlePlaceholder": "Siūlyti asmeninius treniruotes",
+      "aiPrompt": "Galiu vesti asmenines treniruotes."
+    },
+    "food": {
+      "titlePlaceholder": "Pagaminti maistą ar aptarnauti renginį",
+      "aiPrompt": "Galiu pagaminti maistą ar aptarnauti nedidelį renginį."
+    },
+    "creative": {
+      "titlePlaceholder": "Siūlyti fotografijos ar dizaino paslaugas",
+      "aiPrompt": "Galiu nufotografuoti jūsų renginį ar padėti su dizainu."
+    },
+    "business": {
+      "titlePlaceholder": "Siūlyti apskaitos ar verslo pagalbą",
+      "aiPrompt": "Galiu padėti su buhalterija ar verslo klausimais."
+    },
+    "childcare": {
+      "titlePlaceholder": "Prižiūrėti vaikus",
+      "aiPrompt": "Galiu prižiūrėti jūsų vaikus."
+    },
+    "elderCare": {
+      "titlePlaceholder": "Siūlyti bendravimą ar priežiūrą senjorui",
+      "aiPrompt": "Galiu padėti prižiūrėti ar palaikyti kompaniją senjorui."
+    },
+    "events": {
+      "titlePlaceholder": "Padėti organizuoti ar aptarnauti renginį",
+      "aiPrompt": "Galiu padėti organizuoti ar aptarnauti jūsų renginį."
+    },
+    "legal": {
+      "titlePlaceholder": "Siūlyti teisines konsultacijas ar pagalbą su dokumentais",
+      "aiPrompt": "Galiu padėti su teisinėmis konsultacijomis ar dokumentais."
+    },
+    "medical": {
+      "titlePlaceholder": "Siūlyti su sveikata susijusią pagalbą netoliese",
+      "aiPrompt": "Man reikia pagalbos rasti vaistinę ar kliniką."
+    },
+    "other": {
+      "titlePlaceholder": "Aprašykite, ko reikia ar ką galite pasiūlyti",
+      "aiPrompt": "Galiu padėti su kažkuo kitu."
+    }
   }
 }

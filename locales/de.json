@@ -398,6 +398,27 @@
       "profDelivery": "Lieferung",
       "profItSupport": "IT-Support",
       "profComputerRepair": "Computerreparatur"
+    },
+    "life": {
+      "delivery": "Lieferung",
+      "transport": "Transport",
+      "petCare": "Haustierbetreuung",
+      "teaching": "Unterricht",
+      "shopping": "Einkaufen",
+      "technology": "Technik",
+      "cleaning": "Reinigung",
+      "homeRepairs": "Haushaltsreparaturen",
+      "gardening": "Gartenarbeit",
+      "fitness": "Fitness",
+      "food": "Essen",
+      "creative": "Kreatives",
+      "business": "Geschäftshilfe",
+      "childcare": "Kinderbetreuung",
+      "elderCare": "Seniorenbetreuung",
+      "events": "Veranstaltungen",
+      "legal": "Recht",
+      "medical": "Gesundheit",
+      "other": "Sonstiges"
     }
   },
   "auth": {
@@ -1078,7 +1099,8 @@
     "suggestionIncompleteProfile": "Weil dein Profil noch nicht vollständig ist",
     "suggestionIncompleteProfileDetail": "Ein vollständiges Profil hilft Fachkräften, dir schneller zu vertrauen.",
     "suggestionCompleteCta": "Profil vervollständigen",
-    "suggestionViewCta": "Ansehen"
+    "suggestionViewCta": "Ansehen",
+    "categoryStartersLabel": "Oder beginne mit einer Kategorie"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Für dich erledigte Abläufe",
@@ -2424,7 +2446,27 @@
         "tag2": "2 Stunden",
         "action": "Annehmen"
       }
-    }
+    },
+    "loadError": "Live-Möglichkeiten konnten gerade nicht geladen werden.",
+    "demoDataLabel": "Demodaten",
+    "clearFilter": "Filter zurücksetzen",
+    "activeCount": "{count} aktiv",
+    "noActiveYet": "Noch keine aktiven Möglichkeiten.",
+    "beFirstToPost": "Sei der Erste, der in dieser Kategorie postet.",
+    "openRequestsCount": "{count} offene Anfragen",
+    "noActiveRequests": "Keine aktiven Anfragen",
+    "offerYourHelp": "Hilfe anbieten",
+    "requestOfferSplit": "{requests} Anfragen · {offers} Angebote",
+    "nothingLiveYet": "Noch nichts los",
+    "exploreOrPost": "Kategorien durchsuchen oder selbst posten",
+    "latestPrefix": "Neueste: {title}",
+    "urgentCount": "{count} dringend",
+    "viewOpportunities": "Möglichkeiten ansehen",
+    "helpAndEarn": "Helfen & verdienen",
+    "seeOpenRequests": "Offene Anfragen ansehen",
+    "liveActivityHeading": "Was in der Nähe passiert",
+    "liveActivityHint": "Echte Aktivität von Menschen und Unternehmen in der Nähe.",
+    "browseByCategory": "Nach Kategorie durchsuchen"
   },
   "events": {
     "items": {
@@ -2633,5 +2675,89 @@
     "handleTaken": "Dieser Benutzername ist bereits vergeben.",
     "handleSaveError": "Dein Profil wurde gespeichert, aber der Benutzername konnte nicht aktualisiert werden. Versuche es erneut.",
     "accountAction": "Konto & Einstellungen"
+  },
+  "categoryConfig": {
+    "delivery": {
+      "titlePlaceholder": "Ein Paket durch die Stadt liefern",
+      "aiPrompt": "Ich kann Pakete in der Nähe liefern.",
+      "starterPrompt": "Ich brauche Hilfe bei einer Lieferung"
+    },
+    "transport": {
+      "titlePlaceholder": "Jemanden fahren oder abholen",
+      "aiPrompt": "Ich kann dich fahren oder etwas abholen.",
+      "starterPrompt": "Ich brauche eine Fahrt oder Abholung"
+    },
+    "petCare": {
+      "titlePlaceholder": "Ein Haustier ausführen oder betreuen",
+      "aiPrompt": "Ich kann dein Haustier ausführen oder betreuen.",
+      "starterPrompt": "Ich brauche Hilfe mit meinem Haustier"
+    },
+    "teaching": {
+      "aiPrompt": "Ich kann Englisch unterrichten.",
+      "starterPrompt": "Ich suche einen Nachhilfelehrer"
+    },
+    "shopping": {
+      "titlePlaceholder": "Einkäufe erledigen oder eine Besorgung machen",
+      "aiPrompt": "Ich kann Einkäufe oder Besorgungen für dich erledigen.",
+      "starterPrompt": "Ich brauche Hilfe beim Einkaufen"
+    },
+    "technology": {
+      "titlePlaceholder": "Einen Computer reparieren oder WLAN einrichten",
+      "aiPrompt": "Ich kann bei Computern oder WLAN helfen.",
+      "starterPrompt": "Ich brauche technische Hilfe"
+    },
+    "cleaning": {
+      "titlePlaceholder": "Eine Wohnung oder ein Büro reinigen",
+      "aiPrompt": "Ich kann deine Wohnung oder dein Büro reinigen."
+    },
+    "homeRepairs": {
+      "titlePlaceholder": "Möbel aufbauen oder etwas reparieren",
+      "aiPrompt": "Ich kann IKEA-Möbel aufbauen oder Dinge im Haus reparieren.",
+      "starterPrompt": "Ich brauche eine Reparatur"
+    },
+    "gardening": {
+      "titlePlaceholder": "Einen Garten oder Rasen pflegen",
+      "aiPrompt": "Ich kann bei Garten- oder Rasenarbeiten helfen."
+    },
+    "fitness": {
+      "titlePlaceholder": "Personal Training oder einen Trainingsplan anbieten",
+      "aiPrompt": "Ich kann Personal-Training-Sitzungen anbieten."
+    },
+    "food": {
+      "titlePlaceholder": "Ein Essen kochen oder ein Event bewirten",
+      "aiPrompt": "Ich kann ein Essen kochen oder ein kleines Event bewirten."
+    },
+    "creative": {
+      "titlePlaceholder": "Fotografie oder Design anbieten",
+      "aiPrompt": "Ich kann dein Event fotografieren oder beim Design helfen."
+    },
+    "business": {
+      "titlePlaceholder": "Buchhaltung oder geschäftliche Unterstützung anbieten",
+      "aiPrompt": "Ich kann bei Buchhaltung oder geschäftlichen Themen helfen."
+    },
+    "childcare": {
+      "titlePlaceholder": "Kinder babysitten oder betreuen",
+      "aiPrompt": "Ich kann auf deine Kinder aufpassen."
+    },
+    "elderCare": {
+      "titlePlaceholder": "Gesellschaft oder Pflege für eine ältere Person anbieten",
+      "aiPrompt": "Ich kann einer älteren Person Gesellschaft leisten oder helfen."
+    },
+    "events": {
+      "titlePlaceholder": "Bei der Organisation oder Durchführung eines Events helfen",
+      "aiPrompt": "Ich kann bei der Organisation deines Events helfen."
+    },
+    "legal": {
+      "titlePlaceholder": "Rechtsberatung oder Hilfe mit Dokumenten anbieten",
+      "aiPrompt": "Ich kann bei Rechtsberatung oder Dokumenten helfen."
+    },
+    "medical": {
+      "titlePlaceholder": "Gesundheitsbezogene Hilfe in der Nähe anbieten",
+      "aiPrompt": "Ich brauche Hilfe, eine Apotheke oder Klinik zu finden."
+    },
+    "other": {
+      "titlePlaceholder": "Beschreibe, was du brauchst oder anbieten kannst",
+      "aiPrompt": "Ich kann bei etwas anderem helfen."
+    }
   }
 }

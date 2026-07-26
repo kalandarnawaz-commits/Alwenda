@@ -27,6 +27,19 @@ function throwIfError(error, context) {
   throw error;
 }
 
+/** Same observability call throwIfError makes, without the throw — for
+ * lower-stakes public "browse" fetches like fetchListingsByOwner that fail
+ * closed to [] by design (a public profile's listing count silently
+ * degrading to 0 on a transient error is an acceptable, pre-existing
+ * tradeoff), while still reaching observability like every other failed
+ * Supabase call in this file. fetchOpenHelpRequests/fetchPublicListings
+ * (the opportunity-feed sources) deliberately do NOT use this — their
+ * caller needs to tell a real failure apart from a genuinely empty result,
+ * so they throw through throwIfError instead. */
+function logFetchFailure(error, context) {
+  logPilotEvent(OBSERVABILITY_EVENTS.SUPABASE_FAILURE, { context, error }, { severity: "error" });
+}
+
 export class AuthNotConfiguredError extends Error {
   constructor() {
     super("NOT_CONFIGURED");
@@ -545,6 +558,7 @@ export async function createListing({
   title,
   description,
   category,
+  categoryId,
   priceAmount,
   priceCurrency,
   pricePeriod,
@@ -566,6 +580,7 @@ export async function createListing({
       title,
       description: description || null,
       category,
+      category_id: categoryId || null,
       status: "published",
       price_amount: priceAmount || null,
       price_currency: priceCurrency || "EUR",
@@ -773,7 +788,7 @@ export async function fetchMyListings() {
  * Used by both the manual Need Help form and (via the create_hire_request
  * tool in supabase/functions/alwen-chat) Alwen's own request creation, so
  * a request either path creates is the same real, RLS-scoped row. */
-export async function createHelpRequest({ category, description, urgency, area, city }) {
+export async function createHelpRequest({ category, categoryId, description, urgency, area, city }) {
   const supabase = await getClient();
   const user = await getCurrentUser();
   if (!user) throw new AuthNotConfiguredError();
@@ -783,6 +798,7 @@ export async function createHelpRequest({ category, description, urgency, area, 
     .insert({
       requester_user_id: user.id,
       category,
+      category_id: categoryId || null,
       description,
       urgency: urgency || "flexible",
       area: area || null,
@@ -792,6 +808,36 @@ export async function createHelpRequest({ category, description, urgency, area, 
     .single();
   if (error) throwIfError(error, "createHelpRequest");
   return data;
+}
+
+/** Public "what's live right now" feed — every requester's open help_requests,
+ * not just the signed-in user's own (contrast fetchMyHelpRequests below).
+ * RLS already permits this (see "Open help requests are public readable" in
+ * 202607160001_alwen_help_requests.sql), so no auth is required. Column list
+ * excludes nothing sensitive — every selected field is already visible to
+ * anyone via that same public RLS policy. Bounded, deterministic. Throws
+ * through the same throwIfError choke point as every other query in this
+ * file (rather than swallowing) so the caller (main.js's opportunity-feed
+ * loader) can tell "query genuinely failed" apart from "loaded, zero rows"
+ * and show a retry action instead of a false empty state. `!isSupabaseConfigured()`
+ * is the one case that still resolves to [] rather than throwing — there is
+ * no backend to query at all, which the caller treats as "no real data
+ * available" rather than a transient failure. */
+const OPEN_HELP_REQUESTS_DEFAULT_LIMIT = 30;
+const OPEN_HELP_REQUESTS_MAX_LIMIT = 100;
+
+export async function fetchOpenHelpRequests({ limit = OPEN_HELP_REQUESTS_DEFAULT_LIMIT } = {}) {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = await getClient();
+  const boundedLimit = Math.min(Math.max(1, Number(limit) || OPEN_HELP_REQUESTS_DEFAULT_LIMIT), OPEN_HELP_REQUESTS_MAX_LIMIT);
+  const { data, error } = await supabase
+    .from("help_requests")
+    .select("id, category, category_id, description, urgency, area, city, status, created_at")
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(boundedLimit);
+  if (error) throwIfError(error, "fetchOpenHelpRequests");
+  return data || [];
 }
 
 export async function fetchMyHelpRequests() {
@@ -953,7 +999,39 @@ export async function fetchListingsByOwner(ownerId, limit = 3) {
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (error) return [];
+  if (error) {
+    logFetchFailure(error, "fetchListingsByOwner");
+    return [];
+  }
+  return data || [];
+}
+
+/** Public "what's live right now" feed over listings — anyone's published,
+ * trader-eligible listings (RLS: "Eligible published listings are public
+ * readable", 202607180004_trader_verification.sql), not just one owner's
+ * (contrast fetchListingsByOwner above). Used by Live Around You (Part 4)
+ * to combine with fetchOpenHelpRequests into one broader activity feed.
+ * dbCategories narrows to the listings.category enum values relevant to a
+ * given life-category (CATEGORY_CONFIG[id].listingDbCategory) — omit to
+ * fetch across all categories. Bounded, deterministic. Throws through
+ * throwIfError like fetchOpenHelpRequests, for the same reason: the caller
+ * needs to distinguish a real query failure from a genuinely empty result. */
+const PUBLIC_LISTINGS_DEFAULT_LIMIT = 30;
+const PUBLIC_LISTINGS_MAX_LIMIT = 100;
+
+export async function fetchPublicListings({ dbCategories = null, limit = PUBLIC_LISTINGS_DEFAULT_LIMIT } = {}) {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = await getClient();
+  const boundedLimit = Math.min(Math.max(1, Number(limit) || PUBLIC_LISTINGS_DEFAULT_LIMIT), PUBLIC_LISTINGS_MAX_LIMIT);
+  let query = supabase
+    .from("listings")
+    .select("id, title, description, category, category_id, price_amount, price_period, price_currency, neighbourhood, location_label, status, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(boundedLimit);
+  if (Array.isArray(dbCategories) && dbCategories.length) query = query.in("category", dbCategories);
+  const { data, error } = await query;
+  if (error) throwIfError(error, "fetchPublicListings");
   return data || [];
 }
 
