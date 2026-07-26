@@ -1,0 +1,37 @@
+-- Hotfix: compute_trust_score() is directly executable by client roles,
+-- contradicting its own design intent (public.trust_scores' write path is
+-- meant to run ONLY through refresh_trust_score's authorization check).
+--
+-- Root cause: 202607240001_profile_social_identity.sql revoked EXECUTE
+-- from PUBLIC on this function, which is normally sufficient to lock a
+-- function down to no client role. But 202607180005_default_privileges.sql
+-- (applied earlier) set:
+--   alter default privileges in schema public grant all on functions
+--     to anon, authenticated, service_role;
+-- That is a standing rule, not a one-time grant — every function created
+-- afterward in the public schema automatically receives an EXECUTE grant
+-- named directly to anon/authenticated/service_role, independent of and
+-- unaffected by a `revoke ... from public` on that same function. Since
+-- compute_trust_score was created after the default-privileges migration,
+-- it silently kept direct anon/authenticated EXECUTE despite the revoke,
+-- letting any client call it for an arbitrary p_user_id and read that
+-- user's emailVerified/accountAgeDays/listingCount/reviewCount/avgRating/
+-- identityVerified/traderVerified — confirmed live via direct RLS probes
+-- against the production database on 2026-07-26.
+--
+-- Fix: revoke the two specific role grants directly (revoking from PUBLIC
+-- alone does not touch them). postgres and service_role keep EXECUTE,
+-- unchanged. refresh_trust_score is unaffected: it is itself SECURITY
+-- DEFINER, so its internal call to compute_trust_score() runs under
+-- refresh_trust_score's own owning role, not the original caller's role.
+--
+-- Scope: this migration changes ONLY function-execute grants. No table,
+-- column, RLS policy, function body, SECURITY DEFINER setting, trust-score
+-- calculation logic, or refresh_trust_score permission is touched.
+--
+-- Rollback approach: (do not run except deliberately, and only if a future
+-- feature requires direct client access to compute_trust_score again)
+--   grant execute on function public.compute_trust_score(uuid) to anon, authenticated;
+
+revoke execute on function public.compute_trust_score(uuid) from anon;
+revoke execute on function public.compute_trust_score(uuid) from authenticated;
