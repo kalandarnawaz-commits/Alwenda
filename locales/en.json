@@ -837,6 +837,14 @@
       "fuelPetrolNearYou": "Fuel & Petrol Near You",
       "fuelPetrolNearYouHint": "Petrol stations to fill up and refuel."
     },
+    "feed": {
+      "sectionTitle": "From your city",
+      "sectionHint": "The latest from Marketplace and Community, together.",
+      "badgeMarketplace": "Marketplace",
+      "badgeCommunity": "Community",
+      "emptyTitle": "Nothing to show yet",
+      "emptyHint": "New Marketplace listings and Community posts will appear here."
+    },
     "intent": {
       "intentNeedPlumber": "I need a plumber",
       "intentSellBicycle": "Sell my bicycle",

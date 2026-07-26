@@ -837,6 +837,14 @@
       "fuelPetrolNearYou": "Tankstellen in deiner Nähe",
       "fuelPetrolNearYouHint": "Tankstellen zum Auftanken."
     },
+    "feed": {
+      "sectionTitle": "Aus deiner Stadt",
+      "sectionHint": "Das Neueste aus Marktplatz und Community, zusammen.",
+      "badgeMarketplace": "Marktplatz",
+      "badgeCommunity": "Community",
+      "emptyTitle": "Noch nichts zu zeigen",
+      "emptyHint": "Neue Marktplatz-Angebote und Community-Beiträge erscheinen hier."
+    },
     "intent": {
       "intentNeedPlumber": "Ich brauche einen Klempner",
       "intentSellBicycle": "Mein Fahrrad verkaufen",

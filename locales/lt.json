@@ -837,6 +837,14 @@
       "fuelPetrolNearYou": "Degalinės netoliese",
       "fuelPetrolNearYouHint": "Degalinės automobiliui užpildyti."
     },
+    "feed": {
+      "sectionTitle": "Iš jūsų miesto",
+      "sectionHint": "Naujausi Rinkos ir Bendruomenės įrašai kartu.",
+      "badgeMarketplace": "Rinka",
+      "badgeCommunity": "Bendruomenė",
+      "emptyTitle": "Kol kas nieko nėra",
+      "emptyHint": "Čia atsiras naujausi Rinkos skelbimai ir Bendruomenės įrašai."
+    },
     "intent": {
       "intentNeedPlumber": "Reikia santechniko",
       "intentSellBicycle": "Parduoti dviratį",

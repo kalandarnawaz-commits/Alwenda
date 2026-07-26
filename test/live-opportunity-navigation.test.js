@@ -30,16 +30,21 @@ function extractFunction(source, name) {
 // stays in the file — it now backs the fixture-fallback path
 // (fixtureOpportunitiesForSurface) instead of the home rails directly, per
 // the "no premature deletion" rule for this branch.
-test("home rails are category hubs, not individual mock cards", () => {
+//
+// Home redesign (see test/home-feed.test.js): renderEarnToday and
+// renderCategoryHubGrid were removed entirely — Earn Today's dedicated
+// Home rail is gone (the underlying "earn" surface itself is unaffected
+// and still reachable via Contribute's opportunities entry point). Live
+// Around You survives as a premium single-card-peek carousel instead of a
+// category hub grid.
+test("Live Around You is a category-driven carousel, not individual mock cards or a grid", () => {
   const liveRail = extractFunction(main, "renderLiveAroundYou");
-  const earnRail = extractFunction(main, "renderEarnToday");
   assert.match(liveRail, /categoryHubIdsSortedByCount\("live"\)/);
-  assert.match(liveRail, /renderCategoryHubGrid\(categoryIds, "live"\)/);
-  assert.match(earnRail, /categoryHubIdsSortedByCount\("earn"\)/);
-  assert.match(earnRail, /renderCategoryHubGrid\(categoryIds, "earn"\)/);
-  // Neither rail renders individual opportunity cards directly anymore.
+  assert.match(liveRail, /renderCarousel\(/);
+  assert.doesNotMatch(main, /function renderEarnToday\(/, "renderEarnToday must stay removed");
+  assert.doesNotMatch(main, /function renderCategoryHubGrid\(/, "renderCategoryHubGrid must stay removed");
+  // The rail does not render individual opportunity cards directly.
   assert.doesNotMatch(liveRail, /<a class="live-card"/);
-  assert.doesNotMatch(earnRail, /<a class="earn-card"/);
 });
 
 test("HOME_LIVE_OPPORTUNITY_IDS/HOME_EARN_OPPORTUNITY_IDS still back the fixture-fallback split", () => {
