@@ -7391,8 +7391,8 @@ const HOME_FEED_SOURCE_ADAPTERS = {
     enabled: true,
     readable: true,
     timestampAvailable: true,
-    destination: true, // renderRealListingDetail() gives every real listing a working, honest "Open" target — see findListingRecordById
-    privacySafeFields: true, // fetchPublicListings selects only public listing columns, no seller identity
+    destination: true, // renderListingDetail()'s remote path (fetchListingById + renderListingDetailBody) gives every real listing a working, honest "Open" target
+    privacySafeFields: true, // fetchPublicListings/fetchListingById select only public listing/profile columns, never private contact fields
     interactions: { open: true, share: true, like: false, comment: false, save: false },
     badge: { labelKey: "home.feed.badgeMarketplace", tone: "marketplace" },
     fetchItems: () => state.opportunityFeed.listings.map((raw) => ({ type: "marketplace", id: raw.id, createdAt: raw.created_at, raw }))
@@ -7478,9 +7478,10 @@ function buildUnifiedHomeFeed() {
 
 /** Thin Marketplace card for the Home feed — Open + Share only (no Save:
  * state.savedListingIds is non-durable, see the adapter contract above).
- * Root is click-through to the real detail page (renderRealListingDetail),
- * matching the existing data-view="listingDetail" navigation convention
- * used by every other listing card in this file. */
+ * Root is click-through to the real detail page (renderListingDetail,
+ * the same canonical route/body every other listing card uses), matching
+ * the existing data-view="listingDetail" navigation convention used by
+ * every other listing card in this file. */
 function renderHomeFeedListingItem(raw) {
   const categoryId = normalizeOpportunityCategory(raw);
   const categoryLabelText = t(categoryConfigFor(categoryId).labelKey);
