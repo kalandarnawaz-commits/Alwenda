@@ -1099,7 +1099,8 @@
     "suggestionIncompleteProfile": "Nes jūsų profilis dar nebaigtas",
     "suggestionIncompleteProfileDetail": "Baigtas profilis padeda specialistams greičiau jumis pasitikėti.",
     "suggestionCompleteCta": "Užbaigti profilį",
-    "suggestionViewCta": "Peržiūrėti"
+    "suggestionViewCta": "Peržiūrėti",
+    "categoryStartersLabel": "Arba pradėkite nuo kategorijos"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Procesai už jus",
@@ -2451,7 +2452,21 @@
     "clearFilter": "Išvalyti filtrą",
     "activeCount": "{count} aktyvūs",
     "noActiveYet": "Kol kas šioje kategorijoje aktyvių pasiūlymų nėra.",
-    "beFirstToPost": "Būkite pirmas, paskelbęs šioje kategorijoje."
+    "beFirstToPost": "Būkite pirmas, paskelbęs šioje kategorijoje.",
+    "openRequestsCount": "{count} atviri prašymai",
+    "noActiveRequests": "Kol kas aktyvių prašymų nėra",
+    "offerYourHelp": "Pasiūlykite pagalbą",
+    "requestOfferSplit": "{requests} prašymai · {offers} pasiūlymai",
+    "nothingLiveYet": "Kol kas nieko gyvo",
+    "exploreOrPost": "Naršykite kategorijas arba paskelbkite patys",
+    "latestPrefix": "Naujausia: {title}",
+    "urgentCount": "{count} skubūs",
+    "viewOpportunities": "Peržiūrėti galimybes",
+    "helpAndEarn": "Padėkite ir uždirbkite",
+    "seeOpenRequests": "Žiūrėti atvirus prašymus",
+    "liveActivityHeading": "Kas vyksta netoliese",
+    "liveActivityHint": "Reali veikla iš žmonių ir įmonių netoliese.",
+    "browseByCategory": "Naršyti pagal kategoriją"
   },
   "events": {
     "items": {
@@ -2664,26 +2679,32 @@
   "categoryConfig": {
     "delivery": {
       "titlePlaceholder": "Pristatyti siuntinį per miestą",
-      "aiPrompt": "Galiu pristatyti siuntinius netoliese."
+      "aiPrompt": "Galiu pristatyti siuntinius netoliese.",
+      "starterPrompt": "Man reikia pagalbos su pristatymu"
     },
     "transport": {
       "titlePlaceholder": "Pavežti ar paimti kažką",
-      "aiPrompt": "Galiu pavežti arba ką nors paimti."
+      "aiPrompt": "Galiu pavežti arba ką nors paimti.",
+      "starterPrompt": "Man reikia pavežimo ar paėmimo"
     },
     "petCare": {
       "titlePlaceholder": "Pavedžioti ar prižiūrėti gyvūną",
-      "aiPrompt": "Galiu pavedžioti arba prižiūrėti jūsų augintinį."
+      "aiPrompt": "Galiu pavedžioti arba prižiūrėti jūsų augintinį.",
+      "starterPrompt": "Man reikia pagalbos su augintiniu"
     },
     "teaching": {
-      "aiPrompt": "Galiu mokyti anglų kalbos."
+      "aiPrompt": "Galiu mokyti anglų kalbos.",
+      "starterPrompt": "Ieškau korepetitoriaus"
     },
     "shopping": {
       "titlePlaceholder": "Atnešti prekes ar atlikti pavedimą",
-      "aiPrompt": "Galiu atnešti prekes arba atlikti pavedimą."
+      "aiPrompt": "Galiu atnešti prekes arba atlikti pavedimą.",
+      "starterPrompt": "Man reikia pagalbos apsiperkant"
     },
     "technology": {
       "titlePlaceholder": "Sutvarkyti kompiuterį ar wifi",
-      "aiPrompt": "Galiu padėti su kompiuteriu ar wifi."
+      "aiPrompt": "Galiu padėti su kompiuteriu ar wifi.",
+      "starterPrompt": "Man reikia pagalbos su technika"
     },
     "cleaning": {
       "titlePlaceholder": "Išvalyti butą ar biurą",
@@ -2691,7 +2712,8 @@
     },
     "homeRepairs": {
       "titlePlaceholder": "Surinkti baldus ar ką nors pataisyti",
-      "aiPrompt": "Galiu surinkti IKEA baldus ar pataisyti namų daiktus."
+      "aiPrompt": "Galiu surinkti IKEA baldus ar pataisyti namų daiktus.",
+      "starterPrompt": "Man reikia ką nors sutaisyti"
     },
     "gardening": {
       "titlePlaceholder": "Sutvarkyti sodą ar veją",

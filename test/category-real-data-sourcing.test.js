@@ -108,9 +108,14 @@ test("real opportunity cards never claim a distance or fabricate a price", () =>
 });
 
 test("category hub cards give screen readers a full-sentence label, not a bare number", () => {
+  // Round 2 (see test/category-refinement-round2.test.js) replaced the
+  // single bare-count line with a richer primary/secondary summary —
+  // this test only re-checks the accessibility contract still holds:
+  // the accessible label is built from real, non-empty summary lines,
+  // not a bare number.
   const fn = extractFunction(main, "renderCategoryHubCard");
-  assert.match(fn, /aria-label="\$\{escapeHtml/);
-  assert.match(fn, /opportunities\.activeCount/);
+  assert.match(fn, /aria-label="\$\{escapeHtml\(accessibleLabel\)\}"/);
+  assert.match(fn, /const accessibleLabel = \[label, primaryLine, secondaryLine\]\.filter\(Boolean\)\.join\(" — "\);/);
 });
 
 test("public opportunity fetch functions are bounded, deterministic, and column-scoped", () => {

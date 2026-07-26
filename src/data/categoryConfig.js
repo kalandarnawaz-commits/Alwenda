@@ -38,6 +38,12 @@ const CATEGORY_ORDER = [
   "other"
 ];
 
+/** Curated subset for Ask Alwen's proactive starter row (Round 2, Part 5)
+ * — a fixed 7, not the full 19-category grid ("conversation starters, not
+ * another full category browser"). Ordering is deliberate, not alphabetic.
+ * References ids already defined above rather than a second taxonomy. */
+const ALWEN_STARTER_CATEGORY_IDS = ["delivery", "transport", "petCare", "teaching", "homeRepairs", "shopping", "technology"];
+
 export const CATEGORY_CONFIG = Object.freeze({
   delivery: {
     icon: "📦",
@@ -49,7 +55,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: null,
-    posting: { titlePlaceholderKey: "categoryConfig.delivery.titlePlaceholder", aiPromptKey: "categoryConfig.delivery.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
+    posting: { titlePlaceholderKey: "categoryConfig.delivery.titlePlaceholder", aiPromptKey: "categoryConfig.delivery.aiPrompt", starterPromptKey: "categoryConfig.delivery.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
   },
   transport: {
     icon: "🚗",
@@ -61,7 +67,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: "Automobile",
-    posting: { titlePlaceholderKey: "categoryConfig.transport.titlePlaceholder", aiPromptKey: "categoryConfig.transport.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [5, 10, 25, 50] }
+    posting: { titlePlaceholderKey: "categoryConfig.transport.titlePlaceholder", aiPromptKey: "categoryConfig.transport.aiPrompt", starterPromptKey: "categoryConfig.transport.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [5, 10, 25, 50] }
   },
   petCare: {
     icon: "🐾",
@@ -73,7 +79,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: "Pet Services",
-    posting: { titlePlaceholderKey: "categoryConfig.petCare.titlePlaceholder", aiPromptKey: "categoryConfig.petCare.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10] }
+    posting: { titlePlaceholderKey: "categoryConfig.petCare.titlePlaceholder", aiPromptKey: "categoryConfig.petCare.aiPrompt", starterPromptKey: "categoryConfig.petCare.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10] }
   },
   teaching: {
     icon: "📚",
@@ -85,7 +91,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: "Education",
-    posting: { titlePlaceholderKey: "createListing.intentTeachTitlePlaceholder", aiPromptKey: "categoryConfig.teaching.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10, 25] }
+    posting: { titlePlaceholderKey: "createListing.intentTeachTitlePlaceholder", aiPromptKey: "categoryConfig.teaching.aiPrompt", starterPromptKey: "categoryConfig.teaching.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10, 25] }
   },
   shopping: {
     icon: "🛍️",
@@ -97,7 +103,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "buy-sell",
     listingDbCategory: "buy_sell",
     cityEntityCategory: "Shops",
-    posting: { titlePlaceholderKey: "categoryConfig.shopping.titlePlaceholder", aiPromptKey: "categoryConfig.shopping.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
+    posting: { titlePlaceholderKey: "categoryConfig.shopping.titlePlaceholder", aiPromptKey: "categoryConfig.shopping.aiPrompt", starterPromptKey: "categoryConfig.shopping.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
   },
   technology: {
     icon: "💻",
@@ -109,7 +115,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: null,
-    posting: { titlePlaceholderKey: "categoryConfig.technology.titlePlaceholder", aiPromptKey: "categoryConfig.technology.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10, 25] }
+    posting: { titlePlaceholderKey: "categoryConfig.technology.titlePlaceholder", aiPromptKey: "categoryConfig.technology.aiPrompt", starterPromptKey: "categoryConfig.technology.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "hourly", distanceOptions: [1, 5, 10, 25] }
   },
   cleaning: {
     icon: "🧹",
@@ -133,7 +139,7 @@ export const CATEGORY_CONFIG = Object.freeze({
     marketplaceCategoryId: "services",
     listingDbCategory: "local_services",
     cityEntityCategory: "Home Services",
-    posting: { titlePlaceholderKey: "categoryConfig.homeRepairs.titlePlaceholder", aiPromptKey: "categoryConfig.homeRepairs.aiPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
+    posting: { titlePlaceholderKey: "categoryConfig.homeRepairs.titlePlaceholder", aiPromptKey: "categoryConfig.homeRepairs.aiPrompt", starterPromptKey: "categoryConfig.homeRepairs.starterPrompt", requiredFields: ["title", "description", "price"], pricingModel: "fixed", distanceOptions: [1, 5, 10] }
   },
   gardening: {
     icon: "🌱",
@@ -273,6 +279,11 @@ export const CATEGORY_CONFIG = Object.freeze({
  * callers can't mutate the shared source. */
 export function orderedCategoryIds() {
   return CATEGORY_ORDER.slice();
+}
+
+/** Fresh copy each call, same discipline as orderedCategoryIds() above. */
+export function orderedStarterCategoryIds() {
+  return ALWEN_STARTER_CATEGORY_IDS.slice();
 }
 
 export function categoryConfigFor(id) {

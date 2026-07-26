@@ -1099,7 +1099,8 @@
     "suggestionIncompleteProfile": "Because your profile isn't complete yet",
     "suggestionIncompleteProfileDetail": "A complete profile helps professionals trust you faster.",
     "suggestionCompleteCta": "Complete profile",
-    "suggestionViewCta": "View"
+    "suggestionViewCta": "View",
+    "categoryStartersLabel": "Or start with a category"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Done-for-you workflows",
@@ -2451,7 +2452,21 @@
     "clearFilter": "Clear filter",
     "activeCount": "{count} active",
     "noActiveYet": "No active opportunities yet.",
-    "beFirstToPost": "Be the first to post in this category."
+    "beFirstToPost": "Be the first to post in this category.",
+    "openRequestsCount": "{count} open requests",
+    "noActiveRequests": "No active requests",
+    "offerYourHelp": "Offer your help",
+    "requestOfferSplit": "{requests} requests · {offers} offers",
+    "nothingLiveYet": "Nothing live yet",
+    "exploreOrPost": "Explore categories or post something",
+    "latestPrefix": "Latest: {title}",
+    "urgentCount": "{count} urgent",
+    "viewOpportunities": "View opportunities",
+    "helpAndEarn": "Help & earn",
+    "seeOpenRequests": "See open requests",
+    "liveActivityHeading": "What's happening nearby",
+    "liveActivityHint": "Real activity from people and businesses nearby.",
+    "browseByCategory": "Browse by category"
   },
   "events": {
     "items": {
@@ -2664,26 +2679,32 @@
   "categoryConfig": {
     "delivery": {
       "titlePlaceholder": "Deliver a package across town",
-      "aiPrompt": "I can deliver packages nearby."
+      "aiPrompt": "I can deliver packages nearby.",
+      "starterPrompt": "I need help with a delivery"
     },
     "transport": {
       "titlePlaceholder": "Give someone a ride or pickup",
-      "aiPrompt": "I can drive you or pick something up."
+      "aiPrompt": "I can drive you or pick something up.",
+      "starterPrompt": "I need a ride or pickup"
     },
     "petCare": {
       "titlePlaceholder": "Walk or look after a pet",
-      "aiPrompt": "I can walk or look after your pet."
+      "aiPrompt": "I can walk or look after your pet.",
+      "starterPrompt": "I need help with my pet"
     },
     "teaching": {
-      "aiPrompt": "I can teach English."
+      "aiPrompt": "I can teach English.",
+      "starterPrompt": "I'm looking for a tutor"
     },
     "shopping": {
       "titlePlaceholder": "Pick up groceries or run an errand",
-      "aiPrompt": "I can pick up groceries or run an errand."
+      "aiPrompt": "I can pick up groceries or run an errand.",
+      "starterPrompt": "I need help with shopping"
     },
     "technology": {
       "titlePlaceholder": "Fix a computer or set up wifi",
-      "aiPrompt": "I can help with computers or wifi."
+      "aiPrompt": "I can help with computers or wifi.",
+      "starterPrompt": "I need tech help"
     },
     "cleaning": {
       "titlePlaceholder": "Clean an apartment or office",
@@ -2691,7 +2712,8 @@
     },
     "homeRepairs": {
       "titlePlaceholder": "Assemble furniture or fix something",
-      "aiPrompt": "I can assemble IKEA furniture or fix things around the house."
+      "aiPrompt": "I can assemble IKEA furniture or fix things around the house.",
+      "starterPrompt": "I need something repaired"
     },
     "gardening": {
       "titlePlaceholder": "Tidy a garden or lawn",

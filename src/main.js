@@ -116,10 +116,11 @@ import {
 } from "./services/auth/supabaseClient.js?v=category-taxonomy-1";
 import {
   orderedCategoryIds,
+  orderedStarterCategoryIds,
   categoryConfigFor,
   classifyTextToCategory,
   normalizeOpportunityCategory
-} from "./data/categoryConfig.js?v=category-taxonomy-1";
+} from "./data/categoryConfig.js?v=category-taxonomy-2";
 import { sendAlwenMessage } from "./services/alwenChatClient.js?v=alwen-chat-4";
 import { ALWEN_INTENTS, classifyAlwenIntent, wantsOpenNowOnly } from "./services/alwen/intentRouter.js?v=alwen-2-0-1";
 import {
@@ -3875,6 +3876,33 @@ function alwenLanguageLabel(code) {
  * placeholder for something unbuilt. */
 const ALWEN_CONVERSATION_EXAMPLES = ["alwen.examplePlace", "alwen.exampleHire", "alwen.exampleTranslate", "alwen.exampleLiveTranslate"];
 
+/** Round 2, Part 5 — proactive category starters shown before the user
+ * types anything. Deliberately a small, curated row (orderedStarterCategoryIds,
+ * 7 categories), not the full CATEGORY_CONFIG grid — "conversation
+ * starters, not another full category browser". Reuses the existing
+ * ALWEN_CONVERSATION_EXAMPLES click convention (submitAlwenConversationMessage
+ * immediately, same as the 4 capability examples above) rather than a new
+ * pattern. Naturally collapses once the conversation begins:
+ * renderAlwenConversationEmptyState() (and everything in it) only ever
+ * renders when convo.messages.length === 0 — see its one call site. */
+function renderAlwenCategoryStarterRow() {
+  const ids = orderedStarterCategoryIds();
+  return `
+    <div class="alwen-category-starters">
+      <p class="alwen-category-starters-label">${t("alwen.categoryStartersLabel")}</p>
+      <div class="alwen-category-starter-row" role="list">
+        ${ids.map((id) => {
+          const config = categoryConfigFor(id);
+          return `<button type="button" class="alwen-category-starter" data-alwen-category-starter="${id}" aria-label="${escapeHtml(t(config.labelKey))}">
+            <span aria-hidden="true">${config.icon}</span>
+            <span>${escapeHtml(t(config.labelKey))}</span>
+          </button>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderAlwenConversationEmptyState() {
   return `
     <div class="alwen-conversation-empty">
@@ -3884,6 +3912,7 @@ function renderAlwenConversationEmptyState() {
       <div class="alwen-example-row">
         ${ALWEN_CONVERSATION_EXAMPLES.map((key) => `<button type="button" data-alwen-example-prompt="${key}">${t(key)}</button>`).join("")}
       </div>
+      ${renderAlwenCategoryStarterRow()}
     </div>
   `;
 }
@@ -4849,15 +4878,22 @@ function renderOpportunityFeedStatusNote(usingFixtures) {
   return "";
 }
 
+/** Round 2: Live Around You leads with a compact recent-activity feed
+ * (real records, most-recent-first, across every category) before the
+ * category grid — so this reads as a live city activity surface, not a
+ * second copy of Earn Today's category menu. The grid itself stays (Part
+ * 4 explicitly keeps category grouping), just demoted to "browse by
+ * category" underneath the activity feed. */
 function renderLiveAroundYou() {
   if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
   const usingFixtures = shouldUseFixtureOpportunities();
   const categoryIds = categoryHubIdsSortedByCount("live");
+  const activityFeed = renderRecentActivityFeed();
   return renderLivingSection(
     "home.rail.liveAroundYou",
     "home.rail.liveAroundYouHint",
     "liveOpportunities",
-    `${renderOpportunityFeedStatusNote(usingFixtures)}${renderCategoryHubGrid(categoryIds, "live")}`
+    `${renderOpportunityFeedStatusNote(usingFixtures)}${activityFeed}${activityFeed ? `<p class="live-activity-browse-label">${t("opportunities.browseByCategory")}</p>` : ""}${renderCategoryHubGrid(categoryIds, "live")}`
   );
 }
 
@@ -7276,23 +7312,125 @@ function categoryHubIdsSortedByCount(surface) {
   return [...ids].sort((a, b) => counts.get(b) - counts.get(a));
 }
 
+function truncateForCard(text, max = 42) {
+  const trimmed = String(text || "").trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+/** One real record's display title, reused from renderRealOpportunityCard's
+ * own helper — works identically for a real listing (has .title), a real
+ * help_request (falls back to its own description), and a LIVE_OPPORTUNITIES
+ * fixture item (also has .title, so the isListing branch applies). */
+function categoryHubRecordTitle(record) {
+  const isListing = "title" in record && Boolean(record.title);
+  return realOpportunityCardTitle(record, isListing);
+}
+
+/** Live Around You's recent-activity feed (Part 4) — a handful of the
+ * most recent real records across every category, combined and re-sorted
+ * by created_at (realOpportunityRecordsForSurface concatenates
+ * help_requests then listings, each already sorted individually by the
+ * SQL query, but the concatenation itself isn't chronological — this
+ * fixes that for display purposes only, no mutation of the source
+ * arrays). Fixture mode has no created_at to sort by, so it just takes
+ * the curated subset's own order. Every field shown (category label,
+ * title/description) is already publicly selected and displayed
+ * elsewhere (renderRealOpportunityCard) — no new field exposure, no
+ * addresses/contact info/owner-only data. */
+function recentLiveActivityItems(limit = 3) {
+  const usingFixtures = shouldUseFixtureOpportunities();
+  const records = usingFixtures ? fixtureOpportunitiesForSurface("live") : realOpportunityRecordsForSurface("live");
+  if (usingFixtures) return records.slice(0, limit);
+  return [...records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, limit);
+}
+
+function renderRecentActivityFeedItem(record) {
+  const categoryId = normalizeOpportunityCategory(record);
+  const categoryLabel = t(categoryConfigFor(categoryId).labelKey);
+  const title = truncateForCard(categoryHubRecordTitle(record), 52);
+  return `<li class="live-activity-feed-item"><span class="live-activity-feed-category">${escapeHtml(categoryLabel)}</span><span class="live-activity-feed-title">${escapeHtml(title)}</span></li>`;
+}
+
+/** Empty string (not an empty-state message) when there's nothing to
+ * show — the category grid right below already carries the honest
+ * "Nothing live yet" messaging per card; a second empty state here would
+ * be redundant. */
+function renderRecentActivityFeed() {
+  const items = recentLiveActivityItems(3);
+  if (!items.length) return "";
+  return `
+    <ul class="live-activity-feed" aria-label="${t("home.rail.liveAroundYou")}">
+      ${items.map(renderRecentActivityFeedItem).join("")}
+    </ul>
+  `;
+}
+
+/** Every number here traces to opportunityRecordsForCategory()'s real
+ * array (or the labelled fixture fallback) — never invented. requestCount/
+ * offerCount only differ from `count` on the "live" surface, which mixes
+ * help_requests (isListing false) and listings (isListing true); on
+ * "earn" every record is already help_requests-only, so offerCount is
+ * always 0 there (Part 3: Earn Today never mixes in service offers).
+ * urgentCount is 0 unless the record set actually carries urgency==="today"
+ * — never shown when the source doesn't genuinely represent it. */
+function categoryHubCardSummary(categoryId, surface) {
+  const records = opportunityRecordsForCategory(categoryId, surface);
+  let offerCount = 0;
+  let urgentCount = 0;
+  for (const record of records) {
+    const isListing = "title" in record && Boolean(record.title);
+    if (isListing) offerCount += 1;
+    if (record.urgency === "today") urgentCount += 1;
+  }
+  const requestCount = records.length - offerCount;
+  return {
+    count: records.length,
+    requestCount,
+    offerCount,
+    urgentCount,
+    latestTitle: records.length ? truncateForCard(categoryHubRecordTitle(records[0])) : null
+  };
+}
+
 /** Generalizes renderExploreHubCard's "destination card with real count
  * metadata" pattern (main.js, renderExploreHubCard) to the CATEGORY_CONFIG
  * taxonomy — same CATEGORY_TILE_TONES cycling, same real-emoji register as
  * renderCategoryTileGrid, its own .category-hub-card/.category-hub-grid CSS
  * (referencing the same design tokens as .explore-hub-card, not a copy).
- * A zero-count category still renders (it's a fixed navigation surface,
- * not filtered by data — see Part 3/8 of the plan) with an honest "0
- * active" count rather than being hidden or showing an invented number. */
-function renderCategoryHubCard(categoryId, count, surface, index) {
+ * Round 2: cards now surface a real activity summary (open-request count,
+ * or a request/offer split on the "live" surface, plus the latest real
+ * record's title) instead of a bare count, so the grid reads as live city
+ * activity rather than a plain navigation menu. A zero-count category
+ * still renders (fixed navigation surface, not filtered by data) with an
+ * honest empty-state line — never hidden, never an invented number. */
+function renderCategoryHubCard(categoryId, surface, index) {
   const config = categoryConfigFor(categoryId);
   const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
   const label = t(config.labelKey);
+  const summary = categoryHubCardSummary(categoryId, surface);
+  const isEmpty = summary.count === 0;
+
+  let primaryLine;
+  let secondaryLine = null;
+  if (surface === "live") {
+    primaryLine = isEmpty ? t("opportunities.nothingLiveYet") : t("opportunities.requestOfferSplit", { requests: summary.requestCount, offers: summary.offerCount });
+    secondaryLine = isEmpty ? t("opportunities.exploreOrPost") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
+  } else {
+    primaryLine = isEmpty ? t("opportunities.noActiveRequests") : t("opportunities.openRequestsCount", { count: summary.requestCount });
+    secondaryLine = isEmpty ? t("opportunities.offerYourHelp") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
+  }
+  const urgentBadge = !isEmpty && summary.urgentCount > 0 ? `<span class="category-hub-card-urgent">${escapeHtml(t("opportunities.urgentCount", { count: summary.urgentCount }))}</span>` : "";
+  const accessibleLabel = [label, primaryLine, secondaryLine].filter(Boolean).join(" — ");
+
   return `
-    <button type="button" class="category-hub-card tone-${tone} ${count === 0 ? "is-empty" : ""}" data-category-hub-card="${categoryId}" data-category-hub-surface="${surface}" aria-label="${escapeHtml(`${label} — ${t("opportunities.activeCount", { count })}`)}">
+    <button type="button" class="category-hub-card tone-${tone} ${isEmpty ? "is-empty" : ""}" data-category-hub-card="${categoryId}" data-category-hub-surface="${surface}" aria-label="${escapeHtml(accessibleLabel)}">
       <span class="category-hub-card-icon" aria-hidden="true">${config.icon}</span>
       <span class="category-hub-card-name">${escapeHtml(label)}</span>
-      <span class="category-hub-card-meta" aria-hidden="true">${t("opportunities.activeCount", { count })}</span>
+      <span class="category-hub-card-meta" aria-hidden="true">
+        <span class="category-hub-card-primary">${escapeHtml(primaryLine)}</span>
+        ${secondaryLine ? `<span class="category-hub-card-secondary">${escapeHtml(secondaryLine)}</span>` : ""}
+        ${urgentBadge}
+      </span>
       <span class="category-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
     </button>
   `;
@@ -7301,7 +7439,7 @@ function renderCategoryHubCard(categoryId, count, surface, index) {
 function renderCategoryHubGrid(categoryIds, surface) {
   return `
     <div class="category-hub-grid" role="list">
-      ${categoryIds.map((id, index) => renderCategoryHubCard(id, opportunityCountForCategory(id, surface), surface, index)).join("")}
+      ${categoryIds.map((id, index) => renderCategoryHubCard(id, surface, index)).join("")}
     </div>
   `;
 }
@@ -7538,9 +7676,9 @@ function renderLiveOpportunities() {
         <label>${t("common.distance")}<select data-opportunity-distance><option value="all" ${filter.distance === "all" ? "selected" : ""}>${t("common.anyDistance")}</option>${[1, 2, 5].map((distance) => `<option value="${distance}" ${filter.distance === String(distance) ? "selected" : ""}>${t("common.withinDistance", { distance })}</option>`).join("")}</select></label>
       </div>` : ""}
     </div>
-    <div class="opportunity-feed-heading"><div><h2>${t("common.whatCanYouEarnToday")}</h2><p>${t("common.freshVerifiedRequests")}</p></div><span>${t("opportunities.activeCount", { count })}</span></div>
+    <div class="opportunity-feed-heading"><div><h2>${filter.surface === "live" ? t("opportunities.liveActivityHeading") : t("common.whatCanYouEarnToday")}</h2><p>${filter.surface === "live" ? t("opportunities.liveActivityHint") : t("common.freshVerifiedRequests")}</p></div><span>${t("opportunities.activeCount", { count })}</span></div>
     <div class="opportunity-feed">${count ? (usingFixtures ? items.map(renderOpportunityCard).join("") : items.map(renderRealOpportunityCard).join("")) : renderEmptyState(t(categoryId === "all" ? "common.noOpportunitiesMatch" : "opportunities.noActiveYet"))}</div>
-    <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t(count ? "common.postYourOwnRequestHint" : "opportunities.beFirstToPost")}</p><button type="button" data-view="needHelp" ${categoryId !== "all" ? `data-category-id="${categoryId}"` : ""}>${t("common.createRequest")}</button></section>
+    <section class="opportunity-post-cta"><p class="eyebrow">${t("common.needHelpInstead")}</p><h2>${t("common.postYourOwnRequest")}</h2><p>${t(count ? "common.postYourOwnRequestHint" : "opportunities.beFirstToPost")}</p><button type="button" data-view="needHelp" ${categoryId !== "all" ? `data-category-id="${categoryId}"` : ""}>${filter.surface === "earn" ? t("opportunities.helpAndEarn") : t("common.createRequest")}</button></section>
   </section>`;
 }
 
@@ -10418,7 +10556,10 @@ function renderUserProfile() {
 
   return `
     <section class="section-shell profile-panel user-profile-shell">
-      <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+      <div class="user-profile-header-row">
+        <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
+        ${profile.isOwn ? `<button type="button" class="user-profile-settings-icon" data-view="account" aria-label="${t("userProfile.accountAction")}" title="${t("userProfile.accountAction")}">${icon("settings")}</button>` : ""}
+      </div>
 
       <div class="user-profile-cover ${profile.coverUrl ? "" : "user-profile-cover-fallback"}" style="${profile.coverUrl ? `background-image:url('${escapeHtml(profile.coverUrl)}')` : ""}"></div>
 
@@ -10433,8 +10574,7 @@ function renderUserProfile() {
         </div>
         <div class="user-profile-actions">
           ${profile.isOwn
-            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>
-               <button type="button" class="auth-link" data-view="account">${t("userProfile.accountAction")}</button>`
+            ? `<button type="button" class="auth-primary-button" data-settings-edit-profile="true">${t("profile.quickActions.editProfileAction")}</button>`
             : `<button type="button" class="${profile.isFollowing ? "auth-link" : "auth-primary-button"}" data-user-profile-follow="true" ${!canFollow && state.auth.status === "signedIn" ? "disabled" : ""}>${profile.isFollowing ? t("userProfile.followingCta") : t("userProfile.followCta")}</button>
                <button type="button" class="auth-link" data-user-profile-message="true">${t("common.messagePersonCta")}</button>
                <div class="user-profile-more-menu">
@@ -11607,6 +11747,16 @@ function bindEvents() {
   document.querySelectorAll("[data-alwen-example-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       submitAlwenConversationMessage(t(button.dataset.alwenExamplePrompt));
+    });
+  });
+
+  document.querySelectorAll("[data-alwen-category-starter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const categoryId = button.dataset.alwenCategoryStarter;
+      const config = categoryConfigFor(categoryId);
+      const promptKey = config.posting?.starterPromptKey;
+      trackEvent("category_selected", { categoryId, surface: "alwenStarter" });
+      submitAlwenConversationMessage(promptKey ? t(promptKey) : t(config.labelKey));
     });
   });
 

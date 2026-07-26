@@ -1099,7 +1099,8 @@
     "suggestionIncompleteProfile": "Weil dein Profil noch nicht vollständig ist",
     "suggestionIncompleteProfileDetail": "Ein vollständiges Profil hilft Fachkräften, dir schneller zu vertrauen.",
     "suggestionCompleteCta": "Profil vervollständigen",
-    "suggestionViewCta": "Ansehen"
+    "suggestionViewCta": "Ansehen",
+    "categoryStartersLabel": "Oder beginne mit einer Kategorie"
   },
   "alwenWorkspace": {
     "doneForYouWorkflows": "Für dich erledigte Abläufe",
@@ -2451,7 +2452,21 @@
     "clearFilter": "Filter zurücksetzen",
     "activeCount": "{count} aktiv",
     "noActiveYet": "Noch keine aktiven Möglichkeiten.",
-    "beFirstToPost": "Sei der Erste, der in dieser Kategorie postet."
+    "beFirstToPost": "Sei der Erste, der in dieser Kategorie postet.",
+    "openRequestsCount": "{count} offene Anfragen",
+    "noActiveRequests": "Keine aktiven Anfragen",
+    "offerYourHelp": "Hilfe anbieten",
+    "requestOfferSplit": "{requests} Anfragen · {offers} Angebote",
+    "nothingLiveYet": "Noch nichts los",
+    "exploreOrPost": "Kategorien durchsuchen oder selbst posten",
+    "latestPrefix": "Neueste: {title}",
+    "urgentCount": "{count} dringend",
+    "viewOpportunities": "Möglichkeiten ansehen",
+    "helpAndEarn": "Helfen & verdienen",
+    "seeOpenRequests": "Offene Anfragen ansehen",
+    "liveActivityHeading": "Was in der Nähe passiert",
+    "liveActivityHint": "Echte Aktivität von Menschen und Unternehmen in der Nähe.",
+    "browseByCategory": "Nach Kategorie durchsuchen"
   },
   "events": {
     "items": {
@@ -2664,26 +2679,32 @@
   "categoryConfig": {
     "delivery": {
       "titlePlaceholder": "Ein Paket durch die Stadt liefern",
-      "aiPrompt": "Ich kann Pakete in der Nähe liefern."
+      "aiPrompt": "Ich kann Pakete in der Nähe liefern.",
+      "starterPrompt": "Ich brauche Hilfe bei einer Lieferung"
     },
     "transport": {
       "titlePlaceholder": "Jemanden fahren oder abholen",
-      "aiPrompt": "Ich kann dich fahren oder etwas abholen."
+      "aiPrompt": "Ich kann dich fahren oder etwas abholen.",
+      "starterPrompt": "Ich brauche eine Fahrt oder Abholung"
     },
     "petCare": {
       "titlePlaceholder": "Ein Haustier ausführen oder betreuen",
-      "aiPrompt": "Ich kann dein Haustier ausführen oder betreuen."
+      "aiPrompt": "Ich kann dein Haustier ausführen oder betreuen.",
+      "starterPrompt": "Ich brauche Hilfe mit meinem Haustier"
     },
     "teaching": {
-      "aiPrompt": "Ich kann Englisch unterrichten."
+      "aiPrompt": "Ich kann Englisch unterrichten.",
+      "starterPrompt": "Ich suche einen Nachhilfelehrer"
     },
     "shopping": {
       "titlePlaceholder": "Einkäufe erledigen oder eine Besorgung machen",
-      "aiPrompt": "Ich kann Einkäufe oder Besorgungen für dich erledigen."
+      "aiPrompt": "Ich kann Einkäufe oder Besorgungen für dich erledigen.",
+      "starterPrompt": "Ich brauche Hilfe beim Einkaufen"
     },
     "technology": {
       "titlePlaceholder": "Einen Computer reparieren oder WLAN einrichten",
-      "aiPrompt": "Ich kann bei Computern oder WLAN helfen."
+      "aiPrompt": "Ich kann bei Computern oder WLAN helfen.",
+      "starterPrompt": "Ich brauche technische Hilfe"
     },
     "cleaning": {
       "titlePlaceholder": "Eine Wohnung oder ein Büro reinigen",
@@ -2691,7 +2712,8 @@
     },
     "homeRepairs": {
       "titlePlaceholder": "Möbel aufbauen oder etwas reparieren",
-      "aiPrompt": "Ich kann IKEA-Möbel aufbauen oder Dinge im Haus reparieren."
+      "aiPrompt": "Ich kann IKEA-Möbel aufbauen oder Dinge im Haus reparieren.",
+      "starterPrompt": "Ich brauche eine Reparatur"
     },
     "gardening": {
       "titlePlaceholder": "Einen Garten oder Rasen pflegen",

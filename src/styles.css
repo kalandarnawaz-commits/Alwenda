@@ -10894,19 +10894,56 @@ strong:has(> .verified-check) {
      default for most screens, but on Profile it applies between every one
      of the 5 stacked blocks (cover/identity/metrics/reputation/tabs) —
      scoped down here rather than touching the shared rule everyone else
-     also uses. */
-  gap: 8px;
+     also uses. Round 2: tightened further (8px -> 6px) plus a reduced
+     top padding (the shared .section-shell padding is symmetric on all
+     sides; only the top edge is pure decorative space above the back
+     button here, so it's the one safe side to shrink without touching
+     the shared rule other screens rely on). */
+  gap: 6px;
+  padding-top: 10px;
 }
 
 .user-profile-shell .profile-tabs {
   /* .profile-tabs' own margin-top (var(--space-4)) stacks on top of the
      shell gap above rather than being absorbed by it (flex gap doesn't
-     collapse with a child's own margin) — scoped down for the same reason. */
-  margin-top: 8px;
+     collapse with a child's own margin) — zeroed here (not just reduced)
+     since the shell's own gap already provides the spacing; a nonzero
+     value here just double-counts it, found via live measurement in
+     round 2 (was silently adding 8px on top of every other block's gap). */
+  margin-top: 0;
+}
+
+/* Round 2 refinement: Account & settings moved out of the primary
+   identity/actions block entirely (was a text link competing with Edit
+   Profile) into this header row, sharing the back button's existing row
+   rather than adding a new one — a real space saving, not just a visual
+   de-emphasis. */
+.user-profile-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.user-profile-settings-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.user-profile-settings-icon:hover,
+.user-profile-settings-icon:focus-visible {
+  background: var(--surface-soft);
+  color: var(--ink, inherit);
 }
 
 .user-profile-cover {
-  height: clamp(56px, 12vw, 90px);
+  height: clamp(46px, 11vw, 80px);
   margin: -20px -20px 0;
   border-radius: var(--radius-lg, 24px) var(--radius-lg, 24px) 0 0;
   background-position: center;
@@ -10968,7 +11005,7 @@ strong:has(> .verified-check) {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .user-profile-more-menu {
@@ -11016,7 +11053,8 @@ strong:has(> .verified-check) {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 14px;
-  margin-top: 6px;
+  /* No margin-top — same double-counted-gap issue as .profile-tabs above;
+     the shell's own flex gap already separates this from identity. */
 }
 
 .profile-metric {
@@ -11042,7 +11080,7 @@ strong:has(> .verified-check) {
 }
 
 .profile-reputation-signals {
-  margin-top: 2px;
+  /* No margin-top — see .profile-social-metrics above. */
 }
 
 /* Denser than the shared .quote-list span chip size (used broadly
@@ -14286,10 +14324,40 @@ strong:has(> .verified-check) {
   color: var(--ink);
 }
 
+/* Round 2: now a small stack (primary activity line + optional latest-
+   record line + optional urgent badge) instead of one bare count line. */
 .category-hub-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
+  max-width: calc(100% - 20px);
+}
+
+.category-hub-card-primary {
+  color: var(--ink, inherit);
+  font-weight: 800;
+}
+
+.category-hub-card-secondary {
+  font-weight: 600;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-hub-card-urgent {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .category-hub-card-arrow {
@@ -14305,6 +14373,53 @@ strong:has(> .verified-check) {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+/* Live Around You's recent-activity feed (Round 2, Part 4) — a compact
+   list, not another card grid, so it reads visually distinct from the
+   category grid directly below it. */
+.live-activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.live-activity-feed-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 16px);
+  background: var(--surface-soft);
+  min-height: 44px;
+}
+
+.live-activity-feed-category {
+  flex-shrink: 0;
+  color: var(--emerald-text, #0f7a5c);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.live-activity-feed-title {
+  color: var(--ink, inherit);
+  font-size: 0.86rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-activity-browse-label {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .opportunities-demo-badge {
@@ -14549,6 +14664,48 @@ strong:has(> .verified-check) {
   color: var(--ink);
   font-size: 0.85rem;
   text-align: left;
+}
+
+/* Round 2, Part 5 — Ask Alwen category starters. A compact row, visually
+   lighter than the capability-example chips above it, so the interface
+   doesn't feel overloaded with two competing chip rows. */
+.alwen-category-starters {
+  margin-top: 18px;
+}
+
+.alwen-category-starters-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.alwen-category-starter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.alwen-category-starter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.alwen-category-starter:hover,
+.alwen-category-starter:focus-visible {
+  background: var(--surface);
+  border-color: var(--emerald-text, #0f7a5c);
 }
 
 /* ---- Message shells — visual hierarchy distinguishes user input,
