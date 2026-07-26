@@ -93,7 +93,12 @@ test("renderLiveOpportunities has distinct loading, error, and empty branches", 
 });
 
 test("no hardcoded illustrative opportunity counts in the new render functions", () => {
-  for (const name of ["renderCategoryHubCard", "renderCategoryHubGrid", "renderEarnToday", "renderLiveAroundYou", "renderLiveOpportunities"]) {
+  // renderCategoryHubCard/renderCategoryHubGrid/renderEarnToday were
+  // removed by the Home redesign (Earn Today's grid is gone; Live Around
+  // You is now the single-card-peek carousel built from
+  // renderOpportunityCarouselCard) — this test now covers their survivors
+  // and the new carousel card in their place.
+  for (const name of ["renderOpportunityCarouselCard", "renderLiveAroundYou", "renderLiveOpportunities"]) {
     const fn = extractFunction(main, name);
     // Never a literal 2-3 digit number standing in for a count — every
     // count must come from a computed variable (count/opportunityCountForCategory).
@@ -107,13 +112,12 @@ test("real opportunity cards never claim a distance or fabricate a price", () =>
   assert.match(fn, /record\.price_amount != null/, "price is only shown when the record actually has one");
 });
 
-test("category hub cards give screen readers a full-sentence label, not a bare number", () => {
-  // Round 2 (see test/category-refinement-round2.test.js) replaced the
-  // single bare-count line with a richer primary/secondary summary —
-  // this test only re-checks the accessibility contract still holds:
-  // the accessible label is built from real, non-empty summary lines,
-  // not a bare number.
-  const fn = extractFunction(main, "renderCategoryHubCard");
+test("carousel cards give screen readers a full-sentence label, not a bare number", () => {
+  // renderCategoryHubCard was removed by the Home redesign — Live Around
+  // You's premium carousel (renderOpportunityCarouselCard) keeps the same
+  // accessibility contract its predecessor established: the accessible
+  // label is built from real, non-empty summary lines, not a bare number.
+  const fn = extractFunction(main, "renderOpportunityCarouselCard");
   assert.match(fn, /aria-label="\$\{escapeHtml\(accessibleLabel\)\}"/);
   assert.match(fn, /const accessibleLabel = \[label, primaryLine, secondaryLine\]\.filter\(Boolean\)\.join\(" — "\);/);
 });

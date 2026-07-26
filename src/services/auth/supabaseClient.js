@@ -1035,6 +1035,48 @@ export async function fetchPublicListings({ dbCategories = null, limit = PUBLIC_
   return data || [];
 }
 
+/** Public "what's live right now" feed over Community posts — real,
+ * published posts from any author (RLS: "Published community posts are
+ * readable", 202607150001_production_foundation.sql — `status =
+ * 'published'` is already public, no auth required). This is the Home
+ * redesign's Unified Home Feed's Community source (see
+ * HOME_FEED_SOURCE_ADAPTERS.community, main.js) — Community's own page
+ * still renders from the local feedPosts fixture for now (see that
+ * file's comment for why), this function only backs Home's real-data
+ * feed slice. Bounded, deterministic, explicit column list (no `select
+ * *`) — no private field is ever selected.
+ *
+ * Two-step fetch (post rows, then a batched profile lookup via the same
+ * fetchProfilesByIds() fetchFollowers/fetchFollowing already use below),
+ * NOT a Supabase embedded-resource join — verified live against this
+ * project's actual schema cache that a join here throws "Could not find a
+ * relationship between 'community_posts' and 'public_profiles' in the
+ * schema cache": both tables have their own independent FK to auth.users,
+ * but there is no direct FK from community_posts to public_profiles for
+ * PostgREST to auto-detect. public_profiles' own "readable by anyone" RLS
+ * policy (`using (true)`) already covers this second query, so it exposes
+ * nothing the author's real name/avatar isn't already public via. */
+const COMMUNITY_POSTS_DEFAULT_LIMIT = 20;
+const COMMUNITY_POSTS_MAX_LIMIT = 60;
+
+export async function fetchCommunityPosts({ limit = COMMUNITY_POSTS_DEFAULT_LIMIT } = {}) {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = await getClient();
+  const boundedLimit = Math.min(Math.max(1, Number(limit) || COMMUNITY_POSTS_DEFAULT_LIMIT), COMMUNITY_POSTS_MAX_LIMIT);
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("id, title, body, category, neighbourhood, media, created_at, author_user_id")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(boundedLimit);
+  if (error) throwIfError(error, "fetchCommunityPosts");
+  const posts = data || [];
+  const authorIds = [...new Set(posts.map((post) => post.author_user_id).filter(Boolean))];
+  const profiles = await fetchProfilesByIds(authorIds);
+  const profileByUserId = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  return posts.map((post) => ({ ...post, author: profileByUserId.get(post.author_user_id) || null }));
+}
+
 // ---------------------------------------------------------------------
 // Profile social identity — handles, follow relationships, trust score,
 // person-directed reviews, and per-user listing/block lookups. Backed by
@@ -1090,11 +1132,16 @@ export async function fetchFollowCounts(userId) {
 /** Two-step fetch (relationship rows, then a batched profile lookup) rather
  * than a Supabase embedded-resource join — a join needs the exact
  * auto-generated foreign-key constraint name, which can't be verified
- * without a live database in this environment. */
+ * without a live database in this environment (confirmed live for
+ * fetchCommunityPosts above: community_posts and public_profiles have no
+ * direct FK PostgREST can auto-detect, only independent FKs to
+ * auth.users). verification_status is included so callers like
+ * fetchCommunityPosts can show a real verified badge without a second
+ * round-trip. */
 async function fetchProfilesByIds(userIds) {
   if (!userIds.length) return [];
   const supabase = await getClient();
-  const { data, error } = await supabase.from("public_profiles").select("user_id, display_name, avatar_url, handle").in("user_id", userIds);
+  const { data, error } = await supabase.from("public_profiles").select("user_id, display_name, avatar_url, handle, verification_status").in("user_id", userIds);
   if (error) throwIfError(error, "fetchProfilesByIds");
   return data || [];
 }

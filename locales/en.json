@@ -837,6 +837,14 @@
       "fuelPetrolNearYou": "Fuel & Petrol Near You",
       "fuelPetrolNearYouHint": "Petrol stations to fill up and refuel."
     },
+    "feed": {
+      "sectionTitle": "From your city",
+      "sectionHint": "The latest from Marketplace and Community, together.",
+      "badgeMarketplace": "Marketplace",
+      "badgeCommunity": "Community",
+      "emptyTitle": "Nothing to show yet",
+      "emptyHint": "New Marketplace listings and Community posts will appear here."
+    },
     "intent": {
       "intentNeedPlumber": "I need a plumber",
       "intentSellBicycle": "Sell my bicycle",
@@ -1546,7 +1554,8 @@
       "callOpensPhone": "Opens your Phone app",
       "shareCopied": "Link copied",
       "reportedConfirmation": "Reported — thanks for flagging this",
-      "savedConfirmation": "Saved to your list"
+      "savedConfirmation": "Saved to your list",
+      "limitedProfileNote": "Seller contact details aren't available from this view yet — open Marketplace to browse and message sellers directly."
     }
   },
   "needHelp": {

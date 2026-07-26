@@ -2,14 +2,12 @@ import {
   adminStats,
   alwenBusinessDraft,
   alwenListingDraft,
-  alwenRecommendations,
   businesses,
   categories,
   city,
   COMMUNITY_POST_TYPES,
   cityGraph,
   earnToday,
-  exploreHighlights,
   feedPosts,
   helpRequests,
   businessClaims,
@@ -85,6 +83,7 @@ import {
   fetchMyHelpRequests,
   fetchOpenHelpRequests,
   fetchPublicListings,
+  fetchCommunityPosts,
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
@@ -113,7 +112,7 @@ import {
   blockUser,
   unblockUser,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=category-taxonomy-1";
+} from "./services/auth/supabaseClient.js?v=home-feed-1";
 import {
   orderedCategoryIds,
   orderedStarterCategoryIds,
@@ -214,6 +213,12 @@ const state = {
      never renders a false empty state while still loading or after a
      genuine query failure (see refreshOpportunityFeed()). */
   opportunityFeed: { status: "idle", helpRequests: [], listings: [], loadedAt: null },
+  /* Real Supabase data backing the Unified Home Feed's Community source
+     (see HOME_FEED_SOURCE_ADAPTERS.community) — same idle/loading/loaded/
+     error state machine as opportunityFeed above, for the same reason.
+     Community's own page still reads the local feedPosts fixture (see
+     that decision's comment near fetchCommunityPosts' call site). */
+  communityFeed: { status: "idle", posts: [], loadedAt: null },
   headerSolid: false,
   quickTranslateOpen: false,
   localWeather: null,
@@ -1838,8 +1843,13 @@ function sharePost(post) {
 function shareListing(item) {
   const title = listingTitle(item);
   const url = `${window.location.origin}${window.location.pathname}?view=listingDetail&id=${item.id}`;
+  // Mock listings carry a pre-formatted `.price` string; real listings
+  // (fetchPublicListings) only carry price_amount/price_currency — this
+  // covers both without ever interpolating `undefined` into the share text.
+  const priceText = item.price || (item.price_amount != null ? formatCurrency(item.price_amount, item.price_currency || "EUR") : null);
+  const text = priceText ? `${title} — ${priceText}` : title;
   if (navigator.share) {
-    navigator.share({ title, text: `${title} — ${item.price}`, url }).catch(() => {});
+    navigator.share({ title, text, url }).catch(() => {});
     return;
   }
   navigator.clipboard?.writeText(url).catch(() => {});
@@ -2341,7 +2351,11 @@ function carouselId(key) {
 
 function renderCarousel(labelKey, trackClass, cards) {
   const id = carouselId(labelKey);
-  const shellClass = trackClass.includes("marketplace-rail") ? " carousel-shell-marketplace" : "";
+  const shellClass = trackClass.includes("marketplace-rail")
+    ? " carousel-shell-marketplace"
+    : trackClass.includes("opportunity-rail")
+      ? " carousel-shell-opportunity"
+      : "";
   return `
     <div class="carousel-shell${shellClass}">
       <button class="carousel-control carousel-control-left" data-carousel-control="${id}" data-carousel-direction="-1" aria-label="${t("common.scrollLeft")}" type="button">${icon("arrow")}</button>
@@ -4834,33 +4848,21 @@ function renderHome() {
        you type — the Home prompt is purely an entry point into the one
        canonical Alwen conversation now (see the ai-search-submit handler),
        so typed text is only ever acted on by submitting it there, never
-       searched in place here. Home already has its own curated rails
-       below (Live around you, Trending Marketplace, etc.) regardless. */
+       searched in place here. */
       ""}
 
+    ${/* Home's content hierarchy, top to bottom: AI hero (above) -> Live
+       Around You (a premium single-card carousel over real opportunity
+       data) -> the Unified Home Feed (real Marketplace + Community items
+       only, see HOME_FEED_SOURCE_ADAPTERS). Every other rail that used to
+       live here (Trending Marketplace, Explore Highlights, the 15 real-
+       places "NearYou" rails, Neighbourhood Feed, Alwen Recommendations)
+       has been removed — that content still lives on Explore/Marketplace/
+       Community's own pages, Home just no longer duplicates it as a
+       dashboard of widgets. */
+      ""}
     ${renderLiveAroundYou()}
-    ${renderTrendingMarketplace()}
-    ${renderEarnToday()}
-    ${renderExploreHighlights()}
-    ${renderEatingAroundYou()}
-    ${renderNightlifeNearYou()}
-    ${renderPlacesToStay()}
-    ${renderCareNearYou()}
-    ${renderHealthcareNearYou()}
-    ${renderGroceriesNearYou()}
-    ${renderShopsAroundYou()}
-    ${renderShoppingMallsNearYou()}
-    ${renderBeautyWellnessNearYou()}
-    ${renderHealthFitnessNearYou()}
-    ${renderAttractionsNearYou()}
-    ${renderBanksAtmsNearYou()}
-    ${renderPublicServicesNearYou()}
-    ${renderTransportNearYou()}
-    ${renderAutomobileNearYou()}
-    ${renderFuelPetrolNearYou()}
-    ${renderProfessionalsNearYou()}
-    ${renderNeighbourhoodFeed()}
-    ${renderAlwenRecommendations()}
+    ${renderHomeFeed()}
   `;
 }
 
@@ -4898,87 +4900,83 @@ function renderOpportunityFeedStatusNote(usingFixtures) {
   return "";
 }
 
-/** Round 2: Live Around You leads with a compact recent-activity feed
- * (real records, most-recent-first, across every category) before the
- * category grid — so this reads as a live city activity surface, not a
- * second copy of Earn Today's category menu. The grid itself stays (Part
- * 4 explicitly keeps category grouping), just demoted to "browse by
- * category" underneath the activity feed. */
+/** Home redesign: Live Around You is now a premium single-card-peek
+ * carousel (Apple Music/App Store style paging), one category per card,
+ * instead of a dense grid of tiles. Deliberately filtered to only
+ * categories with genuine current activity (summary.count > 0) — showing
+ * ~19 cards where most say "Nothing live yet" would defeat the point of a
+ * premium single-card carousel; the honest empty state below covers the
+ * case where nothing anywhere is currently live, rather than padding the
+ * rail with dead cards. Every field on the card (category, latest title,
+ * counts, urgency) already traces to real Supabase data via
+ * categoryHubCardSummary — nothing new is fabricated here. Distance is
+ * deliberately never rendered: no opportunity record carries real
+ * coordinates today (see renderOpportunityCarouselCard's comment) — this
+ * is an honest "when available" gate, not a fabricated stand-in. */
 function renderLiveAroundYou() {
   if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
   const usingFixtures = shouldUseFixtureOpportunities();
-  const categoryIds = categoryHubIdsSortedByCount("live");
-  const activityFeed = renderRecentActivityFeed();
+  const activeCategoryIds = categoryHubIdsSortedByCount("live").filter((id) => categoryHubCardSummary(id, "live").count > 0);
+  const body = activeCategoryIds.length
+    ? renderCarousel(
+        "liveAroundYou",
+        "opportunity-rail",
+        activeCategoryIds.map((id, index) => renderOpportunityCarouselCard(id, index)).join("")
+      )
+    : renderOpportunityCarouselEmptyState();
   return renderLivingSection(
     "home.rail.liveAroundYou",
     "home.rail.liveAroundYouHint",
     "liveOpportunities",
-    `${renderOpportunityFeedStatusNote(usingFixtures)}${activityFeed}${activityFeed ? `<p class="live-activity-browse-label">${t("opportunities.browseByCategory")}</p>` : ""}${renderCategoryHubGrid(categoryIds, "live")}`
+    `${renderOpportunityFeedStatusNote(usingFixtures)}${body}`
   );
 }
 
-function renderTrendingMarketplace() {
-  const trendingItems = trendingListingItems(10);
-  return renderLivingSection(
-    "home.rail.trendingMarketplace",
-    "home.rail.trendingMarketplaceHint",
-    "marketplace",
-    renderCarousel(
-      "trendingMarketplace",
-      "living-rail marketplace-rail",
-      trendingItems.map(renderMarketplaceMiniCard).join("")
-    )
-  );
+/** One category's real activity, rendered as a large "premium" carousel
+ * card — category, a short real summary line, real request/offer counts,
+ * a real urgency badge (only when the source data actually carries
+ * urgency==="today"), and a strong CTA into that category's full
+ * category-detail screen. Reuses the exact same data-category-hub-card/
+ * data-category-hub-surface attributes the existing bindEvents() handler
+ * already listens for (main.js, "category tap" handler) — no new click
+ * wiring needed, only new markup. */
+function renderOpportunityCarouselCard(categoryId, index) {
+  const config = categoryConfigFor(categoryId);
+  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
+  const label = t(config.labelKey);
+  const summary = categoryHubCardSummary(categoryId, "live");
+  const primaryLine = t("opportunities.requestOfferSplit", { requests: summary.requestCount, offers: summary.offerCount });
+  const secondaryLine = summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : "";
+  const urgentBadge = summary.urgentCount > 0 ? `<span class="opportunity-carousel-card-urgent">${escapeHtml(t("opportunities.urgentCount", { count: summary.urgentCount }))}</span>` : "";
+  // "Distance when available" — no help_requests/listings record carries
+  // real coordinates today (see the opportunity data model), so this never
+  // renders currently. Kept as an explicit, honest conditional rather than
+  // omitted entirely, so a future record with real lat/lng picks it up
+  // automatically without another pass through this card.
+  const distanceLine = summary.distanceLabel ? `<span class="opportunity-carousel-card-distance">${escapeHtml(summary.distanceLabel)}</span>` : "";
+  const accessibleLabel = [label, primaryLine, secondaryLine].filter(Boolean).join(" — ");
+  return `
+    <article class="opportunity-carousel-card tone-${tone}" data-category-hub-card="${categoryId}" data-category-hub-surface="live" role="button" tabindex="0" aria-label="${escapeHtml(accessibleLabel)}">
+      <div class="opportunity-carousel-card-top">
+        <span class="opportunity-carousel-card-icon" aria-hidden="true">${config.icon}</span>
+        ${urgentBadge}
+      </div>
+      <h3 class="opportunity-carousel-card-name">${escapeHtml(label)}</h3>
+      <p class="opportunity-carousel-card-primary">${escapeHtml(primaryLine)}</p>
+      ${secondaryLine ? `<p class="opportunity-carousel-card-secondary">${escapeHtml(secondaryLine)}</p>` : ""}
+      ${distanceLine}
+      <span class="opportunity-carousel-card-cta">${t("opportunities.viewOpportunities")}<span aria-hidden="true">${icon("arrow")}</span></span>
+    </article>
+  `;
 }
 
-/** Category hub, not individual mock job cards (Part 4). Earn Today is the
- * narrower, earn-focused surface — real help_requests only ("someone needs
- * X, come earn by doing it"), surface "earn". See renderLiveAroundYou
- * above for the deliberately different "live" surface. */
-function renderEarnToday() {
-  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
-  const usingFixtures = shouldUseFixtureOpportunities();
-  const categoryIds = categoryHubIdsSortedByCount("earn");
-  return renderLivingSection(
-    "home.rail.earnToday",
-    "home.rail.earnTodayHint",
-    "liveOpportunities",
-    `${renderOpportunityFeedStatusNote(usingFixtures)}${renderCategoryHubGrid(categoryIds, "earn")}`
-  );
-}
-
-function renderExploreHighlights() {
-  return renderLivingSection(
-    "home.rail.eventsNearYou",
-    "home.rail.eventsNearYouHint",
-    "explore",
-    renderCarousel(
-      "eventsNearYou",
-      "visual-card-grid events-rail",
-      exploreHighlights.map((item) => `
-        <article class="visual-card tone-${item.imageTone}" data-view="explore">
-          <div class="visual-card-image" style="background-image: url('${item.image}')"></div>
-          <span>${t(item.typeKey)}</span>
-          <h3>${t(item.titleKey)}</h3>
-          <p>${item.area} · ${t(item.signalKey)}</p>
-        </article>
-      `).join("")
-    )
-  );
-}
-
-/** Nearest real, open-data places in the given categories — sorted by
- * distance from the city-centre reference point, capped for render cost.
- * An optional subcategory predicate lets one imported category (e.g.
- * "Beauty & Wellness", which covers both salons and gyms in the OSM
- * import schema) be split across multiple Home rails. */
-function realPlacesByCategory(categories, limit = 10, subcategoryFilter = null) {
-  return importedBusinesses
-    .filter((item) => categories.includes(item.category) && (!subcategoryFilter || subcategoryFilter(item)))
-    .map((item) => ({ item, distance: distanceFromCenter(item) }))
-    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
-    .slice(0, limit)
-    .map(({ item }) => item);
+function renderOpportunityCarouselEmptyState() {
+  return `
+    <div class="opportunity-carousel-empty">
+      <p class="opportunity-carousel-empty-title">${t("opportunities.nothingLiveYet")}</p>
+      <p class="opportunity-carousel-empty-hint">${t("opportunities.exploreOrPost")}</p>
+    </div>
+  `;
 }
 
 /* Fixed OSM cuisine/type tag values (see normalizers.js, which keeps
@@ -5094,17 +5092,12 @@ function renderPlaceCoverflowTrack(items, trackKey) {
   `;
 }
 
-function renderRealPlacesSection(titleKey, hintKey, categories, trackKey, limit = 10, subcategoryFilter = null) {
-  const items = realPlacesByCategory(categories, limit, subcategoryFilter);
-  if (!items.length) return "";
-  return renderLivingSection(titleKey, hintKey, "explore", renderPlaceCoverflowTrack(items, trackKey), categories.length === 1 ? categories[0] : null);
-}
-
-/** Explore's own "Discovery" rails — same coverflow presentation as the
- * Home rails above, but each fed a bespoke, honestly-derived item list
- * (open now / recently added / has a real photo / near what's saved)
- * instead of a fixed category. No "see all" button since these already
- * live on Explore itself — see renderExploreDiscoveryRails(). */
+/** Explore's own "Discovery" rails — same coverflow presentation the
+ * removed Home "NearYou" rails used to share (renderPlaceCoverflowTrack/
+ * renderPlaceCardCompact below), but each fed a bespoke, honestly-derived
+ * item list (open now / recently added / has a real photo / near what's
+ * saved) instead of a fixed category. No "see all" button since these
+ * already live on Explore itself — see renderExploreDiscoveryRails(). */
 function renderExploreDiscoveryRail(titleKey, hintKey, items, trackKey) {
   if (!items.length) return "";
   return `
@@ -5150,128 +5143,19 @@ function renderExploreDiscoveryRails() {
   `;
 }
 
-/* Each rail below is deliberately narrowed to ONE real-world grouping
-   (cuisine, care type, banking vs. offices, salons vs. gyms, etc.)
-   instead of bundling several unrelated OSM categories into one rail —
-   e.g. pharmacies used to share a rail with hospitals/clinics, and
-   banks/civic offices/transport all lived under one "Public Services"
-   rail. Splitting them means every rail title accurately describes
-   what's actually in it. Categories with no real imported data (e.g.
-   automobile/fuel — not covered by the current Overpass import) are
-   simply not given a rail, rather than showing an empty one; see
-   renderRealPlacesSection's "return nothing if empty" behaviour above. */
-function renderEatingAroundYou() {
-  return renderRealPlacesSection("home.rail.eatingAroundYou", "home.rail.eatingAroundYouHint", ["Food & Drink"], "eatingAroundYou", 10);
-}
-
-function renderNightlifeNearYou() {
-  return renderRealPlacesSection("home.rail.nightlifeNearYou", "home.rail.nightlifeNearYouHint", ["Nightlife"], "nightlifeNearYou", 10);
-}
-
-function renderCareNearYou() {
-  return renderRealPlacesSection("home.rail.careNearYou", "home.rail.careNearYouHint", ["Pharmacy"], "careNearYou", 10);
-}
-
-function renderHealthcareNearYou() {
-  return renderRealPlacesSection("home.rail.healthcareNearYou", "home.rail.healthcareNearYouHint", ["Healthcare"], "healthcareNearYou", 10);
-}
-
-function renderPlacesToStay() {
-  return renderRealPlacesSection("home.rail.placesToStay", "home.rail.placesToStayHint", ["Hotels"], "placesToStay", 10);
-}
-
-function renderAttractionsNearYou() {
-  return renderRealPlacesSection("home.rail.attractionsNearYou", "home.rail.attractionsNearYouHint", ["Attractions", "Parks"], "attractionsNearYou", 10);
-}
-
-function renderBanksAtmsNearYou() {
-  return renderRealPlacesSection("home.rail.banksAtmsNearYou", "home.rail.banksAtmsNearYouHint", ["Finance"], "banksAtmsNearYou", 10);
-}
-
-function renderPublicServicesNearYou() {
-  return renderRealPlacesSection("home.rail.publicServicesNearYou", "home.rail.publicServicesNearYouHint", ["Public Services"], "publicServicesNearYou", 10);
-}
-
-function renderTransportNearYou() {
-  return renderRealPlacesSection("home.rail.transportNearYou", "home.rail.transportNearYouHint", ["Transport"], "transportNearYou", 10);
-}
-
-function renderGroceriesNearYou() {
-  return renderRealPlacesSection("home.rail.groceriesNearYou", "home.rail.groceriesNearYouHint", ["Groceries"], "groceriesNearYou", 10);
-}
-
-function renderShopsAroundYou() {
-  return renderRealPlacesSection("home.rail.shopsAroundYou", "home.rail.shopsAroundYouHint", ["Shops"], "shopsAroundYou", 10, (item) => item.subcategory !== "Shopping mall");
-}
-
-function renderShoppingMallsNearYou() {
-  return renderRealPlacesSection("home.rail.shoppingMallsNearYou", "home.rail.shoppingMallsNearYouHint", ["Shops"], "shoppingMallsNearYou", 10, (item) => item.subcategory === "Shopping mall");
-}
-
-function renderBeautyWellnessNearYou() {
-  return renderRealPlacesSection("home.rail.beautyWellnessNearYou", "home.rail.beautyWellnessNearYouHint", ["Beauty & Wellness"], "beautyWellnessNearYou", 10, (item) => item.subcategory !== "Gym");
-}
-
-function renderHealthFitnessNearYou() {
-  return renderRealPlacesSection("home.rail.healthFitnessNearYou", "home.rail.healthFitnessNearYouHint", ["Beauty & Wellness"], "healthFitnessNearYou", 10, (item) => item.subcategory === "Gym");
-}
-
-function renderAutomobileNearYou() {
-  return renderRealPlacesSection("home.rail.automobileNearYou", "home.rail.automobileNearYouHint", ["Automobile"], "automobileNearYou", 10, (item) => item.subcategory !== "Petrol station");
-}
-
-function renderFuelPetrolNearYou() {
-  return renderRealPlacesSection("home.rail.fuelPetrolNearYou", "home.rail.fuelPetrolNearYouHint", ["Automobile"], "fuelPetrolNearYou", 10, (item) => item.subcategory === "Petrol station");
-}
-
-function renderProfessionalsNearYou() {
-  return renderLivingSection(
-    "home.rail.professionalsNearYou",
-    "home.rail.professionalsNearYouHint",
-    "hire",
-    renderCarousel(
-      "professionalsNearYou",
-      "pro-strip pro-rail",
-      serviceProfessionals.slice(0, 5).map((item) => `
-        <article class="pro-pill" data-view="hire">
-          <strong>★★★★★ ${t(item.categoryKey)}</strong>
-          <span>${item.name}</span>
-          <p>${item.availability} · ${item.price}</p>
-        </article>
-      `).join("")
-    )
-  );
-}
-
-function renderNeighbourhoodFeed() {
-  return renderLivingSection(
-    "home.rail.neighbourhood",
-    "home.rail.neighbourhoodHint",
-    "community",
-    renderCarousel(
-      "neighbourhood",
-      "community-preview",
-      feedPosts.map(renderPulse).join("")
-    )
-  );
-}
-
-const ALWEN_RECOMMENDATION_ICONS = ["spark", "calendar", "briefcase", "home", "chat"];
-
-function renderAlwenRecommendations() {
-  return `
-    <section class="alwen-recommendation-card">
-      <div>
-        <p class="eyebrow">${t("alwen.alwenRecommendations")}</p>
-        <h2>${t("alwen.alwenRecommendationsTitle")}</h2>
-      </div>
-      <div class="recommendation-list">
-        ${alwenRecommendations.map((item, index) => `<p><span class="recommendation-icon">${icon(ALWEN_RECOMMENDATION_ICONS[index % ALWEN_RECOMMENDATION_ICONS.length])}</span>${t(item)}</p>`).join("")}
-      </div>
-      <button data-view="alwen">${t("home.rail.prepareWithAlwen")}</button>
-    </section>
-  `;
-}
+/* The 15 "NearYou" Home rails that used to iterate fixed categories (Food
+   & Drink, Nightlife, Pharmacy, Healthcare, Hotels, Attractions, Finance,
+   Public Services, Transport, Groceries, Shops, Beauty & Wellness,
+   Automobile) — along with their shared per-category wrapper,
+   renderRealPlacesSection, and its realPlacesByCategory helper — have been
+   removed from Home entirely, since nothing else called that wrapper.
+   The lower-level place-rendering helpers it depended on (PLACE_SPECIALTY_
+   TAG_KEY, honestPlaceDescription, realPlaceSpecialty, renderPlaceCard-
+   Compact, renderPlaceCoverflowTrack, above) are genuinely still shared —
+   Explore's own Discovery rails (renderExploreDiscoveryRails below) build
+   directly on those, just not through the now-deleted per-category
+   wrapper. Nothing about Explore's own page changed; Home just stopped
+   duplicating this content as a stack of widgets. */
 
 function renderCapabilityRail() {
   return `
@@ -5624,7 +5508,7 @@ function communityPostTypeMeta(type) {
  * render path. */
 function visibleFeedPosts() {
   return feedPosts.filter(
-    (post) => !state.hiddenPostIds.includes(post.id) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.author)
+    (post) => !state.hiddenPostIds.includes(String(post.id)) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.author)
   );
 }
 
@@ -5641,8 +5525,8 @@ function filteredCommunityPosts() {
 }
 
 function renderPulse(post) {
-  const isHelpful = state.helpfulPostIds.includes(post.id);
-  const isSaved = state.savedPostIds.includes(post.id);
+  const isHelpful = state.helpfulPostIds.includes(String(post.id));
+  const isSaved = state.savedPostIds.includes(String(post.id));
   const helpfulCount = (post.helpful || 0) + (isHelpful ? 1 : 0);
   const savesCount = (post.saves || 0) + (isSaved ? 1 : 0);
   const meta = communityPostTypeMeta(post.type);
@@ -5809,11 +5693,11 @@ function renderCommunityComposerSheet() {
 }
 
 function renderPostActionsSheet() {
-  const post = feedPosts.find((item) => item.id === state.activePostId);
+  const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
   const isReported = state.reportedPeople.includes(post.author);
   const isBlocked = state.blockedPeople.includes(post.author);
-  const isHidden = state.hiddenPostIds.includes(post.id);
+  const isHidden = state.hiddenPostIds.includes(String(post.id));
   const isMuted = state.mutedTopics.includes(post.type);
   return `
     <div class="sheet-backdrop" data-sheet-close="true">
@@ -5843,7 +5727,7 @@ function renderPostActionsSheet() {
  * to it. Replies are a flat list, not threaded — proportionate to a
  * feed that has no comment system anywhere else in the app yet. */
 function renderPostDetailSheet() {
-  const post = feedPosts.find((item) => item.id === state.activePostId);
+  const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
   const meta = communityPostTypeMeta(post.type);
   return `
@@ -7032,7 +6916,7 @@ function renderMarketplaceListing(item) {
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
 function renderListingDetail() {
-  const item = listings.find((listing) => String(listing.id) === String(state.selectedListingId));
+  const { item, isReal } = findListingRecordById(state.selectedListingId);
   if (!item) {
     return `
       <section class="section-shell listing-detail-shell">
@@ -7041,6 +6925,7 @@ function renderListingDetail() {
       </section>
     `;
   }
+  if (isReal) return renderRealListingDetail(item);
 
   const gallery = item.gallery && item.gallery.length ? item.gallery : [item.image];
   const isSaved = state.savedListingIds.includes(String(item.id));
@@ -7112,6 +6997,42 @@ function renderListingDetail() {
         <button type="button" class="${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}">${t("common.favourite")}</button>
         <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
         <button type="button" data-report-target="listing" data-report-id="${item.id}">Report listing</button>
+      </div>
+    </section>
+  `;
+}
+
+/** Honest detail view for a real Supabase listing that isn't in the local
+ * `listings` pool (i.e. published by someone other than the current
+ * viewer) — reached from the Unified Home Feed's Marketplace "Open"
+ * action. fetchPublicListings() only selects a handful of public-safe
+ * columns (no seller identity, no photos, no reputation), so this
+ * deliberately does NOT reuse renderListingDetail's full template above —
+ * that would render broken images and "undefined" seller rows for every
+ * field this pool doesn't carry. Every line here maps directly to a real
+ * column; nothing is fabricated or defaulted to a placeholder. */
+function renderRealListingDetail(item) {
+  const categoryId = normalizeOpportunityCategory(item);
+  const categoryLabelText = t(categoryConfigFor(categoryId).labelKey);
+  const priceLabel = item.price_amount != null ? formatCurrency(item.price_amount, item.price_currency || "EUR") : null;
+  const locationLabel = item.neighbourhood || item.location_label || null;
+  const postedLabel = item.created_at ? formatDate(item.created_at, { dateStyle: "medium" }) : null;
+  return `
+    <section class="section-shell listing-detail-shell">
+      <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
+      <p class="settings-section-hint">${t("marketplace.listingDetail.galleryEmpty")}</p>
+      <div class="screen-heading">
+        <span class="badge category-chip">${escapeHtml(categoryLabelText)}</span>
+        <h1>${escapeHtml(item.title || "")}</h1>
+        ${priceLabel ? `<p class="price-row"><strong>${priceLabel}</strong></p>` : ""}
+      </div>
+      <div class="business-detail-strip">
+        <p class="business-detail-line">${joinNonEmpty([locationLabel ? escapeHtml(locationLabel) : null, postedLabel])}</p>
+      </div>
+      ${item.description ? `<div class="section-title"><h2>${t("marketplace.listingDetail.aboutListing")}</h2></div><p>${escapeHtml(item.description)}</p>` : ""}
+      <p class="settings-section-hint">${t("marketplace.listingDetail.limitedProfileNote")}</p>
+      <div class="business-profile-actions listing-detail-actions">
+        <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
       </div>
     </section>
   `;
@@ -7272,6 +7193,305 @@ async function refreshOpportunityFeed() {
   if (["home", "liveOpportunities"].includes(state.activeView)) render();
 }
 
+const COMMUNITY_FEED_FETCH_LIMIT = 20;
+
+/** Maps a raw fetchCommunityPosts() row into the shape renderPostDetailSheet/
+ * renderPulse/sharePost already expect from a feedPosts mock entry (.type,
+ * .title, .body — never .titleKey/.bodyKey, so those functions' `post.key ?
+ * t(key) : plain field` fallback always takes the plain-field branch for a
+ * real post). Every nullable real column (neighbourhood, author embed,
+ * media) is guarded here once, at the source, rather than at every render
+ * call site. No replies/helpful/saves fields are set at all — omitted, not
+ * defaulted to 0, so nothing downstream can mistake "field absent" for
+ * "zero real engagement" (see HOME_FEED_SOURCE_ADAPTERS.community). */
+function shapeCommunityPostForDisplay(row) {
+  return {
+    id: row.id,
+    type: row.category || "discussion",
+    title: row.title || "",
+    body: row.body || "",
+    neighbourhood: row.neighbourhood || "",
+    createdAt: row.created_at,
+    authorName: row.author?.display_name || "",
+    authorAvatar: row.author?.avatar_url || "",
+    authorVerified: row.author?.verification_status === "verified",
+    mediaUrl: Array.isArray(row.media) && row.media.length ? row.media[0]?.url || null : null,
+    isRealRecord: true
+  };
+}
+
+/** Same fire-and-forget, idle-guarded convention as refreshOpportunityFeed()
+ * above — real Community posts for the Unified Home Feed's Community
+ * source. Unauthenticated (published community_posts is public RLS). */
+async function refreshCommunityFeed() {
+  state.communityFeed = { ...state.communityFeed, status: "loading" };
+  try {
+    const realPosts = await fetchCommunityPosts({ limit: COMMUNITY_FEED_FETCH_LIMIT });
+    state.communityFeed = { status: "loaded", posts: realPosts.map(shapeCommunityPostForDisplay), loadedAt: Date.now() };
+  } catch (error) {
+    console.warn("[communityFeed] Failed to load real community data.", error);
+    state.communityFeed = { status: "error", posts: [], loadedAt: state.communityFeed.loadedAt };
+  }
+  if (state.activeView === "home") render();
+}
+
+/** Shared lookup for a Community post by id, across BOTH sources — the
+ * local feedPosts fixture (Community's own page, numeric ids) and real
+ * Community posts loaded via fetchCommunityPosts() (UUID string ids).
+ * String()-coerced comparison on both sides, matching the same pattern
+ * already used for real listing ids (state.savedListingIds.includes(
+ * String(item.id)), see toggle-listing-save) — this is what actually
+ * fixes the bug where every one of these lookups used to do
+ * `item.id === Number(button.dataset.postId)`: Number() on a real UUID is
+ * NaN, so a real post could never be found by id anywhere in this file. */
+function findCommunityPostById(id) {
+  if (id == null) return null;
+  return feedPosts.find((item) => String(item.id) === String(id)) || state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
+}
+
+/** Shared lookup for a listing by id, across BOTH pools — the local
+ * `listings` array (seeded mock rows + the current user's own real
+ * listings, merged in by applyCreatedListing/refreshMyListings) and the
+ * general public real feed loaded by refreshOpportunityFeed() via
+ * fetchPublicListings() (state.opportunityFeed.listings). These are two
+ * genuinely different pools: `listings` has the full mock display shape
+ * (image, seller, gallery, reputation...) but only ever contains OTHER
+ * users' real listings if this viewer happens to already have them
+ * merged in; state.opportunityFeed.listings has every published real
+ * listing but only the minimal columns fetchPublicListings selects (no
+ * seller/image/gallery at all). isReal tells the caller which shape it
+ * got back, since they need different rendering. */
+function findListingRecordById(id) {
+  if (id == null) return { item: null, isReal: false };
+  const local = listings.find((listing) => String(listing.id) === String(id));
+  if (local) return { item: local, isReal: false };
+  const real = state.opportunityFeed.listings.find((listing) => String(listing.id) === String(id));
+  if (real) return { item: real, isReal: true };
+  return { item: null, isReal: false };
+}
+
+/* -----------------------------------------------------------------------
+   Unified Home Feed — the aggregation layer below Live Around You. Each
+   entry in HOME_FEED_SOURCE_ADAPTERS declares five independent things, not
+   one conflated "interactions" list — a source being readable does NOT
+   imply any social action on it is safe to render as real:
+     enabled             only enabled sources are aggregated into the feed
+     readable            a genuine query path exists (real table/RLS-safe)
+     timestampAvailable   has a genuine created_at/published_at column
+     destination          a working "open original" target actually exists
+     privacySafeFields    only public-safe columns are ever selected
+     interactions         { open, share, like, comment, save } — each true
+                           ONLY if backed by a real DB write path that
+                           persists across a refresh. Verified empirically
+                           for this PR: state.savedListingIds/savedPostIds/
+                           helpfulPostIds are never written to localStorage
+                           or Supabase anywhere in this file (grepped every
+                           writeLocalStorage call site) — pure in-memory,
+                           lost on reload. So like/comment/save are false
+                           for BOTH enabled sources today, even though the
+                           underlying UI toggles exist elsewhere in the app
+                           (Community's own page, Marketplace's own cards) —
+                           this feed must not present a non-durable toggle
+                           as if it were real, persistent engagement.
+     badge                { labelKey, tone } shown on every card
+     fetchItems()          () => Array<{ type, id, createdAt, raw }>
+     readiness             only on disabled sources — the checklist that
+                           must be true before flipping enabled: true
+   This is deliberately NOT a redesign-in-waiting: adding a source later
+   means writing one adapter entry + its fetchItems(), never touching
+   buildUnifiedHomeFeed()/renderHomeFeed() below. */
+const HOME_FEED_SOURCE_ADAPTERS = {
+  marketplace: {
+    enabled: true,
+    readable: true,
+    timestampAvailable: true,
+    destination: true, // renderRealListingDetail() gives every real listing a working, honest "Open" target — see findListingRecordById
+    privacySafeFields: true, // fetchPublicListings selects only public listing columns, no seller identity
+    interactions: { open: true, share: true, like: false, comment: false, save: false },
+    badge: { labelKey: "home.feed.badgeMarketplace", tone: "marketplace" },
+    fetchItems: () => state.opportunityFeed.listings.map((raw) => ({ type: "marketplace", id: raw.id, createdAt: raw.created_at, raw }))
+  },
+  community: {
+    enabled: true,
+    readable: true,
+    timestampAvailable: true,
+    destination: true, // findCommunityPostById()/renderPostDetailSheet() resolve real UUID posts correctly (Part C's UUID fix)
+    privacySafeFields: true, // fetchCommunityPosts selects only public_profiles' public-readable columns for the author embed
+    interactions: { open: true, share: true, like: false, comment: false, save: false },
+    badge: { labelKey: "home.feed.badgeCommunity", tone: "community" },
+    fetchItems: () => state.communityFeed.posts.map((raw) => ({ type: "community", id: raw.id, createdAt: raw.createdAt, raw }))
+  },
+  tyt: {
+    enabled: false,
+    readiness: [
+      "TYT tiles are a static navigation menu, not user-generated content — needs a real, persistent, timestamped record type before it can be a feed item at all",
+      "a real persistent table or reliable API",
+      "a genuine created_at/published_at timestamp",
+      "stable entity IDs",
+      "public/privacy-safe fields",
+      "a valid detail-page destination",
+      "production-ready query code"
+    ]
+  },
+  events: {
+    enabled: false,
+    readiness: [
+      "fixture dates like \"Today · 08:00\" are not real timestamps — interleaving them chronologically with genuine created_at values would misrepresent recency",
+      "a real persistent table or reliable API",
+      "a genuine created_at/published_at timestamp",
+      "stable entity IDs",
+      "public/privacy-safe fields",
+      "a valid detail-page destination",
+      "production-ready query code"
+    ]
+  },
+  explore: {
+    enabled: false,
+    readiness: [
+      "seed/imported place data has no per-item posted timestamp — Explore's directory content isn't \"activity\" at all, it's a static directory",
+      "a real persistent table or reliable API",
+      "a genuine created_at/published_at timestamp",
+      "stable entity IDs",
+      "public/privacy-safe fields",
+      "a valid detail-page destination",
+      "production-ready query code"
+    ]
+  },
+  businesses: {
+    enabled: false,
+    readiness: [
+      "imported business directory rows have no genuine posted timestamp — same gap as Explore above",
+      "a real persistent table or reliable API",
+      "a genuine created_at/published_at timestamp",
+      "stable entity IDs",
+      "public/privacy-safe fields",
+      "a valid detail-page destination",
+      "production-ready query code"
+    ]
+  },
+  userActivity: {
+    enabled: false,
+    readiness: [
+      "no defined concept or backing table exists yet — needs a product definition (which actions, opt-in/privacy model) before any engineering starts",
+      "a real persistent table or reliable API",
+      "a genuine created_at/published_at timestamp",
+      "stable entity IDs",
+      "public/privacy-safe fields",
+      "a valid detail-page destination",
+      "production-ready query code"
+    ]
+  }
+};
+
+function buildUnifiedHomeFeed() {
+  return Object.values(HOME_FEED_SOURCE_ADAPTERS)
+    .filter((adapter) => adapter.enabled)
+    .flatMap((adapter) => adapter.fetchItems())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+/** Thin Marketplace card for the Home feed — Open + Share only (no Save:
+ * state.savedListingIds is non-durable, see the adapter contract above).
+ * Root is click-through to the real detail page (renderRealListingDetail),
+ * matching the existing data-view="listingDetail" navigation convention
+ * used by every other listing card in this file. */
+function renderHomeFeedListingItem(raw) {
+  const categoryId = normalizeOpportunityCategory(raw);
+  const categoryLabelText = t(categoryConfigFor(categoryId).labelKey);
+  const priceLabel = raw.price_amount != null ? formatCurrency(raw.price_amount, raw.price_currency || "EUR") : null;
+  const postedLabel = raw.created_at ? formatDate(raw.created_at, { dateStyle: "medium" }) : null;
+  const title = raw.title || "";
+  return `
+    <article class="home-feed-item" data-view="listingDetail" data-listing-id="${raw.id}" role="button" tabindex="0" aria-label="${escapeHtml(title)}">
+      <span class="home-feed-source-badge tone-marketplace">${t("home.feed.badgeMarketplace")}</span>
+      <h3 class="home-feed-item-title">${escapeHtml(title)}</h3>
+      ${raw.description ? `<p class="home-feed-item-body">${escapeHtml(truncateForCard(raw.description, 120))}</p>` : ""}
+      <p class="home-feed-item-meta">${joinNonEmpty([escapeHtml(categoryLabelText), priceLabel, postedLabel])}</p>
+      <div class="home-feed-item-actions">
+        <span class="home-feed-item-cta">${t("common.viewDetails")}</span>
+        <button type="button" class="home-feed-item-share" data-action="share-listing" data-listing-id="${raw.id}">${t("common.share")}</button>
+      </div>
+    </article>
+  `;
+}
+
+/** Thin Community card for the Home feed — Open + Share only (no Like/
+ * Comment/Save/Helpful: none of those toggles are durable today, see the
+ * adapter contract above). Deliberately NOT a wrapper around renderPulse()
+ * — that shell assumes helpful/save/comment affordances are always
+ * present, which would be dishonest here. Root opens the real post detail
+ * sheet via the existing open-post-detail handler (UUID-safe per Part C). */
+function renderHomeFeedCommunityItem(raw) {
+  const postedLabel = raw.createdAt ? formatDate(raw.createdAt, { dateStyle: "medium" }) : null;
+  const metaLine = joinNonEmpty([raw.authorName ? escapeHtml(raw.authorName) : null, raw.neighbourhood ? escapeHtml(raw.neighbourhood) : null, postedLabel]);
+  const accessibleLabel = raw.title || raw.body || "";
+  return `
+    <article class="home-feed-item" data-action="open-post-detail" data-post-id="${raw.id}" role="button" tabindex="0" aria-label="${escapeHtml(accessibleLabel)}">
+      <span class="home-feed-source-badge tone-community">${t("home.feed.badgeCommunity")}</span>
+      ${raw.title ? `<h3 class="home-feed-item-title">${escapeHtml(raw.title)}</h3>` : ""}
+      ${raw.body ? `<p class="home-feed-item-body">${escapeHtml(truncateForCard(raw.body, 140))}</p>` : ""}
+      ${metaLine ? `<p class="home-feed-item-meta">${metaLine}</p>` : ""}
+      <div class="home-feed-item-actions">
+        <span class="home-feed-item-cta">${t("common.viewDetails")}</span>
+        <button type="button" class="home-feed-item-share" data-action="share-post" data-post-id="${raw.id}">${t("common.share")}</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderHomeFeedItem(item) {
+  if (item.type === "marketplace") return renderHomeFeedListingItem(item.raw);
+  if (item.type === "community") return renderHomeFeedCommunityItem(item.raw);
+  return "";
+}
+
+function renderHomeFeedEmptyState() {
+  return `
+    <div class="opportunity-carousel-empty home-feed-empty">
+      <p class="opportunity-carousel-empty-title">${t("home.feed.emptyTitle")}</p>
+      <p class="opportunity-carousel-empty-hint">${t("home.feed.emptyHint")}</p>
+    </div>
+  `;
+}
+
+/** The Unified Home Feed section — real Marketplace + Community items only
+ * (see HOME_FEED_SOURCE_ADAPTERS), merged and sorted by genuine descending
+ * timestamp. This is an aggregation layer only: every card's "Open" target
+ * is that item's own real destination page, never a duplicate view Home
+ * owns itself — Community's and Marketplace's own pages are unchanged and
+ * unduplicated. Lazily kicks off refreshCommunityFeed() on first render,
+ * same idle-guard convention as refreshOpportunityFeed() (already
+ * triggered above by renderLiveAroundYou() on this same page, but guarded
+ * again here so this function stays independently correct). */
+function renderHomeFeed() {
+  if (state.communityFeed.status === "idle") refreshCommunityFeed();
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+
+  const items = buildUnifiedHomeFeed();
+  const marketplaceFailed = state.opportunityFeed.status === "error";
+  const communityFailed = state.communityFeed.status === "error";
+  const marketplaceSettled = state.opportunityFeed.status === "loaded" || marketplaceFailed;
+  const communitySettled = state.communityFeed.status === "loaded" || communityFailed;
+
+  let body = "";
+  if (items.length) {
+    body = `<div class="home-feed-list">${items.map(renderHomeFeedItem).join("")}</div>`;
+  } else if (marketplaceFailed && communityFailed) {
+    body = `<p class="category-hub-demo-note">${t("opportunities.loadError")}</p>`;
+  } else if (marketplaceSettled && communitySettled) {
+    body = renderHomeFeedEmptyState();
+  }
+
+  return `
+    <section class="living-section home-feed-section">
+      <div class="section-title">
+        <div><h2>${t("home.feed.sectionTitle")}</h2><p>${t("home.feed.sectionHint")}</p></div>
+      </div>
+      ${body}
+    </section>
+  `;
+}
+
 /** Earn Today is help_requests only — real demand postings from other
  * users the viewer could fulfil and earn from. Live Around You is the
  * broader combined pulse (help_requests + published listings, both
@@ -7346,45 +7566,6 @@ function categoryHubRecordTitle(record) {
   return realOpportunityCardTitle(record, isListing);
 }
 
-/** Live Around You's recent-activity feed (Part 4) — a handful of the
- * most recent real records across every category, combined and re-sorted
- * by created_at (realOpportunityRecordsForSurface concatenates
- * help_requests then listings, each already sorted individually by the
- * SQL query, but the concatenation itself isn't chronological — this
- * fixes that for display purposes only, no mutation of the source
- * arrays). Fixture mode has no created_at to sort by, so it just takes
- * the curated subset's own order. Every field shown (category label,
- * title/description) is already publicly selected and displayed
- * elsewhere (renderRealOpportunityCard) — no new field exposure, no
- * addresses/contact info/owner-only data. */
-function recentLiveActivityItems(limit = 3) {
-  const usingFixtures = shouldUseFixtureOpportunities();
-  const records = usingFixtures ? fixtureOpportunitiesForSurface("live") : realOpportunityRecordsForSurface("live");
-  if (usingFixtures) return records.slice(0, limit);
-  return [...records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, limit);
-}
-
-function renderRecentActivityFeedItem(record) {
-  const categoryId = normalizeOpportunityCategory(record);
-  const categoryLabel = t(categoryConfigFor(categoryId).labelKey);
-  const title = truncateForCard(categoryHubRecordTitle(record), 52);
-  return `<li class="live-activity-feed-item"><span class="live-activity-feed-category">${escapeHtml(categoryLabel)}</span><span class="live-activity-feed-title">${escapeHtml(title)}</span></li>`;
-}
-
-/** Empty string (not an empty-state message) when there's nothing to
- * show — the category grid right below already carries the honest
- * "Nothing live yet" messaging per card; a second empty state here would
- * be redundant. */
-function renderRecentActivityFeed() {
-  const items = recentLiveActivityItems(3);
-  if (!items.length) return "";
-  return `
-    <ul class="live-activity-feed" aria-label="${t("home.rail.liveAroundYou")}">
-      ${items.map(renderRecentActivityFeedItem).join("")}
-    </ul>
-  `;
-}
-
 /** Every number here traces to opportunityRecordsForCategory()'s real
  * array (or the labelled fixture fallback) — never invented. requestCount/
  * offerCount only differ from `count` on the "live" surface, which mixes
@@ -7412,57 +7593,13 @@ function categoryHubCardSummary(categoryId, surface) {
   };
 }
 
-/** Generalizes renderExploreHubCard's "destination card with real count
- * metadata" pattern (main.js, renderExploreHubCard) to the CATEGORY_CONFIG
- * taxonomy — same CATEGORY_TILE_TONES cycling, same real-emoji register as
- * renderCategoryTileGrid, its own .category-hub-card/.category-hub-grid CSS
- * (referencing the same design tokens as .explore-hub-card, not a copy).
- * Round 2: cards now surface a real activity summary (open-request count,
- * or a request/offer split on the "live" surface, plus the latest real
- * record's title) instead of a bare count, so the grid reads as live city
- * activity rather than a plain navigation menu. A zero-count category
- * still renders (fixed navigation surface, not filtered by data) with an
- * honest empty-state line — never hidden, never an invented number. */
-function renderCategoryHubCard(categoryId, surface, index) {
-  const config = categoryConfigFor(categoryId);
-  const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
-  const label = t(config.labelKey);
-  const summary = categoryHubCardSummary(categoryId, surface);
-  const isEmpty = summary.count === 0;
-
-  let primaryLine;
-  let secondaryLine = null;
-  if (surface === "live") {
-    primaryLine = isEmpty ? t("opportunities.nothingLiveYet") : t("opportunities.requestOfferSplit", { requests: summary.requestCount, offers: summary.offerCount });
-    secondaryLine = isEmpty ? t("opportunities.exploreOrPost") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
-  } else {
-    primaryLine = isEmpty ? t("opportunities.noActiveRequests") : t("opportunities.openRequestsCount", { count: summary.requestCount });
-    secondaryLine = isEmpty ? t("opportunities.offerYourHelp") : summary.latestTitle ? t("opportunities.latestPrefix", { title: summary.latestTitle }) : null;
-  }
-  const urgentBadge = !isEmpty && summary.urgentCount > 0 ? `<span class="category-hub-card-urgent">${escapeHtml(t("opportunities.urgentCount", { count: summary.urgentCount }))}</span>` : "";
-  const accessibleLabel = [label, primaryLine, secondaryLine].filter(Boolean).join(" — ");
-
-  return `
-    <button type="button" class="category-hub-card tone-${tone} ${isEmpty ? "is-empty" : ""}" data-category-hub-card="${categoryId}" data-category-hub-surface="${surface}" aria-label="${escapeHtml(accessibleLabel)}">
-      <span class="category-hub-card-icon" aria-hidden="true">${config.icon}</span>
-      <span class="category-hub-card-name">${escapeHtml(label)}</span>
-      <span class="category-hub-card-meta" aria-hidden="true">
-        <span class="category-hub-card-primary">${escapeHtml(primaryLine)}</span>
-        ${secondaryLine ? `<span class="category-hub-card-secondary">${escapeHtml(secondaryLine)}</span>` : ""}
-        ${urgentBadge}
-      </span>
-      <span class="category-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
-    </button>
-  `;
-}
-
-function renderCategoryHubGrid(categoryIds, surface) {
-  return `
-    <div class="category-hub-grid" role="list">
-      ${categoryIds.map((id, index) => renderCategoryHubCard(id, surface, index)).join("")}
-    </div>
-  `;
-}
+/* renderCategoryHubCard/renderCategoryHubGrid (the tile-grid presentation
+   of this same categoryHubCardSummary data) were removed with the Home
+   redesign — Live Around You now renders this data as premium carousel
+   cards instead (renderOpportunityCarouselCard, above). The category-
+   detail screen (renderLiveOpportunities) still exists and is reachable
+   from a carousel card's CTA; it renders its own results list, unrelated
+   to this tile markup. */
 
 /** Real-record card — deliberately distinct from renderOpportunityCard
  * (below), which renders the LIVE_OPPORTUNITIES fixture shape only. A real
@@ -12150,7 +12287,11 @@ function bindEvents() {
   document.querySelectorAll('[data-action="toggle-helpful"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const id = Number(button.dataset.postId);
+      // Raw dataset string, not Number() — real Community posts loaded via
+      // fetchCommunityPosts() have UUID ids; Number() on a UUID is NaN,
+      // which silently broke this toggle for any real post (same class of
+      // bug as toggle-listing-save's own id, see that handler's comment).
+      const id = button.dataset.postId;
       state.helpfulPostIds = state.helpfulPostIds.includes(id) ? state.helpfulPostIds.filter((existing) => existing !== id) : [...state.helpfulPostIds, id];
       render();
     });
@@ -12159,7 +12300,7 @@ function bindEvents() {
   document.querySelectorAll('[data-action="toggle-post-save"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const id = Number(button.dataset.postId);
+      const id = button.dataset.postId;
       state.savedPostIds = state.savedPostIds.includes(id) ? state.savedPostIds.filter((existing) => existing !== id) : [...state.savedPostIds, id];
       render();
     });
@@ -12168,7 +12309,7 @@ function bindEvents() {
   document.querySelectorAll('[data-action="share-post"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const post = feedPosts.find((item) => item.id === Number(button.dataset.postId));
+      const post = findCommunityPostById(button.dataset.postId);
       if (post) sharePost(post);
       trackEvent("post_shared", { postId: button.dataset.postId });
     });
@@ -12227,7 +12368,7 @@ function bindEvents() {
   document.querySelectorAll('[data-action="open-post-actions"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      state.activePostId = Number(button.dataset.postId);
+      state.activePostId = button.dataset.postId;
       state.activeSheet = "postActions";
       render();
     });
@@ -12236,7 +12377,7 @@ function bindEvents() {
   document.querySelectorAll('[data-action="open-post-detail"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      state.activePostId = Number(button.dataset.postId);
+      state.activePostId = button.dataset.postId;
       state.activeSheet = "postDetail";
       render();
     });
@@ -12244,26 +12385,26 @@ function bindEvents() {
 
   document.querySelector('[data-action="hide-post"]')?.addEventListener("click", () => {
     const id = state.activePostId;
-    if (id != null && !state.hiddenPostIds.includes(id)) state.hiddenPostIds.push(id);
+    if (id != null && !state.hiddenPostIds.includes(String(id))) state.hiddenPostIds.push(String(id));
     state.activeSheet = null;
     render();
   });
 
   document.querySelector('[data-action="mute-topic"]')?.addEventListener("click", () => {
-    const post = feedPosts.find((item) => item.id === state.activePostId);
+    const post = findCommunityPostById(state.activePostId);
     if (post && !state.mutedTopics.includes(post.type)) state.mutedTopics.push(post.type);
     state.activeSheet = null;
     render();
   });
 
   document.querySelector('[data-action="report-post-author"]')?.addEventListener("click", () => {
-    const post = feedPosts.find((item) => item.id === state.activePostId);
+    const post = findCommunityPostById(state.activePostId);
     if (post && !state.reportedPeople.includes(post.author)) state.reportedPeople.push(post.author);
     render();
   });
 
   document.querySelector('[data-action="block-post-author"]')?.addEventListener("click", () => {
-    const post = feedPosts.find((item) => item.id === state.activePostId);
+    const post = findCommunityPostById(state.activePostId);
     if (post && !state.blockedPeople.includes(post.author)) state.blockedPeople.push(post.author);
     render();
   });
@@ -12274,7 +12415,7 @@ function bindEvents() {
     const formData = new FormData(form);
     const text = String(formData.get("reply") || "").trim();
     if (!text) return;
-    const post = feedPosts.find((item) => item.id === Number(form.dataset.postId));
+    const post = findCommunityPostById(form.dataset.postId);
     if (post) {
       post.replyList = post.replyList || [];
       post.replyList.push({ author: t("common.you"), text });
@@ -12372,7 +12513,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const id = button.dataset.listingId;
-      const item = listings.find((listing) => String(listing.id) === id);
+      const { item } = findListingRecordById(id);
       if (item) shareListing(item);
       trackEvent("place_shared", { listingId: id });
     });

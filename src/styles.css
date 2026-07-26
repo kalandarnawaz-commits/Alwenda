@@ -14250,122 +14250,199 @@ strong:has(> .verified-check) {
   }
 }
 
-/* === Category hub cards (Earn Today / Live Around You / category-detail
-   picker) — generalizes .explore-hub-card's "destination card with real
-   count metadata" pattern to the CATEGORY_CONFIG taxonomy. Same design
-   tokens (surface/mint/gold/sky/rose, radius, shadow), own class names so
-   the two never collide. === */
-.category-hub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+/* === Live Around You premium carousel (Home redesign) — one large card
+   fully visible at a time, next card peeking, Apple Music/App Store-style
+   paging. Built on the existing renderCarousel()/bindCarousels() engine
+   (native scroll-snap does the paging physics, same prev/next arrow
+   controls every other rail already has) — this block only overrides
+   sizing/snap-alignment for the "opportunity-rail" track, the same way
+   .carousel-shell-marketplace overrides sizing for "marketplace-rail".
+   Design tokens match .category-hub-card's (now-removed) tone system:
+   same --mint/--gold/--sky/--rose gradients, corrected to the *actual*
+   --radius-lg (22px)/--radius-xl (28px) values. === */
+.carousel-shell-opportunity {
+  overflow: hidden;
 }
 
-.category-hub-card {
+.carousel-shell-opportunity .carousel-track.opportunity-rail {
+  display: flex !important;
+  flex-wrap: nowrap;
+  grid-auto-columns: unset !important;
+  gap: var(--sp-16, 16px) !important;
+  padding: 4px 7vw 22px !important;
+  scroll-padding-inline: 7vw !important;
+  scroll-snap-type: x mandatory !important;
+}
+
+.carousel-shell-opportunity .carousel-track.opportunity-rail > * {
+  flex: 0 0 86vw;
+  max-width: 520px;
+  scroll-snap-align: center;
+}
+
+.carousel-shell-opportunity .carousel-control-left {
+  left: 14px;
+}
+
+.carousel-shell-opportunity .carousel-control-right {
+  right: 14px;
+}
+
+.opportunity-carousel-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--sp-8, 8px);
   position: relative;
-  min-height: 44px;
-  padding: 16px;
-  border-radius: var(--radius-lg, 24px);
+  min-height: 220px;
+  padding: var(--sp-24, 24px);
+  border-radius: var(--radius-xl, 28px);
   text-align: left;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.05);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
-.category-hub-card:hover {
+.opportunity-carousel-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 14px 28px rgba(15, 31, 27, 0.12);
 }
 
-.category-hub-card:active {
+.opportunity-carousel-card:active {
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(15, 31, 27, 0.08);
 }
 
-.category-hub-card:focus-visible {
+.opportunity-carousel-card:focus-visible {
   outline: 2px solid var(--emerald-text, #0f7a5c);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-.category-hub-card.tone-mint {
-  background: linear-gradient(160deg, var(--mint), var(--surface) 70%);
+.opportunity-carousel-card.tone-mint {
+  background: linear-gradient(160deg, var(--mint), var(--surface) 65%);
 }
 
-.category-hub-card.tone-gold {
-  background: linear-gradient(160deg, var(--gold), var(--surface) 70%);
+.opportunity-carousel-card.tone-gold {
+  background: linear-gradient(160deg, var(--gold), var(--surface) 65%);
 }
 
-.category-hub-card.tone-sky {
-  background: linear-gradient(160deg, var(--sky), var(--surface) 70%);
+.opportunity-carousel-card.tone-sky {
+  background: linear-gradient(160deg, var(--sky), var(--surface) 65%);
 }
 
-.category-hub-card.tone-rose {
-  background: linear-gradient(160deg, var(--rose), var(--surface) 70%);
+.opportunity-carousel-card.tone-rose {
+  background: linear-gradient(160deg, var(--rose), var(--surface) 65%);
 }
 
-/* Zero-count categories still render (fixed navigation surface, not
-   filtered by data) but visually deprioritized rather than hidden. */
-.category-hub-card.is-empty {
-  opacity: 0.72;
+.opportunity-carousel-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
-.category-hub-card-icon {
-  font-size: 1.5rem;
+.opportunity-carousel-card-icon {
+  font-size: 2.2rem;
   line-height: 1;
 }
 
-.category-hub-card-name {
-  font-size: 0.94rem;
-  font-weight: 850;
-  color: var(--ink);
-}
-
-/* Round 2: now a small stack (primary activity line + optional latest-
-   record line + optional urgent badge) instead of one bare count line. */
-.category-hub-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  max-width: calc(100% - 20px);
-}
-
-.category-hub-card-primary {
-  color: var(--ink, inherit);
+.opportunity-carousel-card-urgent {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.14);
+  color: #dc2626;
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
-.category-hub-card-secondary {
+/* Large typography per the brief — this is the one card on screen, not a
+   dense tile among many, so type can be much bigger than .category-hub-
+   card's ever was. */
+.opportunity-carousel-card-name {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 850;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.opportunity-carousel-card-primary {
+  margin: 0;
+  color: var(--ink, inherit);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.opportunity-carousel-card-secondary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
   font-weight: 600;
-  opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-.category-hub-card-urgent {
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 1px 7px;
+.opportunity-carousel-card-distance {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* Strong CTA per the brief — a real button-shaped affordance, not just a
+   small arrow glyph like the old compact tile had. */
+.opportunity-carousel-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 10px 18px;
   border-radius: 999px;
-  background: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
-  font-size: 0.72rem;
+  background: var(--ink, #111);
+  color: var(--surface, #fff);
+  font-size: 0.92rem;
   font-weight: 800;
 }
 
-.category-hub-card-arrow {
-  position: absolute;
-  top: 14px;
-  right: 14px;
+.opportunity-carousel-empty {
+  padding: var(--sp-32, 32px) var(--sp-24, 24px);
+  border-radius: var(--radius-xl, 28px);
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.opportunity-carousel-empty-title {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.opportunity-carousel-empty-hint {
+  margin: 0;
   color: var(--muted);
-  opacity: 0.7;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opportunity-carousel-card {
+    transition: none;
+  }
+  .opportunity-carousel-card:hover,
+  .opportunity-carousel-card:active {
+    transform: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .carousel-shell-opportunity .carousel-track.opportunity-rail {
+    padding-inline: 12vw !important;
+    scroll-padding-inline: 12vw !important;
+  }
+  .carousel-shell-opportunity .carousel-track.opportunity-rail > * {
+    flex-basis: 62vw;
+  }
 }
 
 .category-hub-demo-note {
@@ -14373,53 +14450,6 @@ strong:has(> .verified-check) {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
-}
-
-/* Live Around You's recent-activity feed (Round 2, Part 4) — a compact
-   list, not another card grid, so it reads visually distinct from the
-   category grid directly below it. */
-.live-activity-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 14px;
-  padding: 0;
-  list-style: none;
-}
-
-.live-activity-feed-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md, 16px);
-  background: var(--surface-soft);
-  min-height: 44px;
-}
-
-.live-activity-feed-category {
-  flex-shrink: 0;
-  color: var(--emerald-text, #0f7a5c);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.live-activity-feed-title {
-  color: var(--ink, inherit);
-  font-size: 0.86rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.live-activity-browse-label {
-  margin: 4px 0 8px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .opportunities-demo-badge {
@@ -14444,36 +14474,111 @@ strong:has(> .verified-check) {
   border-radius: 999px;
 }
 
-/* Skeleton loading — reuses the same shimmer as the rest of the app
-   (.profile-listing-grid-loading) rather than a new pattern; the category
-   grid itself just needs the grid shell while data loads. */
-.category-hub-grid:empty {
-  min-height: 88px;
+/* === Unified Home Feed — the aggregation layer below Live Around You.
+   Plain stacked cards (not a carousel — a feed reads top to bottom), each
+   tagged with a small source badge. Deliberately simpler than
+   .opportunity-carousel-card: this card only ever offers Open + Share, so
+   it needs less visual weight than the one-at-a-time carousel above it. */
+.home-feed-section {
+  margin-top: var(--sp-8, 8px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .category-hub-card {
-    transition: none;
-  }
-  .category-hub-card:hover,
-  .category-hub-card:active {
-    transform: none;
-  }
+.home-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16, 16px);
 }
 
-@media (max-width: 640px) {
-  .category-hub-grid {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 8px;
-  }
-  .category-hub-card {
-    padding: 12px;
-    min-height: 44px;
-  }
-  .category-hub-card-icon {
-    font-size: 1.3rem;
-  }
+.home-feed-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8, 8px);
+  position: relative;
+  padding: var(--sp-20, 20px);
+  border-radius: var(--radius-lg, 22px);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft, 0 1px 2px rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
+
+.home-feed-item:focus-visible {
+  outline: 2px solid var(--emerald-text, #0f7a5c);
+  outline-offset: 3px;
+}
+
+.home-feed-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.home-feed-source-badge.tone-marketplace {
+  background: var(--mint);
+  color: var(--emerald-text, #0f7a5c);
+}
+
+.home-feed-source-badge.tone-community {
+  background: var(--sky);
+  color: var(--ink);
+}
+
+.home-feed-item-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.home-feed-item-body {
+  margin: 0;
+  color: var(--ink, inherit);
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.home-feed-item-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.home-feed-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.home-feed-item-cta {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--emerald-text, #0f7a5c);
+}
+
+.home-feed-item-share {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.home-feed-empty {
+  width: 100%;
+}
+
 
 /* Final carousel polish: Marketplace shelves should behave like a deliberate
    media-store rail, with roomy side gutters, snap points, and full-card reveal. */

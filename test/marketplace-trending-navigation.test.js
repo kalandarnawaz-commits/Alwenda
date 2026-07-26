@@ -21,13 +21,16 @@ function extractFunction(source, name) {
   throw new Error(`Could not find end of function ${name}`);
 }
 
-test("home trending marketplace cards open exact listing details while See all opens marketplace", () => {
-  const homeTrending = extractFunction(main, "renderTrendingMarketplace");
+// Home redesign (see test/home-feed.test.js): renderTrendingMarketplace
+// (Home's own "Trending Marketplace" rail) was removed — that content
+// still lives on Marketplace's own landing page (renderMarketplacePicker's
+// trending rail, tested below) and is now also surfaced honestly through
+// the Unified Home Feed's Marketplace source, never duplicated as a
+// separate Home rail. renderMarketplaceMiniCard's navigation contract
+// (open exact listing detail) is unchanged and still shared by both.
+test("renderTrendingMarketplace stays removed; renderMarketplaceMiniCard still opens exact listing details", () => {
+  assert.doesNotMatch(main, /function renderTrendingMarketplace\(/, "renderTrendingMarketplace must stay removed");
   const miniCard = extractFunction(main, "renderMarketplaceMiniCard");
-
-  assert.match(homeTrending, /renderLivingSection\(\s*"home\.rail\.trendingMarketplace",\s*"home\.rail\.trendingMarketplaceHint",\s*"marketplace"/);
-  assert.match(homeTrending, /trendingListingItems\(10\)/);
-  assert.match(homeTrending, /trendingItems\.map\(renderMarketplaceMiniCard\)/);
   assert.match(miniCard, /data-view="listingDetail"/);
   assert.match(miniCard, /data-listing-id="\$\{item\.id\}"/);
 });

@@ -837,6 +837,14 @@
       "fuelPetrolNearYou": "Tankstellen in deiner Nähe",
       "fuelPetrolNearYouHint": "Tankstellen zum Auftanken."
     },
+    "feed": {
+      "sectionTitle": "Aus deiner Stadt",
+      "sectionHint": "Das Neueste aus Marktplatz und Community, zusammen.",
+      "badgeMarketplace": "Marktplatz",
+      "badgeCommunity": "Community",
+      "emptyTitle": "Noch nichts zu zeigen",
+      "emptyHint": "Neue Marktplatz-Angebote und Community-Beiträge erscheinen hier."
+    },
     "intent": {
       "intentNeedPlumber": "Ich brauche einen Klempner",
       "intentSellBicycle": "Mein Fahrrad verkaufen",
@@ -1546,7 +1554,8 @@
       "callOpensPhone": "Öffnet Ihre Telefon-App",
       "shareCopied": "Link kopiert",
       "reportedConfirmation": "Gemeldet — danke für den Hinweis",
-      "savedConfirmation": "Zu Ihrer Liste hinzugefügt"
+      "savedConfirmation": "Zu Ihrer Liste hinzugefügt",
+      "limitedProfileNote": "Kontaktdaten des Verkäufers sind in dieser Ansicht noch nicht verfügbar — öffnen Sie den Marktplatz, um zu stöbern und Verkäufer direkt zu kontaktieren."
     }
   },
   "needHelp": {

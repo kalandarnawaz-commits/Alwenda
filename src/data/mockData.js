@@ -553,28 +553,12 @@ export const earnToday = [
   { titleKey: "mock.earn.earn6Title", value: "€40", area: "Šnipiškės", time: "Tonight", fitKey: "mock.earn.earn6Fit", image: "https://images.unsplash.com/photo-1581539250439-c96689b516dd?auto=format&fit=crop&w=900&q=80" }
 ];
 
-export const exploreHighlights = [
-  { titleKey: "mock.explore.explore1Title", typeKey: "mock.explore.explore1Type", area: "Paupys", imageTone: "mint", signalKey: "mock.explore.explore1Signal", image: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=1100&q=80" },
-  { titleKey: "mock.explore.explore2Title", typeKey: "mock.explore.explore2Type", area: "Naujamiestis", imageTone: "gold", signalKey: "mock.explore.explore2Signal", image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.explore.explore3Title", typeKey: "mock.explore.explore3Type", area: "Old Town", imageTone: "rose", signalKey: "mock.explore.explore3Signal", image: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.explore.explore4Title", typeKey: "mock.explore.explore4Type", area: "Užupis", imageTone: "sky", signalKey: "mock.explore.explore4Signal", image: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=80" },
-  { titleKey: "mock.explore.explore5Title", typeKey: "mock.explore.explore5Type", area: "Naujamiestis", imageTone: "ink", signalKey: "mock.explore.explore5Signal", image: "https://images.unsplash.com/photo-1566054757965-8c4085344c96?auto=format&fit=crop&w=900&q=80" }
-];
-
 export const foodCategories = [
   { name: "Pizza", detail: "8 nearby", accent: "rose", image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80" },
   { name: "Indian", detail: "4 open now", accent: "gold", image: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=800&q=80" },
   { name: "Turkish", detail: "5 nearby", accent: "mint", image: "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?auto=format&fit=crop&w=800&q=80" },
   { name: "Italian", detail: "Reservations", accent: "sky", image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80" },
   { name: "Breakfast", detail: "Open early", accent: "cream", image: "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=800&q=80" }
-];
-
-export const alwenRecommendations = [
-  "mock.alwenRec.alwenRec1",
-  "mock.alwenRec.alwenRec2",
-  "mock.alwenRec.alwenRec3",
-  "mock.alwenRec.alwenRec4",
-  "mock.alwenRec.alwenRec5"
 ];
 
 export const listings = [

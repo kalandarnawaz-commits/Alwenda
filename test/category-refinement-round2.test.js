@@ -91,10 +91,14 @@ test("settings icon keeps a real >=44px hit area despite being visually compact"
 // Part 2 — Richer category cards
 // ---------------------------------------------------------------------
 
-test("category cards render a real count line plus a latest-record line only when a record exists", () => {
-  const fn = extractFunction(main, "renderCategoryHubCard");
-  assert.match(fn, /category-hub-card-primary/);
-  assert.match(fn, /category-hub-card-secondary/);
+test("carousel cards render a real count line plus a latest-record line only when a record exists", () => {
+  // renderCategoryHubCard (Earn Today's grid tile) was removed by the Home
+  // redesign — Live Around You's premium carousel card
+  // (renderOpportunityCarouselCard) keeps the same primary/secondary
+  // summary-line contract its predecessor established.
+  const fn = extractFunction(main, "renderOpportunityCarouselCard");
+  assert.match(fn, /opportunity-carousel-card-primary/);
+  assert.match(fn, /opportunity-carousel-card-secondary/);
   assert.match(fn, /summary\.latestTitle \? t\("opportunities\.latestPrefix"/);
 });
 
@@ -110,26 +114,33 @@ test("urgentCount only reflects a genuine urgency==='today' field, never invente
   assert.match(summaryFn, /record\.urgency === "today"/);
 });
 
-test("honest zero state on category cards: no active requests, never hidden", () => {
-  const fn = extractFunction(main, "renderCategoryHubCard");
-  assert.match(fn, /isEmpty \? t\("opportunities\.noActiveRequests"\)/);
-  assert.match(fn, /isEmpty \? t\("opportunities\.nothingLiveYet"\)/);
+test("honest zero state: Live Around You's carousel never floods with inactive categories, and shows one honest empty state instead", () => {
+  // The Home redesign deliberately reversed Round 2's "show every category,
+  // zeroed-out" behaviour (per the user's explicit "no inactive-category
+  // flood" instruction): Live Around You now filters to only categories
+  // with genuine current activity, and renders ONE honest empty state
+  // (never a per-category zero tile) when nothing anywhere is live.
+  const railFn = extractFunction(main, "renderLiveAroundYou");
+  assert.match(railFn, /categoryHubIdsSortedByCount\("live"\)\.filter\(\(id\) => categoryHubCardSummary\(id, "live"\)\.count > 0\)/);
+  assert.match(railFn, /renderOpportunityCarouselEmptyState\(\)/);
+  const emptyFn = extractFunction(main, "renderOpportunityCarouselEmptyState");
+  assert.match(emptyFn, /t\("opportunities\.nothingLiveYet"\)/);
+  assert.match(emptyFn, /t\("opportunities\.exploreOrPost"\)/);
 });
 
 // ---------------------------------------------------------------------
 // Part 3 — Earn Today
 // ---------------------------------------------------------------------
 
-test("Earn Today sources help_requests only, never mixes in service listings", () => {
-  // On any surface other than "live", offerCount only increments from
-  // records that are themselves listings — but opportunityRecordsForCategory
-  // for surface "earn" only ever returns help_requests in the first place
-  // (realOpportunityRecordsForSurface), so offerCount for earn is always 0.
+test("the earn surface sources help_requests only, never mixes in service listings", () => {
+  // renderEarnToday (Home's dedicated Earn Today rail) was removed by the
+  // Home redesign — the underlying "earn" vs "live" surface distinction it
+  // relied on is still real and still reachable (default opportunityFilter
+  // surface, Contribute's "liveOpportunities" entry point), so this test
+  // now covers only the surviving data-layer contract, not the deleted
+  // Home rail's own render function.
   const summaryFn = extractFunction(main, "categoryHubCardSummary");
   assert.match(summaryFn, /if \(isListing\) offerCount \+= 1;/);
-  const earnRailFn = extractFunction(main, "renderEarnToday");
-  assert.match(earnRailFn, /categoryHubIdsSortedByCount\("earn"\)/);
-  assert.match(earnRailFn, /renderCategoryHubGrid\(categoryIds, "earn"\)/);
   const surfaceFn = extractFunction(main, "realOpportunityRecordsForSurface");
   assert.match(surfaceFn, /if \(surface === "live"\) return \[\.\.\.feed\.helpRequests, \.\.\.feed\.listings\];/);
   assert.match(surfaceFn, /return feed\.helpRequests;/);
@@ -140,10 +151,18 @@ test("Earn Today CTA copy is action-oriented (Help & earn), distinct from Live A
   assert.match(fn, /filter\.surface === "earn" \? t\("opportunities\.helpAndEarn"\)/);
 });
 
-test("Earn Today zero-state action reuses an existing action (offer your help), never invents alert infrastructure", () => {
+test("Live Around You's honest empty state reuses existing copy, never invents alert infrastructure", () => {
+  // renderCategoryHubCard's per-category "offer your help" zero-state CTA
+  // no longer exists — the Home redesign filters zero-count categories out
+  // of the carousel entirely instead of showing them with a zero-state
+  // action (see the "no inactive-category flood" test above). The one
+  // aggregate empty state that replaces it still must not invent new alert
+  // infrastructure, and must reuse the already-established opportunity
+  // copy keys rather than fabricating new ones.
   assert.doesNotMatch(main, /createAlert|alert-subscription|notifyMeWhen/i, "must not introduce new alert infrastructure");
-  const fn = extractFunction(main, "renderCategoryHubCard");
-  assert.match(fn, /opportunities\.offerYourHelp/);
+  const fn = extractFunction(main, "renderOpportunityCarouselEmptyState");
+  assert.match(fn, /opportunities\.nothingLiveYet/);
+  assert.match(fn, /opportunities\.exploreOrPost/);
 });
 
 // ---------------------------------------------------------------------
@@ -153,26 +172,34 @@ test("Earn Today zero-state action reuses an existing action (offer your help), 
 test("Live Around You combines help_requests and listings, and the split is explicitly labelled", () => {
   const summaryFn = extractFunction(main, "categoryHubCardSummary");
   assert.match(summaryFn, /if \(isListing\) offerCount \+= 1;/);
-  const cardFn = extractFunction(main, "renderCategoryHubCard");
+  // renderCategoryHubCard was removed by the Home redesign — the premium
+  // carousel card (renderOpportunityCarouselCard) keeps the same explicit
+  // request/offer split label.
+  const cardFn = extractFunction(main, "renderOpportunityCarouselCard");
   assert.match(cardFn, /opportunities\.requestOfferSplit", \{ requests: summary\.requestCount, offers: summary\.offerCount \}/);
 });
 
-test("recent activity feed items never expose more than category + a title already shown elsewhere", () => {
-  const itemFn = extractFunction(main, "renderRecentActivityFeedItem");
-  assert.match(itemFn, /normalizeOpportunityCategory\(record\)/);
-  assert.match(itemFn, /categoryHubRecordTitle\(record\)/);
-  assert.match(itemFn, /truncateForCard\(/, "title must be truncated for the compact feed");
-  assert.doesNotMatch(itemFn, /\.email|\.phone|\.address|\.owner_user_id|\.requester_user_id/, "must not surface owner-only/contact fields");
-});
-
-test("recent activity feed is sorted by real created_at, not fixture/insertion order, for real records", () => {
-  const fn = extractFunction(main, "recentLiveActivityItems");
-  assert.match(fn, /new Date\(b\.created_at\)\.getTime\(\) - new Date\(a\.created_at\)\.getTime\(\)/);
+test("carousel cards never expose more than category + a title already shown elsewhere", () => {
+  // renderRecentActivityFeedItem/recentLiveActivityItems (Round 2's
+  // separate "recent activity" feed) were removed by the Home redesign —
+  // superseded by the carousel card's own per-category summary line, which
+  // keeps the same "title only, truncated, no owner-only fields" contract.
+  const summaryFn = extractFunction(main, "categoryHubCardSummary");
+  assert.match(summaryFn, /categoryHubRecordTitle\(records\[0\]\)/);
+  assert.match(summaryFn, /truncateForCard\(/, "title must be truncated for the compact card");
+  const titleFn = extractFunction(main, "categoryHubRecordTitle");
+  assert.doesNotMatch(titleFn, /\.email|\.phone|\.address|\.owner_user_id|\.requester_user_id/, "must not surface owner-only/contact fields");
 });
 
 test("Live Around You's empty state reads 'Nothing live yet', distinct from Earn Today's 'No active requests'", () => {
-  const cardFn = extractFunction(main, "renderCategoryHubCard");
-  assert.match(cardFn, /surface === "live"[\s\S]{0,300}nothingLiveYet/);
+  // renderCategoryHubCard's per-surface zero-state copy branch was removed
+  // along with the rest of that function — the carousel's single aggregate
+  // empty state (renderOpportunityCarouselEmptyState) is the only "nothing
+  // live" copy left, and it must stay the distinct "nothingLiveYet" string,
+  // never Earn Today's separate "noActiveRequests" copy.
+  const emptyFn = extractFunction(main, "renderOpportunityCarouselEmptyState");
+  assert.match(emptyFn, /opportunities\.nothingLiveYet/);
+  assert.doesNotMatch(emptyFn, /opportunities\.noActiveRequests/);
 });
 
 test("Live Around You never falls back to fixtures on production — same isProductionHost gate as Earn Today", () => {
@@ -246,7 +273,10 @@ test("category starter buttons are keyboard-operable real buttons with accessibl
 // ---------------------------------------------------------------------
 
 test("every new interactive class added this round has a :hover and :focus-visible rule", () => {
-  for (const selector of [".category-hub-card", ".user-profile-settings-icon", ".alwen-category-starter", ".profile-metric"]) {
+  // .category-hub-card's CSS was removed along with the render function it
+  // styled — .opportunity-carousel-card is its Home-redesign successor and
+  // keeps the same :focus-visible contract (see styles.css).
+  for (const selector of [".opportunity-carousel-card", ".user-profile-settings-icon", ".alwen-category-starter", ".profile-metric"]) {
     assert.match(styles, new RegExp(`\\${selector}:focus-visible`), `${selector} must define :focus-visible`);
   }
 });
@@ -256,7 +286,11 @@ test("category starter chips keep a real >=44px hit area", () => {
   assert.match(rule, /min-height:\s*44px/);
 });
 
-test("live activity feed items keep a real >=44px row height", () => {
-  const rule = styles.match(/\.live-activity-feed-item\s*\{[^}]*\}/)[0];
-  assert.match(rule, /min-height:\s*44px/);
+test("Live Around You's carousel cards keep a real >=44px hit area", () => {
+  // .live-activity-feed-item (Round 2's separate recent-activity feed) was
+  // removed along with the feature it styled — the carousel card that
+  // replaced it is the "one large card" the Home redesign brief calls for,
+  // sized well past a minimum 44px hit area.
+  const rule = styles.match(/\.opportunity-carousel-card\s*\{[^}]*\}/)[0];
+  assert.match(rule, /min-height:\s*220px/);
 });
