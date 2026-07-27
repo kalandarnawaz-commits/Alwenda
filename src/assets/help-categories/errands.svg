@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="Errands category artwork">
+  <defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fef9c3"/><stop offset="1" stop-color="#ca8a04"/></linearGradient></defs>
+  <rect width="1200" height="760" fill="url(#g)"/>
+  <path d="M370 280h455l-42 300H412l-42-300z" fill="#ffffff" opacity=".88"/>
+  <path d="M470 280c10-95 65-140 130-140s120 45 130 140" stroke="#3a2b08" stroke-width="32" stroke-linecap="round" fill="none"/>
+  <path d="M455 380h290M455 455h220" stroke="#3a2b08" stroke-width="28" stroke-linecap="round" opacity=".45"/>
+</svg>

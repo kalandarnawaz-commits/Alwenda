@@ -123,6 +123,7 @@
     "newNeighbourPosts": "new neighbour posts",
     "localAlerts": "local alerts",
     "nearby": "Nearby",
+    "distanceKmAway": "{distance} km away",
     "you": "You",
     "viewProfile": "View profile",
     "bookNow": "Book now",
@@ -2346,6 +2347,7 @@
     "detailNotFound": "This request is no longer available.",
     "moreNearbyWork": "More work nearby",
     "moreNearbyWorkHint": "Other live requests in the same category.",
+    "requestImageAlt": "{category} help request image",
     "items": {
       "airport-pickup": {
         "title": "Airport pickup",

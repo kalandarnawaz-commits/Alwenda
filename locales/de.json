@@ -123,6 +123,7 @@
     "newNeighbourPosts": "neue Nachbarschaftsbeiträge",
     "localAlerts": "lokale Warnungen",
     "nearby": "In der Nähe",
+    "distanceKmAway": "{distance} km entfernt",
     "you": "Du",
     "viewProfile": "Profil ansehen",
     "bookNow": "Jetzt buchen",
@@ -2346,6 +2347,7 @@
     "detailNotFound": "Diese Anfrage ist nicht mehr verfügbar.",
     "moreNearbyWork": "Mehr Arbeit in der Nähe",
     "moreNearbyWorkHint": "Weitere aktive Anfragen in derselben Kategorie.",
+    "requestImageAlt": "Bild zur Hilfeanfrage in {category}",
     "items": {
       "airport-pickup": {
         "title": "Abholung vom Flughafen",

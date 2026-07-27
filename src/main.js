@@ -7200,6 +7200,82 @@ function isProductionHost() {
 }
 
 const OPPORTUNITY_FEED_FETCH_LIMIT = 30;
+const HELP_REQUEST_CATEGORY_IMAGE_ROOT = "./src/assets/help-categories/";
+const HELP_REQUEST_CATEGORY_IMAGE_FALLBACK = `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}community-help.svg`;
+const helpRequestCategoryImageMemo = new Map();
+const HELP_REQUEST_CATEGORY_IMAGE_MAP = Object.freeze({
+  cleaning: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}cleaning.svg`,
+  transport: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}transport.svg`,
+  mechanic: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}transport.svg`,
+  vehicle: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}transport.svg`,
+  food: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}food.svg`,
+  moving: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}moving.svg`,
+  childcare: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}childcare.svg`,
+  homeRepairs: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}repairs.svg`,
+  repairs: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}repairs.svg`,
+  translation: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}translation.svg`,
+  teaching: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}translation.svg`,
+  technology: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}technology.svg`,
+  errands: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}errands.svg`,
+  delivery: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}errands.svg`,
+  shopping: `${HELP_REQUEST_CATEGORY_IMAGE_ROOT}errands.svg`,
+  other: HELP_REQUEST_CATEGORY_IMAGE_FALLBACK
+});
+
+function helpRequestCategoryArtwork(categoryId) {
+  const normalizedCategoryId = categoryId || "other";
+  if (!helpRequestCategoryImageMemo.has(normalizedCategoryId)) {
+    helpRequestCategoryImageMemo.set(normalizedCategoryId, HELP_REQUEST_CATEGORY_IMAGE_MAP[normalizedCategoryId] || HELP_REQUEST_CATEGORY_IMAGE_FALLBACK);
+  }
+  return helpRequestCategoryImageMemo.get(normalizedCategoryId);
+}
+
+function isValidHelpRequestUploadedImageUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return false;
+  if (/^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);/i.test(url) || /^blob:/i.test(url)) return true;
+  if (/^\/(?:storage|uploads|user-content|help-requests)\//i.test(url)) return true;
+  try {
+    const base = typeof location !== "undefined" && location.origin ? location.origin : "https://alwenda.com";
+    const parsed = new URL(url, base);
+    const isSupabaseStorage = parsed.protocol === "https:" && parsed.hostname.endsWith(".supabase.co") && parsed.pathname.includes("/storage/v1/object/public/");
+    const isHelpRequestBucket = /(?:help[-_]?requests?|request[-_]?media|opportunity[-_]?media)/i.test(parsed.pathname);
+    return isSupabaseStorage && isHelpRequestBucket;
+  } catch {
+    return false;
+  }
+}
+
+function firstValidHelpRequestUploadedImage(record) {
+  const media = Array.isArray(record?.media) ? record.media : [];
+  const candidates = [
+    record?.image_url,
+    record?.photo_url,
+    record?.cover_url,
+    record?.media_url,
+    record?.image,
+    ...media.map((item) => (typeof item === "string" ? item : item?.url || item?.publicUrl || item?.src || ""))
+  ];
+  return candidates.find(isValidHelpRequestUploadedImageUrl) || "";
+}
+
+function resolveHelpRequestImage(record) {
+  const uploaded = firstValidHelpRequestUploadedImage(record);
+  const categoryId = normalizeOpportunityCategory(record);
+  const categoryLabel = t(categoryConfigFor(categoryId).labelKey);
+  if (uploaded) {
+    return {
+      src: uploaded,
+      source: "uploaded",
+      alt: t("opportunities.requestImageAlt", { category: categoryLabel })
+    };
+  }
+  return {
+    src: helpRequestCategoryArtwork(categoryId),
+    source: HELP_REQUEST_CATEGORY_IMAGE_MAP[categoryId] ? "category" : "fallback",
+    alt: t("opportunities.requestImageAlt", { category: categoryLabel })
+  };
+}
 
 /** Fire-and-forget, same convention as refreshMyListings()/
  * refreshMyHelpRequests() — but unauthenticated (help_requests/listings
@@ -7721,6 +7797,7 @@ function publicHelpRequestAuthor(record) {
 
 function shapeHelpRequestOpportunityForDisplay(record) {
   const categoryId = normalizeOpportunityCategory(record);
+  const categoryConfig = categoryConfigFor(categoryId);
   const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === record.urgency);
   const description = String(record.description || "").trim();
   return {
@@ -7728,12 +7805,17 @@ function shapeHelpRequestOpportunityForDisplay(record) {
     title: description || t("opportunities.untitledRequest"),
     description,
     categoryId,
-    categoryLabel: t(categoryConfigFor(categoryId).labelKey),
+    categoryLabel: t(categoryConfig.labelKey),
+    categoryIcon: categoryConfig.icon,
     createdAt: record.created_at || null,
     neighbourhood: record.area || record.city || "",
+    distanceLabel: helpRequestDistanceLabel(record),
+    postedRelative: helpRequestRelativePostedLabel(record.created_at),
     urgency: matchedUrgency ? t(matchedUrgency[1]) : "",
+    urgencyKey: matchedUrgency ? matchedUrgency[0] : "",
     status: record.status ? t(`status.${record.status}`) : t("status.open"),
     author: publicHelpRequestAuthor(record),
+    image: resolveHelpRequestImage(record),
     sourceType: record.requester_user_id ? "user" : record.created_by_alwen ? "system" : "legacy",
     requestUrlAvailable: Boolean(record.id)
   };
@@ -7743,6 +7825,71 @@ function helpRequestSourceLabel(item) {
   if (item.sourceType === "system") return t("opportunities.sourceSystem");
   if (item.sourceType === "legacy") return t("opportunities.sourceLegacy");
   return t("opportunities.sourcePerson");
+}
+
+function helpRequestRelativePostedLabel(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const deltaSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const divisions = [
+    { amount: 60, unit: "second" },
+    { amount: 60, unit: "minute" },
+    { amount: 24, unit: "hour" },
+    { amount: 7, unit: "day" }
+  ];
+  let duration = deltaSeconds;
+  for (const division of divisions) {
+    if (Math.abs(duration) < division.amount) {
+      return new Intl.RelativeTimeFormat(currentLocaleTag(), { numeric: "auto" }).format(Math.round(duration), division.unit);
+    }
+    duration /= division.amount;
+  }
+  return formatDate(date, { dateStyle: "medium" });
+}
+
+function helpRequestDistanceLabel(record) {
+  const meters = record?.distance_meters ?? record?.distanceMeters ?? record?.distance;
+  return Number.isFinite(meters) ? formatDistance(meters) : "";
+}
+
+function renderUrgencyBadge(request, modifier = "") {
+  if (!request.urgency) return "";
+  const className = ["urgency-badge", request.urgencyKey ? `urgency-badge-${request.urgencyKey}` : "", modifier].filter(Boolean).join(" ");
+  return `<span class="${className}">${escapeHtml(request.urgency)}</span>`;
+}
+
+function renderCategoryBadge(request, modifier = "") {
+  const className = ["category-badge", modifier].filter(Boolean).join(" ");
+  return `<span class="${className}"><span aria-hidden="true">${escapeHtml(request.categoryIcon)}</span>${escapeHtml(request.categoryLabel)}</span>`;
+}
+
+function renderHelpRequestHeroImage(request, modifier = "") {
+  const className = ["help-request-hero-image", modifier].filter(Boolean).join(" ");
+  return `<div class="${className}">
+    <img src="${escapeHtml(request.image.src)}" alt="${escapeHtml(request.image.alt)}" loading="lazy" decoding="async" />
+  </div>`;
+}
+
+function renderHelpRequestAuthorRow(request, modifier = "") {
+  const authorProfileButton = request.author.profileUrlAvailable
+    ? `data-user-profile-target="${escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId)}" aria-label="${escapeHtml(t("opportunities.openAuthorProfile", { name: request.author.displayName }))}"`
+    : `disabled aria-disabled="true"`;
+  const className = ["people-request-author", modifier].filter(Boolean).join(" ");
+  return `<button type="button" class="${className}" ${authorProfileButton}>
+    <span class="people-request-avatar">${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" decoding="async" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}</span>
+    <span class="people-request-author-copy">
+      <strong>${escapeHtml(request.author.displayName)}${request.author.verified ? verifiedCheck(t("status.verified")) : ""}</strong>
+      <small>${escapeHtml(helpRequestSourceLabel(request))}</small>
+    </span>
+  </button>`;
+}
+
+function renderHelpRequestMetaRow(request, modifier = "") {
+  const meta = [request.neighbourhood, request.distanceLabel, request.postedRelative].filter(Boolean);
+  if (!meta.length) return "";
+  const className = ["help-request-meta-row", modifier].filter(Boolean).join(" ");
+  return `<p class="${className}">${meta.map(escapeHtml).join(" · ")}</p>`;
 }
 
 function findLoadedHelpRequestById(id) {
@@ -7769,7 +7916,6 @@ function renderRealOpportunityCard(record) {
   const title = realOpportunityCardTitle(record, isListing);
   const locationLabel = isListing ? record.neighbourhood || record.location_label : record.area;
   const priceLabel = isListing && record.price_amount != null ? formatCurrency(record.price_amount, record.price_currency || "EUR") : null;
-  const urgencyOption = !isListing ? HELP_URGENCY_OPTIONS.find(([value]) => value === record.urgency) : null;
   const postedLabel = record.created_at ? formatDate(record.created_at, { dateStyle: "medium" }) : null;
   if (isListing) {
     return `<article class="opportunity-card real-opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(title)}" data-view="listingDetail" data-listing-id="${escapeHtml(String(record.id))}" data-opportunity-record-id="${escapeHtml(String(record.id))}" data-opportunity-record-type="listing">
@@ -7783,27 +7929,18 @@ function renderRealOpportunityCard(record) {
   }
 
   const request = shapeHelpRequestOpportunityForDisplay(record);
-  const authorProfileButton = request.author.profileUrlAvailable
-    ? `data-user-profile-target="${escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId)}" aria-label="${escapeHtml(t("opportunities.openAuthorProfile", { name: request.author.displayName }))}"`
-    : `disabled aria-disabled="true"`;
   return `<article class="opportunity-card real-opportunity-card people-request-card" role="button" tabindex="0" aria-label="${escapeHtml(request.title)}" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}" data-opportunity-record-id="${escapeHtml(request.id)}" data-opportunity-record-type="helpRequest">
-    <div class="people-request-author-row">
-      <button type="button" class="people-request-author" ${authorProfileButton}>
-        <span class="people-request-avatar">${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}</span>
-        <span class="people-request-author-copy">
-          <strong>${escapeHtml(request.author.displayName)}${request.author.verified ? verifiedCheck(t("status.verified")) : ""}</strong>
-          <small>${[request.author.handle, postedLabel].filter(Boolean).map(escapeHtml).join(" · ") || escapeHtml(helpRequestSourceLabel(request))}</small>
-        </span>
-      </button>
-    </div>
-    <div class="opportunity-body">
-      <div class="opportunity-price-row"><span class="chip real-opportunity-category-chip">${escapeHtml(request.categoryLabel)}</span><b>${escapeHtml(request.status)}</b></div>
+    ${renderHelpRequestHeroImage(request, "people-request-image")}
+    <div class="opportunity-body people-request-body">
+      <div class="people-request-card-kicker">
+        ${renderCategoryBadge(request)}
+        ${renderUrgencyBadge(request)}
+      </div>
       <h2>${escapeHtml(request.title)}</h2>
-      ${request.description && request.description !== request.title ? `<p>${escapeHtml(request.description)}</p>` : ""}
-      <p class="opportunity-meta">${[locationLabel ? escapeHtml(locationLabel) : null, urgencyOption ? t(urgencyOption[1]) : null, helpRequestSourceLabel(request)].filter(Boolean).join(" · ")}</p>
+      ${renderHelpRequestAuthorRow(request)}
+      ${renderHelpRequestMetaRow(request)}
       <div class="opportunity-actions people-request-actions">
-        <button type="button" class="opportunity-primary" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}">${t("opportunities.viewRequest")}</button>
-        ${request.author.profileUrlAvailable ? `<button type="button" data-user-profile-target="${escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId)}">${t("common.viewProfile")}</button>` : `<span class="people-request-profile-muted">${t("opportunities.profileUnavailable")}</span>`}
+        <a class="opportunity-primary" href="${liveOpportunityHref(request.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}">${t("opportunities.viewRequest")} <span aria-hidden="true">→</span></a>
       </div>
     </div>
   </article>`;
@@ -7839,6 +7976,14 @@ function renderRealHelpRequestDetail(record) {
     ${renderTransactionSafetyNotice()}
     <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
     <article class="opportunity-detail-card people-request-detail-card">
+      <div class="opportunity-detail-hero people-request-detail-hero">
+        ${renderHelpRequestHeroImage(request, "people-request-detail-hero-image")}
+        <div class="opportunity-detail-badges">
+          ${renderCategoryBadge(request, "category-badge-overlay")}
+          ${renderUrgencyBadge(request, "urgency-badge-overlay")}
+          ${request.status ? `<span>${escapeHtml(request.status)}</span>` : ""}
+        </div>
+      </div>
       <div class="opportunity-detail-body">
         <div class="people-request-detail-author">
           ${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}
@@ -7906,20 +8051,55 @@ function opportunityTags(item) {
   return item.tags.map((tag, index) => opportunityText(item, `tag${index + 1}`, tag));
 }
 
-function renderOpportunityCard(item) {
+function shapeFixtureHelpRequestOpportunityForDisplay(item) {
+  const categoryId = normalizeOpportunityCategory(item);
+  const categoryConfig = categoryConfigFor(categoryId);
   const title = opportunityText(item, "title");
-  const category = opportunityText(item, "category");
-  const time = opportunityText(item, "time");
   const requester = opportunityText(item, "requester");
-  const description = opportunityText(item, "description");
-  const action = opportunityText(item, "action");
-  return `<article class="opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${title} ${item.priceLabel}`)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">
-    <div class="opportunity-cover" style="background-image:url('${item.image}')"><span>${category}</span>${item.urgent ? `<strong>${t("common.urgentLabel")}</strong>` : ""}</div>
-    <div class="opportunity-body"><div class="opportunity-price-row"><h2>${title}</h2><b>${item.priceLabel}</b></div>
-    <p class="opportunity-meta">${t("common.opportunityDistanceMeta", { distance: item.distance, time })}</p>
-    <p>${description}</p><div class="opportunity-trust"><span>✓ ${requester}</span><span>★ ${t("common.trustScore", { score: item.trust })}</span></div>
-    <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
-    <div class="opportunity-actions"><button type="button" class="opportunity-primary" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${action}</button><a href="${liveOpportunityHref(item.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${item.id}">${t("common.viewDetails")}</a></div></div>
+  const urgency = item.urgent ? t("common.urgentLabel") : item.today ? t("common.today") : "";
+  return {
+    id: String(item.id),
+    title,
+    description: opportunityText(item, "description"),
+    categoryId,
+    categoryLabel: t(categoryConfig.labelKey),
+    categoryIcon: categoryConfig.icon,
+    neighbourhood: item.area || "",
+    distanceLabel: item.distance ? t("common.distanceKmAway", { distance: item.distance }) : "",
+    postedRelative: opportunityText(item, "time"),
+    urgency,
+    urgencyKey: item.urgent ? "urgent" : item.today ? "today" : "",
+    status: item.urgent ? t("common.fastMatch") : t("common.openRequest"),
+    author: {
+      userId: null,
+      displayName: requester,
+      avatarUrl: "",
+      handle: "",
+      verified: Boolean(item.verified),
+      profileUrlAvailable: false
+    },
+    image: resolveHelpRequestImage(item),
+    sourceType: "legacy",
+    requestUrlAvailable: Boolean(item.id)
+  };
+}
+
+function renderOpportunityCard(item) {
+  const request = shapeFixtureHelpRequestOpportunityForDisplay(item);
+  return `<article class="opportunity-card people-request-card" role="button" tabindex="0" aria-label="${escapeHtml(request.title)}" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}">
+    ${renderHelpRequestHeroImage(request, "people-request-image")}
+    <div class="opportunity-body people-request-body">
+      <div class="people-request-card-kicker">
+        ${renderCategoryBadge(request)}
+        ${renderUrgencyBadge(request)}
+      </div>
+      <h2>${escapeHtml(request.title)}</h2>
+      ${renderHelpRequestAuthorRow(request)}
+      ${renderHelpRequestMetaRow(request)}
+      <div class="opportunity-actions people-request-actions">
+        <a class="opportunity-primary" href="${liveOpportunityHref(request.id)}" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}">${t("opportunities.viewRequest")} <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
   </article>`;
 }
 
@@ -7964,6 +8144,7 @@ function renderLiveOpportunityDetail() {
   const requester = opportunityText(item, "requester");
   const description = opportunityText(item, "description");
   const action = opportunityText(item, "action");
+  const image = resolveHelpRequestImage(item);
   const related = LIVE_OPPORTUNITIES
     .filter((candidate) => candidate.id !== item.id && (candidate.category === item.category || candidate.today === item.today))
     .slice(0, 3);
@@ -7971,7 +8152,8 @@ function renderLiveOpportunityDetail() {
     ${renderTransactionSafetyNotice()}
     <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
     <article class="opportunity-detail-card">
-      <div class="opportunity-detail-hero" style="background-image:url('${item.image}')">
+      <div class="opportunity-detail-hero opportunity-detail-hero-image">
+        <img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" loading="lazy" decoding="async" />
         <div class="opportunity-detail-badges">
           <span>${category}</span>
           ${item.urgent ? `<strong>${t("common.urgentLabel")}</strong>` : ""}
