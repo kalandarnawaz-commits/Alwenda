@@ -778,20 +778,8 @@
     "rail": {
       "liveAroundYou": "Live in deiner Nähe",
       "liveAroundYouHint": "Echte Nachfrage in deiner Nähe von Menschen, die jetzt Hilfe brauchen.",
-      "trendingMarketplace": "Angesagt auf dem Marktplatz",
-      "trendingMarketplaceHint": "Die Angebote, Wohnungen, Fahrzeuge und nützlichen Funde, die Menschen in deiner Nähe beobachten.",
-      "trendingToday": "Heute angesagt",
-      "trendingTodayHint": "Die beliebtesten Anzeigen im Moment.",
       "recentlyListed": "Kürzlich eingestellt",
       "recentlyListedHint": "Frisch zum Marktplatz hinzugefügt.",
-      "bestRated": "Am besten bewertet",
-      "bestRatedHint": "Verifizierte Verkäufer mit der besten Erfolgsbilanz.",
-      "nearbyListings": "In der Nähe",
-      "nearbyListingsHint": "Am nächsten zu deinem aktuellen Standort.",
-      "openNowListings": "Jetzt geöffnet",
-      "openNowListingsHint": "Verfügbar und heute einsatzbereit.",
-      "recommendedForYou": "Für dich empfohlen",
-      "recommendedForYouHint": "Ausgewählt passend zu dem, wonach du normalerweise suchst.",
       "allListings": "Alle Anzeigen",
       "allListingsHint": "Jede aktive Anzeige, die zu deinen Filtern passt.",
       "earnToday": "Heute verdienen",
@@ -1517,11 +1505,12 @@
     "marketplaceHint": "Kaufen, beauftragen, mieten, arbeiten",
     "marketplaceTitle": "Alles, was deine Stadt für dich tun kann.",
     "marketplaceHeroTitle": "Marktplatz",
-    "marketplaceHeroSubtitle": "Kaufen. Verkaufen. Entdecken. Beauftragen. Reservieren.",
+    "marketplaceHeroSubtitle": "Kaufen. Verkaufen. Entdecken. Beauftragen.",
+    "marketplaceEmptyTitle": "Noch keine Inserate",
+    "marketplaceEmptyHint": "Sei der Erste, der hier etwas einstellt.",
     "hub": {
       "listingsCount": "{count} Angebote",
-      "noListingsYet": "Neu hier",
-      "activeNowCount": "{count} jetzt aktiv"
+      "noListingsYet": "Neu hier"
     },
     "capabilities": {
       "capabilityAiSearch": "KI-Suche",

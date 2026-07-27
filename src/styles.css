@@ -2542,6 +2542,20 @@ body.has-open-sheet {
   background-size: cover;
 }
 
+/* One intentional placeholder for a real listing with no photo (see
+   shapeListingSummaryForDisplay) — same discipline as
+   .business-gallery-photo.listing-gallery-placeholder, never an
+   invented/stock image. */
+.market-photo.listing-photo-placeholder,
+.card-photo.listing-photo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 2rem;
+}
+
 .favourite-float,
 .ai-verified {
   position: absolute;

@@ -28,8 +28,8 @@ test("the Home hero Events tile points at a real events destination", () => {
 test("Events/Jobs/Apartments hero values are computed from real data, never hardcoded", () => {
   const helper = extractFunction(main, "currentLivingCitySignals");
   assert.match(helper, /EVENTS\.filter\(\(event\) => event\.outdoor && event\.distanceMinutes <= 25\)\.length/);
-  assert.match(helper, /listings\.filter\(\(listing\) => listing\.type === "jobs"\)\.length/);
-  assert.match(helper, /listings\.filter\(\(listing\) => listing\.type === "rentals"\)\.length/);
+  assert.match(helper, /listingPool\.filter\(\(listing\) => listing\.type === "jobs"\)\.length/);
+  assert.match(helper, /listingPool\.filter\(\(listing\) => listing\.type === "rentals"\)\.length/);
   // The static livingCitySignals[1..3].value mock strings must never be
   // returned as-is — every call site overrides them with a computed count.
   assert.doesNotMatch(helper, /return livingCitySignals;/);

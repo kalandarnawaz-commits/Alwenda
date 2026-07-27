@@ -778,20 +778,8 @@
     "rail": {
       "liveAroundYou": "Live around you",
       "liveAroundYouHint": "Real demand nearby from people who need help now.",
-      "trendingMarketplace": "Trending Marketplace",
-      "trendingMarketplaceHint": "The deals, homes, vehicles, and useful finds people are watching nearby.",
-      "trendingToday": "Trending today",
-      "trendingTodayHint": "The most popular listings right now.",
       "recentlyListed": "Recently listed",
       "recentlyListedHint": "Freshly added to the marketplace.",
-      "bestRated": "Best rated",
-      "bestRatedHint": "Verified sellers with the strongest track record.",
-      "nearbyListings": "Nearby",
-      "nearbyListingsHint": "Closest to where you are now.",
-      "openNowListings": "Open now",
-      "openNowListingsHint": "Available and ready today.",
-      "recommendedForYou": "Recommended for you",
-      "recommendedForYouHint": "Picked to match what you usually look for.",
       "allListings": "All listings",
       "allListingsHint": "Every active listing matching your filters.",
       "earnToday": "Earn Today",
@@ -1517,11 +1505,12 @@
     "marketplaceHint": "Buy, hire, rent, work",
     "marketplaceTitle": "Everything your city can do for you.",
     "marketplaceHeroTitle": "Marketplace",
-    "marketplaceHeroSubtitle": "Buy. Sell. Discover. Hire. Reserve.",
+    "marketplaceHeroSubtitle": "Buy. Sell. Discover. Hire.",
+    "marketplaceEmptyTitle": "No listings yet",
+    "marketplaceEmptyHint": "Be the first to list something here.",
     "hub": {
       "listingsCount": "{count} listings",
-      "noListingsYet": "New here",
-      "activeNowCount": "{count} active now"
+      "noListingsYet": "New here"
     },
     "capabilities": {
       "capabilityAiSearch": "AI search",

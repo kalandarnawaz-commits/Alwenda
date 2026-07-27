@@ -778,20 +778,8 @@
     "rail": {
       "liveAroundYou": "Gyva aplink jus",
       "liveAroundYouHint": "Tikros netoliese esančių žmonių užklausos, kuriems reikia pagalbos dabar.",
-      "trendingMarketplace": "Populiaru turguje",
-      "trendingMarketplaceHint": "Pasiūlymai, namai, transportas ir naudingi radiniai netoliese.",
-      "trendingToday": "Populiaru šiandien",
-      "trendingTodayHint": "Populiariausi skelbimai dabar.",
       "recentlyListed": "Neseniai įkelta",
       "recentlyListedHint": "Ką tik pridėta į rinką.",
-      "bestRated": "Geriausiai įvertinti",
-      "bestRatedHint": "Patikrinti pardavėjai su geriausia reputacija.",
-      "nearbyListings": "Netoliese",
-      "nearbyListingsHint": "Arčiausiai tavęs esantys skelbimai.",
-      "openNowListings": "Dabar atidaryta",
-      "openNowListingsHint": "Prieinama ir paruošta šiandien.",
-      "recommendedForYou": "Rekomenduojama tau",
-      "recommendedForYouHint": "Parinkta pagal tavo įpročius.",
       "allListings": "Visi skelbimai",
       "allListingsHint": "Visi aktyvūs skelbimai pagal tavo filtrus.",
       "earnToday": "Uždirbkite šiandien",
@@ -1517,11 +1505,12 @@
     "marketplaceHint": "Pirkti, samdyti, nuoma",
     "marketplaceTitle": "Viskas, ką miestas gali padaryti jums.",
     "marketplaceHeroTitle": "Rinka",
-    "marketplaceHeroSubtitle": "Pirk. Parduok. Atrask. Samdyk. Rezervuok.",
+    "marketplaceHeroSubtitle": "Pirk. Parduok. Atrask. Samdyk.",
+    "marketplaceEmptyTitle": "Dar nėra skelbimų",
+    "marketplaceEmptyHint": "Būk pirmas, kuris čia įkels skelbimą.",
     "hub": {
       "listingsCount": "{count} skelbimai",
-      "noListingsYet": "Nauja čia",
-      "activeNowCount": "{count} aktyvūs dabar"
+      "noListingsYet": "Nauja čia"
     },
     "capabilities": {
       "capabilityAiSearch": "DI paieška",

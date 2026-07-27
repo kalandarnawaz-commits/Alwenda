@@ -10,7 +10,6 @@ import {
   businessClaims,
   importedBusinesses,
   importSources,
-  listings,
   liveAroundYou,
   livingCitySignals,
   marketplaceCapabilities,
@@ -521,7 +520,7 @@ function findPersonById(id) {
   if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
   const post = feedPosts.find((item) => item.authorId === id);
   if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.verified, context: "community" };
-  const listing = listings.find((item) => item.sellerId === id);
+  const listing = myListingsPool.find((item) => item.sellerId === id);
   if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
   return null;
 }
@@ -2177,13 +2176,15 @@ function pharmacySignal() {
 }
 
 /* Events/Jobs/Apartments values are computed from the real underlying
-   collections (EVENTS, listings) on every call — never hardcoded — so the
-   hero tile can never drift out of sync with what its destination screen
-   actually shows, the same discipline already applied to Weather below. */
+   collections (EVENTS, the real Marketplace pool) on every call — never
+   hardcoded — so the hero tile can never drift out of sync with what its
+   destination screen actually shows, the same discipline already applied
+   to Weather below. */
 function currentLivingCitySignals() {
   const eventsNearYouCount = EVENTS.filter((event) => event.outdoor && event.distanceMinutes <= 25).length;
-  const jobsCount = listings.filter((listing) => listing.type === "jobs").length;
-  const rentalsCount = listings.filter((listing) => listing.type === "rentals").length;
+  const listingPool = marketplaceListingPool();
+  const jobsCount = listingPool.filter((listing) => listing.type === "jobs").length;
+  const rentalsCount = listingPool.filter((listing) => listing.type === "rentals").length;
   const base = [
     livingCitySignals[0],
     { ...livingCitySignals[1], value: String(eventsNearYouCount) },
@@ -2815,23 +2816,20 @@ function routeForQuery() {
 }
 
 function filteredListings() {
-  return listings.filter((item) => {
+  return marketplaceListingPool().filter((item) => {
     const categoryMatch = state.category === "all" || item.type === state.category;
     const areaMatch = state.area === "All" || item.area === state.area;
     return categoryMatch && areaMatch && matchesQuery(`${listingTitle(item)} ${item.area} ${listingMeta(item)} ${item.status}`);
   }).sort((a, b) => queryScore(`${listingTitle(b)} ${listingTitle(b)} ${listingMeta(b)} ${b.type}`) - queryScore(`${listingTitle(a)} ${listingTitle(a)} ${listingMeta(a)} ${a.type}`));
 }
 
-function listingMovementScore(item) {
-  const popularity = Number.parseInt(String(item.popularity || "").match(/\d+/)?.[0] || "0", 10);
-  const verifiedBoost = item.verifiedSeller ? 8 : 0;
-  const activeBoost = /open|available|hiring|this week|matched/i.test(item.status || "") ? 6 : 0;
-  return popularity + verifiedBoost + activeBoost + Number(item.id || 0) / 1000;
-}
-
-function trendingListingItems(limit = 10) {
-  return [...listings]
-    .sort((a, b) => listingMovementScore(b) - listingMovementScore(a))
+/** Real timestamps only — every real listing carries createdAt (see
+ * shapeListingForDisplay/shapeListingSummaryForDisplay), so "recent" is
+ * always a genuine, verifiable ordering rather than a fabricated
+ * popularity/verified-seller/status heuristic. */
+function recentListingItems(limit = 10) {
+  return [...marketplaceListingPool()]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, limit);
 }
 
@@ -6107,7 +6105,7 @@ function renderMarketplaceMiniCard(item) {
   const isSaved = state.savedListingIds.includes(String(item.id));
   return `
     <article class="market-mini-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0" aria-label="${escapeHtml(`${listingTitle(item)} ${item.price}`)}">
-      <div class="card-photo" style="background-image: url('${item.image}')"></div>
+      <div class="card-photo ${item.image ? "" : "listing-photo-placeholder"}" ${item.image ? `style="background-image: url('${item.image}')"` : ""}>${!item.image ? icon("tag") : ""}</div>
       <button type="button" class="mini-save ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       <span>${categoryLabel(item.type)}</span>
       <h3>${listingTitle(item)}</h3>
@@ -6131,37 +6129,25 @@ function marketplaceListingRail(titleKey, hintKey, items) {
   );
 }
 
+/** Real listings have no genuine popularity/verified-seller/distance/
+ * open-now signal (see shapeListingSummaryForDisplay) — this used to
+ * curate 6 rails from those fields, which would now either be empty or
+ * fabricated for every real row. createdAt is the one signal every real
+ * listing genuinely has, so "Recently Listed" is the only rail left. */
 function renderMarketplaceCollections(items) {
   if (!items.length) return "";
-  const parseCount = (value) => Number.parseInt(String(value).match(/\d+/)?.[0] ?? "0", 10);
-  const parseDistance = (value) => (value === "Remote" ? Infinity : Number.parseFloat(value) || Infinity);
-  const byId = (a, b) => b.id - a.id;
-
-  const trending = [...items].sort((a, b) => parseCount(b.popularity) - parseCount(a.popularity)).slice(0, 6);
-  const recentlyListed = [...items].sort(byId).slice(0, 6);
-  const bestRated = items.filter((item) => item.verifiedSeller).slice(0, 6);
-  const nearby = [...items].sort((a, b) => parseDistance(a.distance) - parseDistance(b.distance)).slice(0, 6);
-  const openNow = items.filter((item) => /open|available|hiring|this week/i.test(item.status)).slice(0, 6);
-  const recommended = [...items].sort((a, b) => byId(a, b)).reverse().slice(0, 6);
-
-  return `
-    ${marketplaceListingRail("home.rail.trendingToday", "home.rail.trendingTodayHint", trending)}
-    ${marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentlyListed)}
-    ${marketplaceListingRail("home.rail.bestRated", "home.rail.bestRatedHint", bestRated)}
-    ${marketplaceListingRail("home.rail.nearbyListings", "home.rail.nearbyListingsHint", nearby)}
-    ${marketplaceListingRail("home.rail.openNowListings", "home.rail.openNowListingsHint", openNow)}
-    ${marketplaceListingRail("home.rail.recommendedForYou", "home.rail.recommendedForYouHint", recommended)}
-  `;
+  const recentlyListed = [...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 6);
+  return marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentlyListed);
 }
 
-/** Real counts only — how many listings actually sit in this category
- * ("all" counts every listing), and how many of those read as currently
- * active (same open/available/hiring/this-week signal already used by
- * renderMarketplaceCollections' "Open now" rail, not a separate guess). */
+/** Real count only — how many listings actually sit in this category
+ * ("all" counts every listing in the real pool). Real listings have no
+ * "active/inactive" concept (status is always "published"), so there is
+ * no honest activeCount to show alongside it anymore. */
 function marketplaceCategoryMetadata(categoryId) {
-  const items = categoryId === "all" ? listings : listings.filter((item) => item.type === categoryId);
-  const activeCount = items.filter((item) => /open|available|hiring|this week/i.test(item.status)).length;
-  return { total: items.length, activeCount };
+  const pool = marketplaceListingPool();
+  const items = categoryId === "all" ? pool : pool.filter((item) => item.type === categoryId);
+  return { total: items.length };
 }
 
 /** Same destination-card language as renderExploreHubCard (icon, name,
@@ -6173,7 +6159,7 @@ function marketplaceCategoryMetadata(categoryId) {
  * parallel .marketplace-hub-card class, since the pattern is generic. */
 function renderMarketplaceHubCard(categoryId, index) {
   const isAll = categoryId === "all";
-  const { total, activeCount } = marketplaceCategoryMetadata(categoryId);
+  const { total } = marketplaceCategoryMetadata(categoryId);
   const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
   const label = isAll ? t("common.allCategories") : t(categories.find((category) => category.id === categoryId).labelKey);
   return `
@@ -6182,7 +6168,6 @@ function renderMarketplaceHubCard(categoryId, index) {
       <span class="explore-hub-card-name">${label}</span>
       <span class="explore-hub-card-meta">
         ${total > 0 ? t("marketplace.hub.listingsCount", { count: total }) : t("marketplace.hub.noListingsYet")}
-        ${activeCount > 0 ? `<span class="explore-hub-card-open">${t("marketplace.hub.activeNowCount", { count: activeCount })}</span>` : ""}
       </span>
       <span class="explore-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
     </button>
@@ -6207,7 +6192,7 @@ function renderMarketplacePicker() {
         </div>
         ${renderAiSearch("marketplace")}
       </section>
-      ${marketplaceListingRail("home.rail.trendingMarketplace", "home.rail.trendingMarketplaceHint", trendingListingItems(10))}
+      ${marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentListingItems(10))}
       <div class="explore-hub-grid">
         ${["all", ...categories.map((category) => category.id)].map((categoryId, index) => renderMarketplaceHubCard(categoryId, index)).join("")}
       </div>
@@ -6218,19 +6203,44 @@ function renderMarketplacePicker() {
 function renderMarketplace() {
   if (!state.marketplaceCategoryChosen) return renderMarketplacePicker();
 
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+
+  const hero = `
+    <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
+      <div class="city-hero-copy">
+        <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
+        <h1 id="marketplace-hero-title">${t("marketplace.marketplaceHeroTitle")}</h1>
+        <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
+      </div>
+      ${renderAiSearch("marketplace")}
+    </section>
+  `;
+
+  if (state.opportunityFeed.status === "loading") {
+    return `
+      <section class="section-shell marketplace-shell">
+        ${hero}
+        <div class="profile-listing-grid-loading" aria-busy="true"></div>
+      </section>
+    `;
+  }
+
+  if (state.opportunityFeed.status === "error") {
+    return `
+      <section class="section-shell marketplace-shell">
+        ${hero}
+        ${renderEmptyState(t("opportunities.loadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button>
+      </section>
+    `;
+  }
+
   const items = filteredListings();
   const pros = filteredProfessionals();
 
   return `
     <section class="section-shell marketplace-shell">
-      <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
-          <h1 id="marketplace-hero-title">${t("marketplace.marketplaceHeroTitle")}</h1>
-          <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
-        </div>
-        ${renderAiSearch("marketplace")}
-      </section>
+      ${hero}
       ${renderCapabilityRail()}
       <div class="need-help-card">
         <div>
@@ -6248,7 +6258,9 @@ function renderMarketplace() {
         <div><h2>${t("home.rail.allListings")}</h2><p>${t("home.rail.allListingsHint")}</p></div>
       </div>
       <div class="market-grid">
-        ${items.map(renderMarketplaceListing).join("")}
+        ${items.length
+          ? items.map(renderMarketplaceListing).join("")
+          : `${renderEmptyState(t("marketplace.marketplaceEmptyTitle"), "tag")}<div class="opportunity-post-cta"><p>${t("marketplace.marketplaceEmptyHint")}</p><button type="button" data-view="createListing">${t("common.sellSomething")}</button></div>`}
       </div>
       <div class="section-title">
         <div><h2>${t("common.verifiedPros")}</h2><p>${t("common.verifiedProsHint")}</p></div>
@@ -6695,15 +6707,18 @@ function renderMarketplaceListing(item) {
   const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
     <article class="market-card visual-market-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
-      <div class="market-photo" style="background-image: url('${item.image}')">
+      <div class="market-photo ${item.image ? "" : "listing-photo-placeholder"}" ${item.image ? `style="background-image: url('${item.image}')"` : ""}>
+        ${!item.image ? icon("tag") : ""}
         <button type="button" class="favourite-float ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
       <div class="market-card-body">
+        ${item.seller ? `
         <div class="seller-row" role="button" tabindex="0" ${personAttrs}>
           <img src="${item.sellerAvatar}" alt="" />
           <div><strong>${item.seller}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong><span>${joinNonEmpty([item.distance, item.area, item.commute, item.verifiedSeller ? t("common.verifiedSeller") : null])}</span></div>
         </div>
-        <span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>
+        ` : ""}
+        ${item.offerorStatus ? `<span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>` : ""}
         <span class="badge">${categoryLabel(item.type)}</span>
         ${item.workMode ? `<span class="badge badge-workmode">${item.workMode}</span>` : ""}
         <h3>${listingTitle(item)}</h3>
@@ -6724,17 +6739,17 @@ function renderMarketplaceListing(item) {
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
 /** Resolves state.selectedListingId to an item and renders it through the
- * ONE canonical body below — the local `listings` pool (mock seed data +
- * the current user's own real listings, always fully shaped and
- * available synchronously) is checked first; anything not found there
- * (any other user's real, published listing — e.g. reached from the Home
- * Feed) falls through to an async full-record fetch via
- * refreshRemoteListingDetail(), cached in state.remoteListingDetail so a
- * re-render while loading doesn't re-fetch. Both paths render through the
- * exact same renderListingDetailBody() — there is no separate reduced
- * view for real listings. */
+ * ONE canonical body below — myListingsPool (the current user's own real
+ * listings, always fully shaped and available synchronously) is checked
+ * first; anything not found there (any other user's real, published
+ * listing — e.g. reached from the Home Feed) falls through to an async
+ * full-record fetch via refreshRemoteListingDetail(), cached in
+ * state.remoteListingDetail so a re-render while loading doesn't
+ * re-fetch. Both paths render through the exact same
+ * renderListingDetailBody() — there is no separate reduced view for real
+ * listings. */
 function renderListingDetail() {
-  const localItem = listings.find((listing) => String(listing.id) === String(state.selectedListingId));
+  const localItem = myListingsPool.find((listing) => String(listing.id) === String(state.selectedListingId));
   if (localItem) return renderListingDetailBody(localItem);
   return renderRemoteListingDetail();
 }
@@ -7153,21 +7168,19 @@ function findCommunityPostById(id) {
   return feedPosts.find((item) => String(item.id) === String(id)) || state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
 }
 
-/** Shared lookup for a listing by id, across BOTH pools — the local
- * `listings` array (seeded mock rows + the current user's own real
- * listings, merged in by applyCreatedListing/refreshMyListings) and the
- * general public real feed loaded by refreshOpportunityFeed() via
- * fetchPublicListings() (state.opportunityFeed.listings). These are two
- * genuinely different pools: `listings` has the full mock display shape
- * (image, seller, gallery, reputation...) but only ever contains OTHER
- * users' real listings if this viewer happens to already have them
- * merged in; state.opportunityFeed.listings has every published real
- * listing but only the minimal columns fetchPublicListings selects (no
- * seller/image/gallery at all). isReal tells the caller which shape it
- * got back, since they need different rendering. */
+/** Shared lookup for a listing by id, across BOTH pools — myListingsPool
+ * (the current user's own real listings, merged in by
+ * applyCreatedListing/refreshMyListings) and the general public real feed
+ * loaded by refreshOpportunityFeed() via fetchPublicListings()
+ * (state.opportunityFeed.listings). These are two genuinely different
+ * shapes: myListingsPool has the full display shape (image, seller,
+ * gallery, reputation...); state.opportunityFeed.listings has every
+ * published real listing but only the minimal columns fetchPublicListings
+ * selects (no seller/image/gallery at all). isReal tells the caller which
+ * shape it got back, since they need different rendering. */
 function findListingRecordById(id) {
   if (id == null) return { item: null, isReal: false };
-  const local = listings.find((listing) => String(listing.id) === String(id));
+  const local = myListingsPool.find((listing) => String(listing.id) === String(id));
   if (local) return { item: local, isReal: false };
   const real = state.opportunityFeed.listings.find((listing) => String(listing.id) === String(id));
   if (real) return { item: real, isReal: true };
@@ -8609,18 +8622,14 @@ function formatListingPrice(priceAmount, pricePeriod, currency = "EUR") {
 }
 
 /** Shapes a real listings-table row into whatever renderMarketplaceListing()
- * and friends already expect from the seeded mock data, and adds it to both
- * the local `listings` list (so it appears in Marketplace immediately, same
- * convention as submitHelpRequest()/applyAlwenCreatedHelpRequest() use for
- * Hire) and state.myListings (Profile's "My Listings"). Shared by the manual
- * form below and by Alwen's create_marketplace_listing tool result. */
-/** Shapes a real listings-table row into whatever renderMarketplaceListing()
- * and friends already expect from the seeded mock data. Shared by the
- * manual form/Alwen's tool result (a listing just created THIS session) and
- * refreshMyListings() below (listings created in an earlier session, which
- * otherwise only ever exist in state.myListings and never actually appear
- * anywhere you'd browse them, since the `listings` array driving Marketplace
- * is a plain in-memory array with no database backing of its own). */
+ * and friends already expect, and adds it to both myListingsPool (so it
+ * appears in Marketplace immediately, same convention as
+ * submitHelpRequest()/applyAlwenCreatedHelpRequest() use for Hire) and
+ * state.myListings (Profile's "My Listings"). Shared by the manual form
+ * below, by Alwen's create_marketplace_listing tool result (a listing just
+ * created THIS session), and by refreshMyListings() below (listings
+ * created in an earlier session, which otherwise only ever exist in
+ * state.myListings and never actually appear anywhere you'd browse them). */
 function shapeListingForDisplay(created) {
   const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === created.category) || "buy-sell";
   const user = state.auth.user;
@@ -8658,12 +8667,74 @@ function shapeListingForDisplay(created) {
     popularity: "",
     aiPrice: "",
     aiInsight: "",
-    cardSize: "compact"
+    cardSize: "compact",
+    createdAt: created.created_at || new Date().toISOString()
   };
 }
 
+/** Maps fetchPublicListings()'s lightweight row (no images/owner embed,
+ * see that function's SELECT) into the same display shape as
+ * shapeListingForDisplay above — every field genuinely unavailable at
+ * this projection (image, seller, distance, popularity, aiPrice,
+ * offerorStatus) stays empty/null rather than guessed, so
+ * renderMarketplaceListing/renderMarketplaceMiniCard can omit them
+ * exactly like they already do for any listing missing an optional
+ * field. */
+function shapeListingSummaryForDisplay(raw) {
+  const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === raw.category) || "buy-sell";
+  return {
+    id: raw.id,
+    sellerId: null,
+    type: uiCategory,
+    title: raw.title,
+    meta: raw.description || "",
+    description: raw.description || "",
+    area: raw.neighbourhood || raw.location_label || "",
+    price: formatListingPrice(raw.price_amount, raw.price_period, raw.price_currency),
+    status: t("status.published"),
+    condition: null,
+    image: "",
+    gallery: [],
+    seller: "",
+    sellerAvatar: "",
+    sellerPhone: null,
+    sellerResponseTime: null,
+    sellerReputation: null,
+    pickupAvailable: false,
+    deliveryAvailable: false,
+    offerorStatus: null,
+    verifiedSeller: false,
+    distance: "",
+    popularity: "",
+    aiPrice: "",
+    aiInsight: "",
+    cardSize: "compact",
+    createdAt: raw.created_at
+  };
+}
+
+/** Replaces the old mock-seeded `listings` array's role as the "my own
+ * real listings" pool (see applyCreatedListing/refreshMyListings below) —
+ * starts empty rather than pre-populated with fake rows. */
+let myListingsPool = [];
+
+/** The full real Marketplace browse pool: the current user's own
+ * listings (full shape, from myListingsPool — has photos/seller identity
+ * since createListing/fetchMyListings return the full row) plus every
+ * other published listing from the shared refreshOpportunityFeed() cache
+ * (light shape, mapped via shapeListingSummaryForDisplay), deduplicated
+ * by id so a listing that is both "mine" and already present in the
+ * general feed never renders twice. Reuses the exact cache Home/Live
+ * Opportunities already fetch — no extra network round trip just for
+ * Marketplace's own page (see renderMarketplace()'s idle guard). */
+function marketplaceListingPool() {
+  const ownIds = new Set(myListingsPool.map((item) => String(item.id)));
+  const others = state.opportunityFeed.listings.filter((raw) => !ownIds.has(String(raw.id))).map(shapeListingSummaryForDisplay);
+  return [...myListingsPool, ...others];
+}
+
 function applyCreatedListing(created) {
-  listings.unshift(shapeListingForDisplay(created));
+  myListingsPool.unshift(shapeListingForDisplay(created));
   state.myListings.unshift(created);
   trackEvent("listing_created", { category: created.category, hasPrice: Boolean(created.price_amount) });
 }
@@ -8679,8 +8750,8 @@ async function refreshMyListings() {
   try {
     state.myListings = await fetchMyListings();
     for (const item of state.myListings) {
-      if (!listings.some((existing) => String(existing.id) === String(item.id))) {
-        listings.unshift(shapeListingForDisplay(item));
+      if (!myListingsPool.some((existing) => String(existing.id) === String(item.id))) {
+        myListingsPool.unshift(shapeListingForDisplay(item));
       }
     }
     // Home never reads state.myListings (Profile/Contribute do). This — and
@@ -8949,9 +9020,9 @@ function openGeneratedConversation({ type, participant, verified = false, previe
 }
 
 function startListingConversation(listingId) {
-  const item =
-    listings.find((listing) => String(listing.id) === String(listingId)) ||
-    (String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null);
+  const { item: found, isReal } = findListingRecordById(listingId);
+  const remote = String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null;
+  const item = (isReal && found ? shapeListingSummaryForDisplay(found) : found) || remote;
   if (!item) return;
   const title = listingTitle(item);
   openGeneratedConversation({
@@ -11760,7 +11831,7 @@ function bindEvents() {
       }
       if (button.dataset.listingId) {
         state.selectedListingId = button.dataset.listingId;
-        const selected = listings.find((listing) => String(listing.id) === String(button.dataset.listingId));
+        const selected = myListingsPool.find((listing) => String(listing.id) === String(button.dataset.listingId));
         if (selected?.offerorStatus === "trader") loadTraderDisclosure(selected.sellerId);
       }
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
