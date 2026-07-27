@@ -167,10 +167,10 @@ test("selectHomeIntentChips is deterministic — identical signals always produc
 });
 
 test("selectHomeIntentChips falls back to stable pool order when no contextual signal favours any chip", () => {
-  // Wednesday, no weather, signed in (kills the guest-only "translate" boost;
-  // "nearbyOffers" boosts for signed-in, which is the one real signal left).
+  // Wednesday, no weather, signed in (kills the guest-only "translate" boost)
+  // — no other signal fires, so the result is pure pool order.
   const order = runSelectHomeIntentChips({ daySuffix: "", weatherCode: null, isSignedIn: true, hasEarnInventory: false, dayOfWeek: 3 });
-  assert.deepEqual(order, ["nearbyOffers", "doctor", "translate", "weekendPlans", "sellSomething"]);
+  assert.deepEqual(order, ["doctor", "translate", "weekendPlans", "sellSomething", "needHelp"]);
 });
 
 test("selectHomeIntentChips re-ranks chips upward when their real signal is present (guest + real earn inventory)", () => {

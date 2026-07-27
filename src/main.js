@@ -1,6 +1,5 @@
 import {
   adminStats,
-  businesses,
   categories,
   city,
   COMMUNITY_POST_TYPES,
@@ -19,10 +18,8 @@ import {
   neighbourhoods,
   NOTIFICATION_FILTERS,
   notifications,
-  offers,
   professionalCategories,
   profileReviews,
-  reservations,
   reputationProfile,
   SEED_CITY_META,
   serviceProfessionals
@@ -246,7 +243,6 @@ const state = {
     delivery: "Pickup today",
     boost: "48-hour local boost"
   },
-  selectedBusinessId: null,
   selectedListingId: null,
   /* Full real listing record for a listing not in the local `listings`
      pool (i.e. someone else's published listing, reached from the Home
@@ -527,8 +523,6 @@ function findPersonById(id) {
   if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.verified, context: "community" };
   const listing = listings.find((item) => item.sellerId === id);
   if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
-  const offer = offers.find((item) => `offer-${item.id}` === id);
-  if (offer) return { id, name: offer.vendor, area: offer.area, context: "marketplace" };
   return null;
 }
 
@@ -1141,12 +1135,8 @@ const DEEP_LINK_VIEWS = new Set([
   "liveOpportunityDetail",
   "events",
   "eventDetail",
-  "businesses",
-  "businessProfile",
   "businessCreate",
   "businessClaim",
-  "offers",
-  "reservations",
   "translate",
   "profile",
   "account",
@@ -1170,7 +1160,7 @@ const DEEP_LINK_VIEWS = new Set([
 /* Views whose deep link needs a companion ?id= to mean anything — read
    from and written to the URL alongside `view` by syncStateFromUrl /
    syncUrlToState below. */
-const ID_LINKED_VIEWS = new Set(["publicProfile", "userProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
+const ID_LINKED_VIEWS = new Set(["publicProfile", "userProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
 
 /* Handles are lowercase a-z0-9_ only (mirrors public_profiles_handle_format
    in supabase/migrations/202607240001_profile_social_identity.sql) and a
@@ -1194,7 +1184,6 @@ let lastPushedUrlKey = null;
 function currentDeepLinkId() {
   if (state.activeView === "publicProfile") return state.publicProfile?.id || null;
   if (state.activeView === "userProfile") return state.userProfile?.handle || state.userProfile?.userId || null;
-  if (state.activeView === "businessProfile") return state.selectedBusinessId != null ? String(state.selectedBusinessId) : null;
   if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
   if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
   if (state.activeView === "liveOpportunityDetail") return state.selectedOpportunityId != null ? String(state.selectedOpportunityId) : null;
@@ -1260,7 +1249,6 @@ function syncStateFromUrl() {
   if (!id || !ID_LINKED_VIEWS.has(view)) return;
   if (view === "publicProfile") openPublicProfileById(id);
   else if (view === "userProfile") openUserProfile(id);
-  else if (view === "businessProfile") state.selectedBusinessId = Number(id);
   else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
   else if (view === "liveOpportunityDetail") state.selectedOpportunityId = id;
@@ -1795,16 +1783,13 @@ function appleMapsUrl(item) {
 }
 
 /** Which category-specific quick action(s) apply beyond the universal
- * Directions/Waze/Call/Website row. Kept intentionally small — each one
- * routes to a real, already-existing flow (reservations view, tel:/site
- * links) rather than a new backend that doesn't exist. */
+ * Directions/Waze/Call/Website row. Kept intentionally small — no
+ * reserve/book action exists here since no booking backend exists;
+ * "menu" just links out to the place's own website. */
 function categoryActionsFor(item) {
   const actions = [];
   if (item.category === "Food & Drink") {
     if (item.website) actions.push("menu");
-    actions.push("reserve");
-  } else if (item.category === "Hotels") {
-    actions.push("book");
   } else if (item.category === "Pharmacy" || item.category === "Healthcare") {
     actions.push("hours");
   } else if (item.category === "Public Services") {
@@ -2819,7 +2804,7 @@ function routeForQuery() {
   if (/(earn|€100|100 today|make money|paid task|contribution points|dog walking|programming|consulting|knowledge sharing)/.test(q)) return "contribute";
   if (/(sell|iphone|bicycle|bike|lost wallet|wallet|apartment|bedroom|under 900|job|vehicle|business for sale)/.test(q)) return "marketplace";
   if (/(claim business)/.test(q)) return "businessClaim";
-  if (/(new italian restaurant|business owner|opening in vilnius)/.test(q)) return "businesses";
+  if (/(new italian restaurant|business owner|opening in vilnius)/.test(q)) return "businessCreate";
   if (/(profile|account|what brings|skills|profession)/.test(q)) return "profile";
   if (/(just moved|moved to|settling|first week|plan my move)/.test(q)) return "home";
   if (/(remind|watch|track|monitor|notify me|tell me when|priority|workspace|alwen)/.test(q)) return "alwen";
@@ -2848,13 +2833,6 @@ function trendingListingItems(limit = 10) {
   return [...listings]
     .sort((a, b) => listingMovementScore(b) - listingMovementScore(a))
     .slice(0, limit);
-}
-
-function filteredBusinesses() {
-  return businesses.filter((item) => {
-    const areaMatch = state.area === "All" || item.area === state.area;
-    return areaMatch && matchesQuery(`${item.name} ${item.area} ${item.type} ${item.tagKeys.map((tagKey) => t(tagKey)).join(" ")}`);
-  });
 }
 
 const HAS_PHOTO_STATUSES = new Set(["real", "google", "wikimedia"]);
@@ -2979,13 +2957,6 @@ function topMatches(limit = 4, context = "home") {
     action: "hire",
     initials: initials(item.name)
   }));
-  const placeMatches = filteredBusinesses().map((item) => ({
-    kind: t("entity.place"),
-    title: item.name,
-    meta: `${item.area} · ★ ${item.rating} · ${item.hours}`,
-    action: "reservations",
-    image: item.image
-  }));
   const importedMatches = filteredImportedBusinesses().map((item) => {
     const distance = formatDistance(distanceFromCenter(item));
     const open = isOpenNow(item.openingHours);
@@ -3005,30 +2976,20 @@ function topMatches(limit = 4, context = "home") {
     action: "marketplace",
     image: item.image
   }));
-  const offerMatches = offers.filter((offer) => matchesQuery(`${offer.vendor} ${t(offer.titleKey)} ${offer.area}`)).map((offer) => ({
-    kind: t("entity.offer"),
-    title: t(offer.titleKey),
-    meta: `${offer.vendor} · ${offer.value}`,
-    action: "offers",
-    tileIcon: "tag"
-  }));
-
   const ordered =
     routed === "hire"
-      ? [...proMatches, ...helpMatches, ...placeMatches, ...listingMatches]
+      ? [...proMatches, ...helpMatches, ...listingMatches]
       : routed === "marketplace"
-        ? [...listingMatches, ...offerMatches, ...proMatches, ...helpMatches, ...placeMatches, ...importedMatches]
+        ? [...listingMatches, ...proMatches, ...helpMatches, ...importedMatches]
         : routed === "translate"
-          ? [...translationMatches, ...placeMatches, ...importedMatches]
+          ? [...translationMatches, ...importedMatches]
           : routed === "explore"
-            ? [...importedMatches, ...offerMatches, ...listingMatches, ...proMatches, ...helpMatches]
+            ? [...importedMatches, ...listingMatches, ...proMatches, ...helpMatches]
             : routed === "community"
-              ? [...helpMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches, ...offerMatches]
+              ? [...helpMatches, ...proMatches, ...listingMatches, ...importedMatches]
               : routed === "contribute"
-                ? [...helpMatches, ...offerMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches]
-                : routed === "reservations" || routed === "businesses"
-                  ? [...placeMatches, ...importedMatches, ...offerMatches, ...proMatches, ...listingMatches, ...helpMatches]
-                  : [...placeMatches, ...importedMatches, ...proMatches, ...listingMatches, ...helpMatches, ...offerMatches];
+                ? [...helpMatches, ...proMatches, ...listingMatches, ...importedMatches]
+                : [...importedMatches, ...proMatches, ...listingMatches, ...helpMatches];
 
   return ordered.slice(0, limit);
 }
@@ -3755,12 +3716,8 @@ function renderView() {
     eventDetail: renderEventDetail,
     createListing: renderCreateListingForm,
     listingDetail: renderListingDetail,
-    businesses: renderBusinesses,
     businessCreate: renderBusinessCreate,
-    businessProfile: renderBusinessProfile,
     businessClaim: renderBusinessClaim,
-    offers: renderOffers,
-    reservations: renderReservations,
     translate: renderTranslation,
     // "profile" is the entry point clicked in the app chrome (header
     // avatar, "Sign in" prompts, Contribute's identity card) — for a
@@ -4747,7 +4704,6 @@ const HOME_INTENT_CHIPS = [
   { id: "needHelp", labelKey: "home.intent.intentNeedHelp", view: "community" },
   { id: "findWork", labelKey: "home.intent.intentEarnNearby", view: "contribute" },
   { id: "emergency", labelKey: "home.intent.intentEmergency", view: "explore", seeAllCategory: "Pharmacy" },
-  { id: "nearbyOffers", labelKey: "home.intent.intentNearbyOffers", view: "offers" },
   { id: "plumber", labelKey: "home.intent.intentNeedPlumber", view: "hire" },
   { id: "taxi", labelKey: "home.intent.intentNeedTaxi", view: "explore", seeAllCategory: "Transport" }
 ];
@@ -4773,7 +4729,6 @@ function selectHomeIntentChips(count = 5) {
     emergency: isBadWeather ? 1 : 0,
     weekendPlans: isWeekend ? 1 : 0,
     findWork: hasEarnInventory ? 1 : 0,
-    nearbyOffers: isSignedIn ? 1 : 0,
     taxi: daySuffix === "Evening" ? 1 : 0,
     translate: !isSignedIn ? 1 : 0
   };
@@ -5219,8 +5174,8 @@ function renderHomeAiComposer() {
 }
 
 /** Shared by every non-Home context (create/community/explore/marketplace/
- * contribute/hire/businesses/reservations) — Home has its own dedicated
- * renderHomeAiComposer() above and never calls this. */
+ * contribute/hire) — Home has its own dedicated renderHomeAiComposer()
+ * above and never calls this. */
 function renderAiSearch(context) {
   // Community and Explore each get their own contextual placeholder
   // immediately (the rotation in bindAiSearchPlaceholderRotation() takes
@@ -6765,10 +6720,7 @@ function renderMarketplaceListing(item) {
 }
 
 /** Full listing detail — the card above only ever showed a teaser (photo,
- * truncated title, price) with no way to see the rest. Reuses the same
- * gallery-rail / detail-strip / actions-row markup pattern as
- * renderBusinessProfile above so it reads as the same "detail screen"
- * family rather than a one-off layout. Deep-linkable via WP0's routing
+ * truncated title, price) with no way to see the rest. Deep-linkable via WP0's routing
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
 /** Resolves state.selectedListingId to an item and renders it through the
@@ -8873,137 +8825,6 @@ function renderMarketplaceCategoryChipRow(targetView = "marketplace") {
   return renderCategoryChipRow(marketplaceCategoryTiles(targetView));
 }
 
-function renderBusinesses() {
-  const items = filteredBusinesses();
-  return `
-    <section class="section-shell">
-      <section class="city-hero page-hero businesses-hero-photo" aria-labelledby="businesses-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
-          <h1 id="businesses-hero-title">${t("common.localPlaces")}</h1>
-          <p>${t("common.localPlacesHint")}</p>
-        </div>
-        ${renderAiSearch("businesses")}
-      </section>
-      ${renderAiSearchResults(6, "businesses")}
-      <div class="visual-business-grid">
-        ${items
-          .map(
-            (item) => `
-            <article class="business-card visual-business-card">
-              <div class="business-photo" style="background-image: url('${item.image}')">
-                <span>${item.hours}</span>
-              </div>
-              <div>
-                <h3>${item.name}${verifiedCheck(t("status.verified"))}</h3>
-                <p>${item.area} · ${item.distance} · ★ ${item.rating}</p>
-                <div class="tag-row">${item.tagKeys.map((tagKey) => `<span>${t(tagKey)}</span>`).join("")}</div>
-                <div class="ai-price-pill">${icon("spark")}<span>${t(item.aiInsightKey)}</span></div>
-                ${item.ecosystem ? `<div class="business-platform">${item.ecosystem.map((capability) => `<span>${capability}</span>`).join("")}</div>` : ""}
-              </div>
-              <div class="market-actions">
-                <button data-view="businessProfile" data-business-id="${item.id}">${t("common.viewProfile")}</button>
-                <button data-view="reservations">${t("common.reserve")}</button>
-              </div>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-const BUSINESS_TYPE_LABEL_KEY = {
-  restaurants: "category.business.bizCatFoodDrink",
-  hotels: "category.business.bizCatHotels",
-  "service-apartments": "category.business.bizCatHotels",
-  pharmacies: "category.business.bizCatPharmacy",
-  clinics: "category.business.bizCatHealthcare",
-  grocery: "category.business.bizCatGroceries",
-  repair: "category.business.bizCatShops",
-  shops: "category.business.bizCatShops"
-};
-
-function businessTypeLabel(type) {
-  const key = BUSINESS_TYPE_LABEL_KEY[type];
-  return key ? t(key) : type;
-}
-
-const OPENING_HOURS_DAY_LABEL_KEY = {
-  "Mon–Fri": "field.days.monFri",
-  "Mon–Sat": "field.days.monSat",
-  Sat: "field.days.sat",
-  "Sat–Sun": "field.days.satSun",
-  "Tue–Sun": "field.days.tueSun",
-  "Every day": "field.days.everyDay"
-};
-
-function openingHoursDayLabel(days) {
-  const key = OPENING_HOURS_DAY_LABEL_KEY[days];
-  return key ? t(key) : days;
-}
-
-function renderBusinessProfile() {
-  const item = businesses.find((business) => business.id === state.selectedBusinessId) || businesses[0];
-  const gallery = [item.image, ...(item.gallery || [])];
-
-  return `
-    <section class="section-shell business-profile-shell">
-      <button class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
-      <div class="business-profile-hero" style="background-image: url('${item.image}')">
-        <div class="business-profile-hero-copy">
-          <h1>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h1>
-          <p>${item.area} · ${item.distance} · ${icon("star")}${item.rating}</p>
-        </div>
-      </div>
-      ${
-        gallery.length > 1
-          ? `<div class="business-gallery-rail">${gallery.map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`).join("")}</div>`
-          : ""
-      }
-      <div class="ai-price-pill">${icon("spark")}<span>${item.aiSummaryKey ? t(item.aiSummaryKey) : t(item.aiInsightKey)}</span></div>
-
-      <div class="business-detail-strip">
-        ${item.type ? `<span class="badge category-chip">${businessTypeLabel(item.type)}</span>` : ""}
-        ${item.address ? `<p class="business-detail-line">${pinIcon()}${escapeHtml(item.address)}</p>` : ""}
-        ${item.phone ? `<a class="business-detail-line business-detail-phone" href="tel:${item.phone}">${phoneIcon()}${escapeHtml(item.phone)}</a>` : ""}
-      </div>
-      ${item.tagKeys?.length ? `<div class="quote-list">${item.tagKeys.map((key) => `<span>${t(key)}</span>`).join("")}</div>` : ""}
-
-      <div class="business-profile-actions">
-        <button type="button" data-view="reservations">${t("common.bookNow")}</button>
-        ${renderDirectionsButton(item)}
-        ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>` : ""}
-        <button type="button" data-action="start-business-conversation" data-business-id="${item.id}">${t("common.message")}</button>
-      </div>
-      ${
-        item.services
-          ? `<div class="section-title"><h2>${t("common.services")}</h2></div>
-             <div class="business-services-list">${item.services.map((service) => `<div class="business-service-row"><span>${t(service.nameKey)}</span><strong>${service.price}</strong></div>`).join("")}</div>`
-          : ""
-      }
-      ${
-        item.openingHours
-          ? `<div class="section-title"><h2>${t("field.openingHours")}</h2></div>
-             <div class="business-hours-list">${item.openingHours.map((row) => `<div class="business-hours-row"><span>${openingHoursDayLabel(row.days)}</span><strong>${row.hours}</strong></div>`).join("")}</div>`
-          : ""
-      }
-      <div class="section-title"><h2>${t("common.reviews")}</h2></div>
-      <div class="review-grid">
-        ${profileReviews.map((review) => `
-          <article>
-            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
-              <img src="${review.avatar}" alt="" />
-              <div><strong>${review.author}</strong><span>${"★".repeat(review.rating)}</span></div>
-            </div>
-            <p>${t(review.textKey)}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
 /* Inbox & Notification Centre — a single hub with two modes (segmented
    control below), not two unrelated screens. Both "notifications" and
    "messages" routes render this same shell; state.activeView (already
@@ -9178,23 +8999,6 @@ function startProfessionalConversation(personId, mode = "contact") {
     userMessage: mode === "book" ? `Hi ${pro.name}, I’d like to book your service.` : `Hi ${pro.name}, I’d like to ask about your service.`,
     firstMessage: `Thanks — send your preferred time, location, and any details here.`
   });
-}
-
-function startBusinessConversation(businessId) {
-  const item = businesses.find((business) => String(business.id) === String(businessId)) || importedBusinesses.find((business) => String(business.id) === String(businessId));
-  if (!item) return;
-  openGeneratedConversation({
-    type: "business",
-    participant: item.name,
-    verified: Boolean(item.verified || item.verificationStatus === "Verified"),
-    preview: `New conversation with ${item.name}`,
-    contextKind: "booking",
-    contextTitle: item.name,
-    contextMeta: joinNonEmpty([businessCategoryLabel(item.category || item.type), item.area || item.neighbourhood || city.name]),
-    userMessage: `Hi, I’d like to ask about ${item.name}.`,
-    firstMessage: `Thanks for contacting us. Tell us what you need and we’ll help from here.`
-  });
-  trackEvent("business_contacted", { businessId: String(item.id) });
 }
 
 /* Swipe-to-act wrapper shared by notification cards and conversation
@@ -9454,117 +9258,6 @@ function renderConversationDetail() {
         <input type="text" id="conversation-composer-input" name="message" placeholder="${t("messages.composerPlaceholder")}" value="${escapeHtml(state.composerDraft)}" aria-label="${t("messages.composerPlaceholder")}" autocomplete="off" />
         <button type="submit">${t("messages.send")}</button>
       </form>
-    </section>
-  `;
-}
-
-function renderOffers() {
-  return `
-    <section class="section-shell">
-      ${renderTransactionSafetyNotice()}
-      <div class="screen-heading">
-        <p class="eyebrow">${currentAreaLabel()}</p>
-        <h1>${t("common.localOffers")}</h1>
-      </div>
-      <div class="offer-list">
-        ${offers
-          .map(
-            (offer) => `
-            <article class="offer-card">
-              <span>${offer.expires}</span>
-              <h3>${offer.value}</h3>
-              <p>${t(offer.titleKey)}</p>
-              <small role="button" tabindex="0" ${publicProfileAttrs({ id: `offer-${offer.id}`, name: offer.vendor, area: offer.area, context: "marketplace" })}>${offer.vendor} · ${offer.area}</small>
-              <button>${t("business.claim.claimOffer")}</button>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-const RESERVATION_STATUS_TONE = {
-  "Pending confirmation": "status-badge-amber",
-  "Quote requested": "status-badge-sky",
-  "Awaiting slot": "status-badge-muted",
-  Confirmed: "status-badge-green"
-};
-
-const RESERVATION_TYPE_ICON = {
-  Restaurant: "food",
-  "Service apartment": "stay",
-  Service: "tool"
-};
-
-const RESERVATION_BOOKABLE_TYPES = ["restaurants", "hotels", "service-apartments", "repair", "clinics"];
-
-function renderReservationCard(request) {
-  const match = businesses.find((item) => item.name === request.target);
-  return `
-    <article class="reservation-card">
-      <div class="reservation-card-photo" ${match ? `style="background-image: url('${match.image}')"` : ""}>
-        ${!match ? `<span class="reservation-card-icon">${icon(RESERVATION_TYPE_ICON[request.type] || "calendar")}</span>` : ""}
-      </div>
-      <div class="reservation-card-body">
-        <span class="badge ${RESERVATION_STATUS_TONE[request.status] || ""}">${request.status}</span>
-        <h3>${request.target}</h3>
-        <p>${request.type} · ${request.date} · ${request.party}</p>
-      </div>
-      ${match ? `<button data-view="businessProfile" data-business-id="${match.id}">${t("common.viewProfile")}</button>` : ""}
-    </article>
-  `;
-}
-
-function renderReservationSuggestion(item) {
-  return `
-    <article class="reservation-suggestion-card" data-view="businessProfile" data-business-id="${item.id}">
-      <div class="card-photo" style="background-image: url('${item.image}')"></div>
-      <h3>${item.name}</h3>
-      <p>${item.area} · ★ ${item.rating}</p>
-      <button type="button" data-view="businessProfile" data-business-id="${item.id}">${t("common.reserve")}</button>
-    </article>
-  `;
-}
-
-function renderReservations() {
-  const suggestions = businesses.filter((item) => RESERVATION_BOOKABLE_TYPES.includes(item.type));
-  return `
-    <section class="section-shell reservations-shell">
-      <section class="city-hero page-hero reservations-hero-photo" aria-labelledby="reservations-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.book")} · ${currentAreaLabel()}</p>
-          <h1 id="reservations-hero-title">${t("common.reservationTitle")}</h1>
-          <p>${t("common.reservationHeroSubtitle")}</p>
-        </div>
-        ${renderAiSearch("reservations")}
-      </section>
-
-      ${renderAiSearchResults(6, "reservations")}
-
-      <div class="request-form-card">
-        <h2>${t("common.newRequestTitle")}</h2>
-        <form class="request-form">
-          <label>${icon("shop")}<input placeholder="${t("common.requestPlaceholder")}" /></label>
-          <label>${icon("calendar")}<input placeholder="${t("common.datePlaceholder")}" /></label>
-          <label>${icon("people")}<input placeholder="${t("common.notesPlaceholder")}" /></label>
-          <button type="button">${t("entity.request")}</button>
-        </form>
-      </div>
-
-      <div class="section-title">
-        <div><h2>${t("common.myRequestsTitle")}</h2></div>
-      </div>
-      <div class="reservation-list">
-        ${reservations.map(renderReservationCard).join("")}
-      </div>
-
-      ${suggestions.length ? `
-        <div class="section-title">
-          <div><h2>${t("common.popularToBookTitle")}</h2><p>${t("common.popularToBookHint")}</p></div>
-        </div>
-        ${renderCarousel("popularToBook", "living-rail", suggestions.map(renderReservationSuggestion).join(""))}
-      ` : ""}
     </section>
   `;
 }
@@ -11125,10 +10818,7 @@ function renderOps() {
       <div class="ops-actions">
         ${[
           ["marketplace", "nav.marketplace"],
-          ["businesses", "nav.businesses"],
           ["hire", "nav.hire"],
-          ["offers", "nav.offers"],
-          ["reservations", "nav.reservations"],
           ["cityImport", "import.cityImport"]
         ].map(([view, labelKey]) => `<button data-view="${view}">${t(labelKey)}<span>${t("common.manage")}</span></button>`).join("")}
       </div>
@@ -11574,8 +11264,6 @@ function renderPlaceActionButtons(item) {
   const secondary = categoryActionsFor(item)
     .map((action) => {
       if (action === "menu" && item.website) return `<a class="directions-btn" href="${item.website}" target="_blank" rel="noopener noreferrer">${t("common.menu")}</a>`;
-      if (action === "reserve") return `<button data-view="reservations">${t("common.reserve")}</button>`;
-      if (action === "book") return `<button data-view="reservations">${t("nav.book")}</button>`;
       if (action === "hours" && item.openingHours) return `<span class="badge hours-chip">${escapeHtml(item.openingHours)}</span>`;
       if (action === "documents") return `<span class="badge hours-chip">${t("common.documents")}</span>`;
       return "";
@@ -11761,11 +11449,11 @@ function renderBusinessDashboard() {
  * city-import dashboard, which meant every "Own this business" button in
  * the app routed ordinary customers into an unrelated internal admin
  * screen. This wraps the same real 4-step form in its own section with a
- * normal back button, same pattern as renderListingDetail/renderBusinessProfile. */
+ * normal back button, same pattern as renderListingDetail. */
 function renderBusinessClaim() {
   return `
     <section class="section-shell business-claim-shell">
-      <button type="button" class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
+      <button type="button" class="back-button" data-view="explore">${icon("arrow")}${t("common.back")}</button>
       ${renderClaimFlow()}
     </section>
   `;
@@ -12070,7 +11758,6 @@ function bindEvents() {
         state.exploreCuisine = "All";
         state.exploreStars = "All";
       }
-      if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
       if (button.dataset.listingId) {
         state.selectedListingId = button.dataset.listingId;
         const selected = listings.find((listing) => String(listing.id) === String(button.dataset.listingId));
@@ -12227,14 +11914,6 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       startProfessionalConversation(button.dataset.proId, button.dataset.conversationMode || "contact");
-    });
-  });
-
-  document.querySelectorAll('[data-action="start-business-conversation"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      startBusinessConversation(button.dataset.businessId);
     });
   });
 

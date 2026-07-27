@@ -61,12 +61,16 @@ test("the transaction-safety notice (already present) and the Need Help 3-step e
   assert.match(needHelpBody, /common\.chatAndArrange/);
 });
 
-test("the out-of-scope Hotels/Food & Drink reservations flow (common.bookNow, renderReservations) is untouched", async () => {
+test("the fake Businesses/Reservations system (renderBusinesses, renderBusinessProfile, renderReservations, common.bookNow) is fully removed", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /t\("common\.bookNow"\)/, "Hotels/Food & Drink reservations button must still exist — only the Hire fake-confirm flow was in scope");
-  assert.match(main, /function renderReservations/);
-  const enLocale = JSON.parse(await readRepoFile("locales/en.json"));
-  assert.equal(enLocale.common.bookNow, "Book now");
+  assert.doesNotMatch(main, /function renderBusinesses\(/);
+  assert.doesNotMatch(main, /function renderBusinessProfile\(/);
+  assert.doesNotMatch(main, /function renderReservations\(/);
+  assert.doesNotMatch(main, /t\("common\.bookNow"\)/);
+  for (const locale of ["en", "lt", "de"]) {
+    const json = JSON.parse(await readRepoFile(`locales/${locale}.json`));
+    assert.equal(json.common.bookNow, undefined, `locales/${locale}.json must not keep the dead bookNow key`);
+  }
 });
 
 test("Marketplace listing detail/card (Rentals, Property included) offer contact actions only — no booking or price-setting language", async () => {

@@ -6,10 +6,9 @@
  * producing unusable analytics data later.
  *
  * Every event name below is a real, already-existing call site in
- * src/main.js (found by grep across the whole file), plus two new ones
- * this task added: business_contacted and session_started — needed to
- * answer "was an onboarded business viewed/contacted" and "did a user
- * come back in week 2", which nothing previously tracked at all.
+ * src/main.js (found by grep across the whole file), plus session_started
+ * — needed to answer "did a user come back in week 2", which nothing
+ * previously tracked at all.
  *
  * Field types: "string" | "number" | "boolean". A field name suffixed
  * with "?" is optional. Extra keys not listed for an event are rejected —
@@ -21,7 +20,6 @@ export const ANALYTICS_EVENTS = Object.freeze({
   BUSINESS_BOOST_ENABLED: "business_boost_enabled",
   BUSINESS_BOOST_DISABLED: "business_boost_disabled",
   BUSINESS_VIEWED: "business_viewed",
-  BUSINESS_CONTACTED: "business_contacted",
   BUSINESS_CLAIM_SUBMITTED: "business_claim_submitted",
   APP_INSTALLED: "app_installed",
   SESSION_STARTED: "session_started",
@@ -74,7 +72,6 @@ const SCHEMA = {
   [ANALYTICS_EVENTS.BUSINESS_BOOST_ENABLED]: { businessId: "string" },
   [ANALYTICS_EVENTS.BUSINESS_BOOST_DISABLED]: { businessId: "string" },
   [ANALYTICS_EVENTS.BUSINESS_VIEWED]: { businessId: "string", category: "string?" },
-  [ANALYTICS_EVENTS.BUSINESS_CONTACTED]: { businessId: "string" },
   [ANALYTICS_EVENTS.BUSINESS_CLAIM_SUBMITTED]: { businessId: "string" },
   [ANALYTICS_EVENTS.APP_INSTALLED]: {},
   [ANALYTICS_EVENTS.SESSION_STARTED]: {},
