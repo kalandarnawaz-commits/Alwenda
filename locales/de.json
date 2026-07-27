@@ -2333,6 +2333,19 @@
     }
   },
   "opportunities": {
+    "profileUnavailable": "Profil nicht verfügbar",
+    "untitledRequest": "Hilfeanfrage",
+    "sourceSystem": "Von Alwen gepostet",
+    "sourceLegacy": "Ältere Anfrage",
+    "sourcePerson": "Von einem Nachbarn gepostet",
+    "openAuthorProfile": "Profil von {name} öffnen",
+    "viewRequest": "Anfrage ansehen",
+    "requestAuthorHidden": "Profil des Autors nicht verfügbar",
+    "replyComingSoon": "Antwortfunktion folgt bald",
+    "detailLoadError": "Diese Anfrage konnte nicht geladen werden. Bitte erneut versuchen.",
+    "detailNotFound": "Diese Anfrage ist nicht mehr verfügbar.",
+    "moreNearbyWork": "Mehr Arbeit in der Nähe",
+    "moreNearbyWorkHint": "Weitere aktive Anfragen in derselben Kategorie.",
     "items": {
       "airport-pickup": {
         "title": "Abholung vom Flughafen",

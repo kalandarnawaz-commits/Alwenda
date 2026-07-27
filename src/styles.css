@@ -14486,6 +14486,152 @@ strong:has(> .verified-check) {
   border-radius: 999px;
 }
 
+.people-request-card {
+  display: grid;
+  gap: 2px;
+}
+
+.people-request-author-row {
+  padding: 16px 16px 0;
+}
+
+.people-request-author,
+.people-request-detail-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.people-request-author {
+  min-height: 48px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.people-request-author:disabled {
+  cursor: default;
+}
+
+.people-request-author:focus-visible,
+.people-request-detail-author button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.people-request-avatar,
+.people-request-detail-author > img,
+.people-request-detail-author > span:first-child {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, #dff7ee, #f5f0e8);
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.people-request-avatar img,
+.people-request-detail-author > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.people-request-author-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.people-request-author-copy strong,
+.people-request-detail-author h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.people-request-author-copy small,
+.people-request-detail-author p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.people-request-actions {
+  align-items: center;
+}
+
+.people-request-profile-muted {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.people-request-detail-card .opportunity-detail-body {
+  gap: 20px;
+}
+
+.people-request-detail-author {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.people-request-detail-author > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.people-request-detail-author button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.people-request-detail-title h1 {
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .people-request-author-row {
+    padding: 14px 14px 0;
+  }
+
+  .people-request-detail-author {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .people-request-detail-author button {
+    width: 100%;
+  }
+}
+
 /* === Unified Home Feed — the aggregation layer below Live Around You.
    Plain stacked cards (not a carousel — a feed reads top to bottom), each
    tagged with a small source badge. Deliberately simpler than

@@ -61,8 +61,8 @@ test("HOME_LIVE_OPPORTUNITY_IDS/HOME_EARN_OPPORTUNITY_IDS still back the fixture
 
 test("live opportunity detail is deep-linkable and opens through one helper", () => {
   const helper = extractFunction(main, "openLiveOpportunityDetail");
-  assert.match(helper, /findOpportunityById\(id\)/);
-  assert.match(helper, /state\.selectedOpportunityId = item\.id/);
+  assert.doesNotMatch(helper, /LIVE_OPPORTUNITIES\[0\]/, "real help request UUIDs must not fall back to the first fixture");
+  assert.match(helper, /state\.selectedOpportunityId = String\(id \|\| ""\)/);
   assert.match(helper, /state\.activeView = "liveOpportunityDetail"/);
   assert.match(helper, /render\(\)/);
 
@@ -81,6 +81,7 @@ test("live cards have a dedicated click and keyboard activation path", () => {
   assert.match(bindEvents, /true\s*\)/);
   assert.match(bindEvents, /openLiveOpportunityDetail\(card\.dataset\.opportunityId\)/);
   assert.match(bindEvents, /openLiveOpportunityDetail\(opportunityId\)/);
+  assert.match(bindEvents, /findLoadedHelpRequestById\(opportunityId\)/, "real help request cards must be allowed through the click guard");
   assert.match(bindEvents, /event\.stopImmediatePropagation\(\)/);
   assert.match(bindEvents, /event\.key !== "Enter" && event\.key !== " " && event\.key !== "Spacebar"/);
 });
