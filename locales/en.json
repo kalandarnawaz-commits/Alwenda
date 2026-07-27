@@ -1259,6 +1259,7 @@
     },
     "sourceLabel": "Source",
     "updatedLabel": "Updated",
+    "createUnavailable": "Adding a business isn't available yet. Claimed and imported businesses will appear here soon.",
     "verify": {
       "verifyBusinessEmailDomain": "Business email domain",
       "verifyPhone": "Phone verification",

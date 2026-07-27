@@ -1259,6 +1259,7 @@
     },
     "sourceLabel": "Quelle",
     "updatedLabel": "Aktualisiert",
+    "createUnavailable": "Das Hinzufügen eines Unternehmens ist noch nicht möglich. Beanspruchte und importierte Unternehmen erscheinen bald hier.",
     "verify": {
       "verifyBusinessEmailDomain": "Geschäftliche E-Mail-Domain",
       "verifyPhone": "Telefonverifizierung",

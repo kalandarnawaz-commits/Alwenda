@@ -1259,6 +1259,7 @@
     },
     "sourceLabel": "Šaltinis",
     "updatedLabel": "Atnaujinta",
+    "createUnavailable": "Verslo pridėjimas kol kas neveikia. Pretenduojami ir importuoti verslai netrukus atsiras čia.",
     "verify": {
       "verifyBusinessEmailDomain": "Verslo el. pašto domenas",
       "verifyPhone": "Telefono patikra",

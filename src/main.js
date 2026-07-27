@@ -1,7 +1,5 @@
 import {
   adminStats,
-  alwenBusinessDraft,
-  alwenListingDraft,
   businesses,
   categories,
   city,
@@ -1133,7 +1131,6 @@ const DEEP_LINK_VIEWS = new Set([
   "home",
   "explore",
   "marketplace",
-  "listings",
   "listingDetail",
   "create",
   "community",
@@ -3757,7 +3754,6 @@ function renderView() {
     events: renderEvents,
     eventDetail: renderEventDetail,
     createListing: renderCreateListingForm,
-    listings: renderListings,
     listingDetail: renderListingDetail,
     businesses: renderBusinesses,
     businessCreate: renderBusinessCreate,
@@ -5827,7 +5823,6 @@ function renderCreate() {
           `).join("")}
         </div>
       </div>
-      ${renderAlwenListingCreator()}
     </section>
   `;
 }
@@ -6294,7 +6289,6 @@ function renderMarketplace() {
       ${renderDiscoverToggle()}
       ${renderAiSearchResults(6, "marketplace")}
       ${renderMarketplaceCollections(items)}
-      ${renderAlwenListingCreator()}
       <div class="section-title">
         <div><h2>${t("home.rail.allListings")}</h2><p>${t("home.rail.allListingsHint")}</p></div>
       </div>
@@ -6731,154 +6725,6 @@ function renderCreateListingForm() {
 
         <button type="submit" class="auth-primary-button" ${isLoading || ((state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified") ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : t("createListing.publishButton")}</button>
       </form>
-    </section>
-  `;
-}
-
-function renderAlwenListingCreator() {
-  const selections = state.alwenListingSelections || {};
-  const suggestionGroups = [
-    {
-      key: "price",
-      title: t("alwen.listingSuggestionPrice"),
-      options: [
-        { value: "€820", label: t("alwen.listingPriceFast"), meta: t("alwen.listingPriceFastMeta") },
-        { value: "€860", label: t("alwen.listingPriceBalanced"), meta: t("alwen.listingPriceBalancedMeta") },
-        { value: "€890", label: t("alwen.listingPriceMax"), meta: t("alwen.listingPriceMaxMeta") }
-      ]
-    },
-    {
-      key: "delivery",
-      title: t("alwen.listingSuggestionDelivery"),
-      options: [
-        { value: "Pickup today", label: t("alwen.listingDeliveryPickup"), meta: alwenListingDraft.pickupArea },
-        { value: "Courier in Vilnius", label: t("alwen.listingDeliveryCourier"), meta: "€4-7" },
-        { value: "Meet in public place", label: t("alwen.listingDeliveryMeet"), meta: t("alwen.listingRecommended") }
-      ]
-    },
-    {
-      key: "boost",
-      title: t("alwen.listingSuggestionBoost"),
-      options: [
-        { value: "No boost", label: t("alwen.listingBoostNone"), meta: t("alwen.listingBoostNoneMeta") },
-        { value: "48-hour local boost", label: t("alwen.listingBoostLocal"), meta: t("alwen.listingBoostLocalMeta") },
-        { value: "Weekend electronics boost", label: t("alwen.listingBoostWeekend"), meta: t("alwen.listingBoostWeekendMeta") }
-      ]
-    }
-  ];
-  const selectedPrice = selections.price || "€860";
-  const selectedDelivery = selections.delivery || "Pickup today";
-  const selectedBoost = selections.boost || "48-hour local boost";
-  const readinessItems = [
-    [true, t("alwen.listingReadyTitle")],
-    [true, t("alwen.listingReadyPrice")],
-    [true, t("alwen.listingReadyCategory")],
-    [false, t("alwen.listingReadyPhotos")]
-  ];
-  const quickFacts = [
-    ["8 sec", t("alwen.listingTimeSaved")],
-    [alwenListingDraft.nearbyBuyers, t("alwen.listingDemand")],
-    ["92%", t("alwen.listingCompleteness")]
-  ];
-  const smartDrops = [
-    [t("alwen.listingFieldCategory"), alwenListingDraft.marketplaceCategory],
-    [t("field.condition"), alwenListingDraft.condition],
-    [t("alwen.listingFieldBrand"), alwenListingDraft.brand],
-    [t("alwen.listingFieldPickup"), alwenListingDraft.pickupArea],
-    [t("alwen.listingFieldDelivery"), selectedDelivery],
-    [t("alwen.listingFieldBoost"), selectedBoost]
-  ];
-
-  return `
-    <section class="alwen-card alwen-listing-studio">
-      <div class="section-title">
-        <div><h2>${t("alwen.alwenListingTitle")}</h2><p>${t("alwen.alwenListingHint")}</p></div>
-        <span class="alwen-speed-pill">${icon("spark")}${t("alwen.listingAutopilot")}</span>
-      </div>
-      <div class="alwen-create-layout">
-        <div class="alwen-create-copy">
-          <div class="alwen-prompt">${icon("spark")}<div><strong>${t("alwen.listingPromptLabel")}</strong><p>${alwenListingDraft.prompt}</p></div></div>
-          <div class="alwen-workspace-head">
-            <span>${t("alwen.listingDraftStatus")}</span>
-            <h3>${t("alwen.listingReviewHeadline")}</h3>
-            <p>${t("alwen.listingReviewHint")}</p>
-          </div>
-          <div class="alwen-listing-metrics" aria-label="${t("alwen.listingInsights")}">
-            ${quickFacts.map(([value, label]) => `<article><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`).join("")}
-          </div>
-          <div class="alwen-suggestion-board" aria-label="${t("alwen.listingSuggestionBoard")}">
-            ${suggestionGroups.map((group) => `
-              <article class="alwen-suggestion-group">
-                <div>
-                  <strong>${group.title}</strong>
-                  <span>${t("alwen.listingTapToApply")}</span>
-                </div>
-                <div class="alwen-option-stack">
-                  ${group.options.map((option) => {
-                    const isSelected = (selections[group.key] || group.options[1]?.value || group.options[0].value) === option.value;
-                    return `
-                      <button type="button" class="${isSelected ? "is-selected" : ""}" data-action="alwen-listing-suggestion" data-suggestion-group="${group.key}" data-suggestion-value="${escapeHtml(option.value)}">
-                        <span>${escapeHtml(option.label)}</span>
-                        <strong>${escapeHtml(option.value)}</strong>
-                        <em>${escapeHtml(option.meta)}</em>
-                      </button>
-                    `;
-                  }).join("")}
-                </div>
-              </article>
-            `).join("")}
-          </div>
-          <div class="alwen-smart-dropzone">
-            <div>
-              <strong>${t("alwen.listingSmartDropzone")}</strong>
-              <span>${t("alwen.listingSmartDropzoneHint")}</span>
-            </div>
-            <div class="alwen-generated-grid">
-              ${smartDrops.map(([label, value]) => `
-                <article>
-                  <span>${label}</span>
-                  <strong>${escapeHtml(value)}</strong>
-                </article>
-              `).join("")}
-            </div>
-          </div>
-          <div class="alwen-listing-panels">
-            <article class="alwen-photo-card">
-              <strong>${t("alwen.listingPhotoPlan")}</strong>
-              <div class="alwen-photo-plan">
-                ${alwenListingDraft.suggestedPhotos.map((photo, index) => `<span>${index + 1}. ${escapeHtml(photo)}</span>`).join("")}
-              </div>
-            </article>
-            <article class="alwen-readiness-card">
-              <strong>${t("alwen.listingPublishReadiness")}</strong>
-              <div class="alwen-readiness-list">
-                ${readinessItems.map(([done, label]) => `<span class="${done ? "is-done" : ""}">${done ? "✓" : "○"} ${label}</span>`).join("")}
-              </div>
-            </article>
-          </div>
-          <div class="draft-actions"><button>${t("common.publish")}</button><button>${t("common.addPhotos")}</button><button>${t("common.improve")}</button></div>
-        </div>
-        <article class="market-card visual-market-card alwen-preview-card">
-          <div class="market-photo" style="background-image: url('https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80')">
-            <button class="favourite-float" aria-label="${t("common.favourite")}">${icon("heart")}</button>
-          </div>
-          <div class="market-card-body">
-            <span class="ai-verified inline-ai-verified">${icon("spark")}${t("common.createdByAlwen")}</span>
-            <div class="seller-row">
-              <img src="${reputationProfile.portrait}" alt="" />
-              <div><strong>${reputationProfile.name}${verifiedCheck(t("common.verifiedSeller"))}</strong><span>${alwenListingDraft.pickupArea} · ${t("common.verifiedSeller")}</span></div>
-            </div>
-            <h3>${alwenListingDraft.title}</h3>
-            <div class="price-row"><strong>${selectedPrice}</strong><span>${t("common.goodPrice")}</span></div>
-            <p>${alwenListingDraft.summary}</p>
-            <div class="ai-price-pill">${icon("spark")}<span>${escapeHtml(`${selectedDelivery} · ${selectedBoost}`)}</span></div>
-            <div class="alwen-preview-next">
-              <strong>${t("alwen.listingNextBestAction")}</strong>
-              <span>${alwenListingDraft.suggestedImprovements[0]}</span>
-            </div>
-          </div>
-        </article>
-      </div>
     </section>
   `;
 }
@@ -9019,42 +8865,12 @@ function marketplaceCategoryTiles(targetView) {
   ];
 }
 
-function renderCategoryTabs(targetView = "marketplace") {
-  return renderCategoryTileGrid(marketplaceCategoryTiles(targetView));
-}
-
 /** Chip-row version for the full Marketplace results page — the picker
  * screen in front of it already showed the box grid, so repeating it
  * here would read as a second picker rather than a filter on results
  * already in view. See renderCategoryChipRow. */
 function renderMarketplaceCategoryChipRow(targetView = "marketplace") {
   return renderCategoryChipRow(marketplaceCategoryTiles(targetView));
-}
-
-function renderListings() {
-  const items = filteredListings();
-  return `
-    <section class="section-shell">
-      <div class="screen-heading">
-        <p class="eyebrow">${currentAreaLabel()}</p>
-        <h1>${t("common.localListings")}</h1>
-      </div>
-      ${renderCategoryTabs("listings")}
-      <div class="stack-list">
-        ${items
-          .map(
-            (item) => `
-            <article class="content-card">
-              <span class="badge">${item.status}</span>
-              <h3>${listingTitle(item)}</h3>
-              <p>${item.area} · ${listingMeta(item)}</p>
-              <div><strong>${item.price}</strong><button>${t("common.view")}</button></div>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
 }
 
 function renderBusinesses() {
@@ -11316,7 +11132,6 @@ function renderOps() {
           ["cityImport", "import.cityImport"]
         ].map(([view, labelKey]) => `<button data-view="${view}">${t(labelKey)}<span>${t("common.manage")}</span></button>`).join("")}
       </div>
-      ${renderAlwenBusinessCreator()}
       ${renderCityGraph()}
       ${renderCityImport()}
       <div class="integration-list">
@@ -11335,33 +11150,7 @@ function renderBusinessCreate() {
         <h1>${t("alwen.alwenBusinessTitle")}</h1>
         <p>${t("alwen.alwenBusinessHint")}</p>
       </div>
-      ${renderAlwenBusinessCreator()}
-    </section>
-  `;
-}
-
-function renderAlwenBusinessCreator() {
-  const draftRows = [
-    ["field.name", alwenBusinessDraft.name],
-    ["field.cuisine", alwenBusinessDraft.cuisine],
-    ["field.openingHours", alwenBusinessDraft.openingHours],
-    ["nav.reservations", alwenBusinessDraft.reservationSettings],
-    ["field.location", alwenBusinessDraft.locationPlaceholder],
-    ["business.claim.cta", alwenBusinessDraft.claimStatus]
-  ];
-
-  return `
-    <section class="alwen-card">
-      <div class="section-title">
-        <div><h2>${t("alwen.alwenBusinessTitle")}</h2><p>${t("alwen.alwenBusinessHint")}</p></div>
-      </div>
-      <div class="alwen-prompt">${icon("spark")}<p>${alwenBusinessDraft.prompt}</p></div>
-      <p class="draft-description">${alwenBusinessDraft.description}</p>
-      <div class="draft-grid">${draftRows.map(([label, value]) => `<article><span>${t(label)}</span><strong>${value}</strong></article>`).join("")}</div>
-      <div class="quote-list">${[...alwenBusinessDraft.categories, ...alwenBusinessDraft.popularKeywords].map((item) => `<span>${item}</span>`).join("")}</div>
-      <div class="draft-list"><strong>${t("common.menuSections")}</strong><p>${alwenBusinessDraft.menuSections.join(" · ")}</p></div>
-      <div class="draft-list"><strong>${t("common.suggestedPhotos")}</strong><p>${alwenBusinessDraft.suggestedPhotos.join(" · ")}</p></div>
-      <div class="draft-actions"><button>${t("common.improveWithAlwen")}</button><button>${t("common.reviewPublish")}</button></div>
+      ${renderEmptyState(t("business.createUnavailable"), "building")}
     </section>
   `;
 }
@@ -11536,30 +11325,7 @@ function renderCityImport() {
   `;
 }
 
-/** Wolt-style colourful category grid — a handful of tone tiles cycled
- * across however many categories there are, so the grid reads as
- * scannable/colourful without needing a bespoke colour per category.
- * tiles: [{ label, iconGlyph, isActive, attrs }], attrs is a raw string
- * of data-* attributes (e.g. `data-category="x" data-target-view="y"`)
- * so the existing click handlers for each caller keep working unchanged. */
 const CATEGORY_TILE_TONES = ["mint", "gold", "sky", "rose"];
-
-function renderCategoryTileGrid(tiles) {
-  return `
-    <div class="category-tile-grid" role="list">
-      ${tiles
-        .map(
-          (tile, index) => `
-            <button type="button" class="category-tile tone-${CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length]} ${tile.isActive ? "is-active" : ""}" ${tile.attrs}>
-              <span class="category-tile-icon">${tile.iconGlyph}</span>
-              <span class="category-tile-label">${tile.label}</span>
-            </button>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-}
 
 /** Compact pill-row version of the same tile data — used on the full
  * Marketplace/Explore results pages instead of renderCategoryTileGrid's
