@@ -111,6 +111,13 @@ test("help request cards and details render lazy category imagery without leakin
   assert.match(heroImage, /loading="lazy" decoding="async"/);
   assert.match(detail, /class="opportunity-detail-hero people-request-detail-hero"/);
   assert.match(detail, /renderHelpRequestHeroImage\(request, "people-request-detail-hero-image"\)/);
+  assert.match(detail, /people-request-detail-hero-overlay/);
+  assert.match(detail, /renderCategoryBadge\(request, "category-badge-overlay"\)/);
+  assert.match(detail, /renderUrgencyBadge\(request, "urgency-badge-overlay"\)/);
+  assert.match(detail, /renderHelpRequestAuthorRow\(request, "people-request-hero-author"\)/);
+  assert.match(detail, /renderHelpRequestMetaRow\(request, "people-request-hero-meta"\)/);
+  assert.doesNotMatch(detail, /people-request-detail-author/);
+  assert.doesNotMatch(detail, /people-request-detail-title/);
   assert.match(extractFunction(main, "resolveHelpRequestImage"), /requestImageAlt/);
   assert.doesNotMatch(`${card}\n${detail}\n${heroImage}`, /contact_email|contact_phone|private_profiles|auth\.users|reputation_score/);
 });
@@ -167,4 +174,29 @@ test("real help request detail never falls back to the first fixture for unknown
   assert.match(detail, /detailNotFound/);
   assert.match(detail, /const fixtureItem = findOpportunityById\(state\.selectedOpportunityId\)/);
   assert.doesNotMatch(detail, /findOpportunityById\(state\.selectedOpportunityId\) \|\| LIVE_OPPORTUNITIES\[0\]/);
+});
+
+test("adaptive page wrappers separate mobile and desktop layout without duplicating business logic", () => {
+  assert.match(extractFunction(main, "renderRealHelpRequestDetail"), /adaptive-page adaptive-page-help-request/);
+  assert.match(extractFunction(main, "renderMarketplace"), /adaptive-page adaptive-page-marketplace marketplace-shell/);
+  assert.match(extractFunction(main, "renderListingDetailBody"), /adaptive-page adaptive-page-marketplace listing-detail-shell/);
+  assert.match(extractFunction(main, "renderBusinesses"), /adaptive-page adaptive-page-business/);
+  assert.match(extractFunction(main, "renderBusinessProfile"), /adaptive-page adaptive-page-business business-profile-shell/);
+  assert.match(extractFunction(main, "renderProfile"), /adaptive-page adaptive-page-profile profile-panel identity-profile/);
+  assert.match(extractFunction(main, "renderUserProfile"), /adaptive-page adaptive-page-profile profile-panel user-profile-shell/);
+  assert.match(styles, /\.adaptive-page\s*\{[\s\S]*1280px/, "desktop adaptive pages should constrain content around 1280px");
+  assert.match(styles, /@media \(max-width: 767px\)[\s\S]*\.adaptive-page/, "mobile adaptive wrappers must have dedicated rules");
+  assert.match(styles, /@media \(min-width: 768px\) and \(max-width: 1199px\)/, "tablet adaptive wrappers must have dedicated rules");
+  assert.match(styles, /@media \(min-width: 1200px\)/, "desktop adaptive wrappers must have dedicated rules");
+});
+
+test("help request detail hero reserves media space and prevents overlay collisions", () => {
+  assert.match(styles, /\.people-request-detail-hero\s*\{[\s\S]*aspect-ratio:\s*16 \/ 8/);
+  assert.match(styles, /\.people-request-detail-hero\s*\{[\s\S]*overflow:\s*hidden/);
+  assert.match(styles, /\.people-request-detail-hero-overlay\s*\{[\s\S]*position:\s*relative/);
+  assert.match(styles, /\.people-request-detail-hero-overlay\s*\{[\s\S]*justify-content:\s*space-between/);
+  assert.match(styles, /\.people-request-detail-hero-copy h1\s*\{[\s\S]*text-wrap:\s*balance/);
+  assert.match(styles, /\.people-request-detail-hero-image > img\s*\{[\s\S]*object-fit:\s*cover/);
+  assert.doesNotMatch(styles, /\.people-request-detail-hero img\s*\{[\s\S]*position:\s*absolute/, "author avatars inside the hero overlay must not inherit the hero media positioning");
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.people-request-detail-hero\s*\{[\s\S]*aspect-ratio:\s*4 \/ 5/);
 });

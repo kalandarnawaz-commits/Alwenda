@@ -5926,7 +5926,7 @@ function renderCommunity() {
 function renderSavedPlaces() {
   const saved = importedBusinesses.filter((item) => state.savedPlaceIds.includes(item.id));
   return `
-    <section class="section-shell">
+    <section class="section-shell adaptive-page adaptive-page-business">
       <div class="screen-heading">
         <p class="eyebrow">${t("nav.profile")}</p>
         <h1>${t("profile.quickActions.savedPlacesAction")}</h1>
@@ -6272,7 +6272,7 @@ function renderMarketplace() {
   const pros = filteredProfessionals();
 
   return `
-    <section class="section-shell marketplace-shell">
+    <section class="section-shell adaptive-page adaptive-page-marketplace marketplace-shell">
       <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
@@ -7001,7 +7001,7 @@ function renderListingDetailBody(item) {
   if (item.offerorStatus === "trader" && state.traderPublicProfiles[item.sellerId] === undefined) queueMicrotask(() => loadTraderDisclosure(item.sellerId));
 
   return `
-    <section class="section-shell listing-detail-shell">
+    <section class="section-shell adaptive-page adaptive-page-marketplace listing-detail-shell">
       <button type="button" class="back-button" data-view="marketplace">${icon("arrow")}${t("common.back")}</button>
 
       ${
@@ -7967,40 +7967,30 @@ function openLiveOpportunityDetail(id) {
 
 function renderRealHelpRequestDetail(record) {
   const request = shapeHelpRequestOpportunityForDisplay(record);
-  const postedLabel = request.createdAt ? formatDate(request.createdAt, { dateStyle: "medium" }) : null;
   const authorTarget = request.author.profileUrlAvailable ? escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId) : "";
   const related = opportunityRecordsForCategory(request.categoryId, state.opportunityFilter.surface)
     .filter((candidate) => String(candidate.id) !== request.id)
     .slice(0, 3);
-  return `<section class="section-shell opportunity-detail-shell people-request-detail-shell">
+  return `<section class="section-shell adaptive-page adaptive-page-help-request opportunity-detail-shell people-request-detail-shell">
     ${renderTransactionSafetyNotice()}
     <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
     <article class="opportunity-detail-card people-request-detail-card">
       <div class="opportunity-detail-hero people-request-detail-hero">
         ${renderHelpRequestHeroImage(request, "people-request-detail-hero-image")}
-        <div class="opportunity-detail-badges">
-          ${renderCategoryBadge(request, "category-badge-overlay")}
-          ${renderUrgencyBadge(request, "urgency-badge-overlay")}
-          ${request.status ? `<span>${escapeHtml(request.status)}</span>` : ""}
+        <div class="people-request-detail-hero-overlay">
+          <div class="people-request-detail-hero-top">
+            ${renderCategoryBadge(request, "category-badge-overlay")}
+            ${renderUrgencyBadge(request, "urgency-badge-overlay")}
+          </div>
+          <div class="people-request-detail-hero-copy">
+            <p class="eyebrow">${escapeHtml(helpRequestSourceLabel(request))}</p>
+            <h1>${escapeHtml(request.title)}</h1>
+            ${renderHelpRequestAuthorRow(request, "people-request-hero-author")}
+            ${renderHelpRequestMetaRow(request, "people-request-hero-meta")}
+          </div>
         </div>
       </div>
       <div class="opportunity-detail-body">
-        <div class="people-request-detail-author">
-          ${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}
-          <div>
-            <p class="eyebrow">${escapeHtml(helpRequestSourceLabel(request))}</p>
-            <h2>${escapeHtml(request.author.displayName)}${request.author.verified ? verifiedCheck(t("status.verified")) : ""}</h2>
-            <p>${[request.author.handle, postedLabel].filter(Boolean).map(escapeHtml).join(" · ") || escapeHtml(t("opportunities.requestAuthorHidden"))}</p>
-          </div>
-          ${authorTarget ? `<button type="button" data-user-profile-target="${authorTarget}">${t("common.viewProfile")}</button>` : ""}
-        </div>
-        <div class="opportunity-detail-title people-request-detail-title">
-          <div>
-            <p class="eyebrow">${escapeHtml(request.categoryLabel)} · ${escapeHtml(currentAreaLabel())}</p>
-            <h1>${escapeHtml(request.title)}</h1>
-            <p>${[request.neighbourhood ? escapeHtml(request.neighbourhood) : null, request.urgency ? escapeHtml(request.urgency) : null, request.status ? escapeHtml(request.status) : null].filter(Boolean).join(" · ")}</p>
-          </div>
-        </div>
         <div class="opportunity-detail-grid">
           <article><span>${t("common.postedBy")}</span><strong>${escapeHtml(request.author.displayName)}</strong></article>
           <article><span>${t("common.category")}</span><strong>${escapeHtml(request.categoryLabel)}</strong></article>
@@ -9034,7 +9024,7 @@ function renderMarketplaceCategoryChipRow(targetView = "marketplace") {
 function renderListings() {
   const items = filteredListings();
   return `
-    <section class="section-shell">
+    <section class="section-shell adaptive-page adaptive-page-marketplace">
       <div class="screen-heading">
         <p class="eyebrow">${currentAreaLabel()}</p>
         <h1>${t("common.localListings")}</h1>
@@ -9060,7 +9050,7 @@ function renderListings() {
 function renderBusinesses() {
   const items = filteredBusinesses();
   return `
-    <section class="section-shell">
+    <section class="section-shell adaptive-page adaptive-page-business">
       <section class="city-hero page-hero businesses-hero-photo" aria-labelledby="businesses-hero-title">
         <div class="city-hero-copy">
           <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
@@ -9132,7 +9122,7 @@ function renderBusinessProfile() {
   const gallery = [item.image, ...(item.gallery || [])];
 
   return `
-    <section class="section-shell business-profile-shell">
+    <section class="section-shell adaptive-page adaptive-page-business business-profile-shell">
       <button class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
       <div class="business-profile-hero" style="background-image: url('${item.image}')">
         <div class="business-profile-hero-copy">
@@ -10735,7 +10725,7 @@ function renderPublicProfile() {
   ].filter(Boolean);
 
   return `
-    <section class="section-shell profile-panel">
+    <section class="section-shell adaptive-page adaptive-page-profile profile-panel">
       <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
       <div class="public-profile-identity">
         <span class="avatar-frame public-profile-avatar">
@@ -10825,7 +10815,7 @@ function renderProfile() {
   const ownOfferorStatus = state.myListings.some((item) => item.metadata?.offerorStatus === "trader") ? "Trader/business" : state.myListings.length ? "Private seller/provider" : null;
 
   return `
-    <section class="section-shell profile-panel identity-profile">
+    <section class="section-shell adaptive-page adaptive-page-profile profile-panel identity-profile">
       <div class="identity-hero">
         <button type="button" class="identity-edit-button" data-settings-edit-profile="true" aria-label="${t("profile.quickActions.editProfileAction")}">${icon("ops")}</button>
         <span class="avatar-frame identity-avatar">
@@ -11134,11 +11124,11 @@ function renderUserProfileTrustDialog(profile) {
 function renderUserProfile() {
   const profile = state.userProfile;
   if (!profile || profile.status === "loading") {
-    return `<section class="section-shell profile-panel"><div class="profile-listing-grid-loading" aria-busy="true"></div></section>`;
+    return `<section class="section-shell adaptive-page adaptive-page-profile profile-panel"><div class="profile-listing-grid-loading" aria-busy="true"></div></section>`;
   }
   if (profile.status === "notFound" || profile.status === "error") {
     return `
-      <section class="section-shell profile-panel">
+      <section class="section-shell adaptive-page adaptive-page-profile profile-panel">
         <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
         ${renderEmptyState(profile.status === "notFound" ? t("userProfile.notFound") : t("userProfile.loadError"), "search")}
       </section>
@@ -11149,7 +11139,7 @@ function renderUserProfile() {
   const isBlocked = profile.isBlocked;
 
   return `
-    <section class="section-shell profile-panel user-profile-shell">
+    <section class="section-shell adaptive-page adaptive-page-profile profile-panel user-profile-shell">
       <div class="user-profile-header-row">
         <button type="button" class="back-button" data-view="home">${icon("arrow")}${t("common.close")}</button>
         ${profile.isOwn ? `<button type="button" class="user-profile-settings-icon" data-view="account" aria-label="${t("userProfile.accountAction")}" title="${t("userProfile.accountAction")}">${icon("settings")}</button>` : ""}

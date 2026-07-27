@@ -13618,7 +13618,7 @@ strong:has(> .verified-check) {
 }
 
 .opportunity-detail-hero-image img,
-.people-request-detail-hero img {
+.people-request-detail-hero-image > img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -14750,9 +14750,91 @@ strong:has(> .verified-check) {
   gap: 20px;
 }
 
+.people-request-detail-hero {
+  min-height: 0;
+  aspect-ratio: 16 / 8;
+  overflow: hidden;
+  padding: 0;
+  align-items: stretch;
+  isolation: isolate;
+}
+
 .people-request-detail-hero-image {
   position: absolute;
   inset: 0;
+}
+
+.people-request-detail-hero-overlay {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  padding: clamp(18px, 4vw, 40px);
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgba(6, 18, 16, .22) 0%, rgba(6, 18, 16, .44) 45%, rgba(6, 18, 16, .82) 100%),
+    linear-gradient(90deg, rgba(6, 18, 16, .68) 0%, rgba(6, 18, 16, .18) 58%, rgba(6, 18, 16, .46) 100%);
+}
+
+.people-request-detail-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.people-request-detail-hero-copy {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 12px;
+}
+
+.people-request-detail-hero-copy .eyebrow,
+.people-request-hero-meta {
+  color: rgba(255, 255, 255, .82);
+}
+
+.people-request-detail-hero-copy h1 {
+  max-width: 12ch;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(2.25rem, 6vw, 5.35rem);
+  line-height: .94;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.people-request-hero-author {
+  width: fit-content;
+  max-width: min(100%, 520px);
+  min-height: 52px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, .16);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.people-request-hero-author .people-request-avatar {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
+}
+
+.people-request-hero-author .people-request-author-copy strong,
+.people-request-hero-author .people-request-author-copy small {
+  color: #fff;
+}
+
+.people-request-hero-author .people-request-author-copy small {
+  color: rgba(255, 255, 255, .78);
 }
 
 .people-request-detail-author {
@@ -14795,6 +14877,75 @@ strong:has(> .verified-check) {
 
   .people-request-detail-author button {
     width: 100%;
+  }
+
+  .people-request-detail-hero {
+    aspect-ratio: 4 / 5;
+  }
+
+  .people-request-detail-hero-overlay {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .people-request-detail-hero-copy h1 {
+    max-width: 10ch;
+    font-size: clamp(2rem, 11vw, 3.5rem);
+  }
+
+  .people-request-hero-author {
+    width: 100%;
+  }
+}
+
+.adaptive-page {
+  width: min(100%, 1280px);
+  margin-inline: auto;
+}
+
+@media (max-width: 767px) {
+  .adaptive-page {
+    width: 100%;
+  }
+
+  .adaptive-page-marketplace .market-grid,
+  .adaptive-page-business .visual-business-grid,
+  .adaptive-page-profile .achievement-grid,
+  .adaptive-page-profile .profile-listing-grid,
+  .adaptive-page-help-request .opportunity-feed {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .adaptive-page-marketplace .market-grid,
+  .adaptive-page-business .visual-business-grid,
+  .adaptive-page-profile .achievement-grid,
+  .adaptive-page-profile .profile-listing-grid,
+  .adaptive-page-help-request .opportunity-feed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .adaptive-page {
+    padding-inline: 0;
+  }
+
+  .adaptive-page-help-request .people-request-detail-card,
+  .adaptive-page-marketplace.listing-detail-shell,
+  .adaptive-page-business.business-profile-shell,
+  .adaptive-page-profile.user-profile-shell,
+  .adaptive-page-profile.identity-profile {
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+
+  .adaptive-page-marketplace .market-grid,
+  .adaptive-page-business .visual-business-grid,
+  .adaptive-page-profile .achievement-grid,
+  .adaptive-page-profile .profile-listing-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
