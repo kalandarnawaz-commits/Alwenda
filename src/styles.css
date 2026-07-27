@@ -13428,6 +13428,7 @@ strong:has(> .verified-check) {
 }
 
 .opportunity-cover {
+  position: relative;
   aspect-ratio: 16 / 9;
   padding: 14px;
   display: flex;
@@ -13437,8 +13438,22 @@ strong:has(> .verified-check) {
   background-size: cover;
 }
 
+.opportunity-cover-image {
+  background-image: none;
+}
+
+.opportunity-cover-image img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .opportunity-cover span,
 .opportunity-cover strong {
+  position: relative;
+  z-index: 1;
   padding: 7px 11px;
   border-radius: 999px;
   color: #fff;
@@ -13587,6 +13602,8 @@ strong:has(> .verified-check) {
 }
 
 .opportunity-detail-hero {
+  position: relative;
+  overflow: hidden;
   min-height: clamp(260px, 42vw, 440px);
   padding: 18px;
   display: flex;
@@ -13595,7 +13612,23 @@ strong:has(> .verified-check) {
   background-size: cover;
 }
 
+.opportunity-detail-hero-image,
+.people-request-detail-hero {
+  background: var(--surface-soft);
+}
+
+.opportunity-detail-hero-image img,
+.people-request-detail-hero img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .opportunity-detail-badges {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -14487,8 +14520,121 @@ strong:has(> .verified-check) {
 }
 
 .people-request-card {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  min-height: 430px;
+  border: 1px solid rgba(17, 17, 17, .05);
+}
+
+.help-request-hero-image {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.help-request-hero-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.people-request-image {
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 10;
+}
+
+.people-request-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+
+.people-request-body h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.22rem, 2vw, 1.5rem);
+  line-height: 1.08;
+  letter-spacing: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.people-request-card-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.category-badge,
+.urgency-badge {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-weight: 900;
+}
+
+.category-badge {
+  padding: 0 12px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: .84rem;
+}
+
+.category-badge span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.urgency-badge {
+  flex: 0 0 auto;
+  padding: 0 11px;
+  font-size: .72rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #0f5137;
+  background: #dff7ec;
+}
+
+.urgency-badge-thisWeek {
+  color: #754600;
+  background: #fff1cf;
+}
+
+.urgency-badge-flexible {
+  color: #495057;
+  background: #eef0f2;
+}
+
+.urgency-badge-urgent {
+  color: #8f1d16;
+  background: #ffe3dd;
+}
+
+.category-badge-overlay,
+.urgency-badge-overlay {
+  background: rgba(255, 255, 255, .9);
+  color: var(--ink);
+  box-shadow: var(--shadow-subtle);
+  backdrop-filter: blur(12px);
+}
+
+.opportunity-detail-badges .category-badge span {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .people-request-author-row {
@@ -14574,8 +14720,23 @@ strong:has(> .verified-check) {
   white-space: nowrap;
 }
 
+.help-request-meta-row {
+  margin: 0;
+  color: var(--muted);
+  font-size: .9rem;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
 .people-request-actions {
+  margin-top: auto;
   align-items: center;
+}
+
+.people-request-actions .opportunity-primary {
+  width: 100%;
+  flex: 1 1 100%;
+  border-radius: 999px;
 }
 
 .people-request-profile-muted {
@@ -14587,6 +14748,11 @@ strong:has(> .verified-check) {
 
 .people-request-detail-card .opportunity-detail-body {
   gap: 20px;
+}
+
+.people-request-detail-hero-image {
+  position: absolute;
+  inset: 0;
 }
 
 .people-request-detail-author {

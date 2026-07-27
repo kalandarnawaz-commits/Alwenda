@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="Moving category artwork">
+  <defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#f5efe6"/><stop offset="1" stop-color="#7c3f1d"/></linearGradient></defs>
+  <rect width="1200" height="760" fill="url(#g)"/>
+  <rect x="230" y="260" width="310" height="260" rx="26" fill="#fff" opacity=".9"/>
+  <rect x="600" y="215" width="320" height="305" rx="28" fill="#ead7bd" opacity=".92"/>
+  <path d="M230 330h310M385 260v260M600 300h320M760 215v305" stroke="#4a2716" stroke-width="20" opacity=".35"/>
+  <path d="M215 570h735" stroke="#ffffff" stroke-width="30" stroke-linecap="round" opacity=".45"/>
+</svg>

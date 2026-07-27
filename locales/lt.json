@@ -123,6 +123,7 @@
     "newNeighbourPosts": "nauji kaimynų įrašai",
     "localAlerts": "vietiniai įspėjimai",
     "nearby": "Netoliese",
+    "distanceKmAway": "{distance} km atstumu",
     "you": "Jūs",
     "viewProfile": "Žiūrėti profilį",
     "bookNow": "Rezervuoti dabar",
@@ -2346,6 +2347,7 @@
     "detailNotFound": "Ši užklausa nebepasiekiama.",
     "moreNearbyWork": "Daugiau darbų netoliese",
     "moreNearbyWorkHint": "Kitos aktyvios tos pačios kategorijos užklausos.",
+    "requestImageAlt": "{category} pagalbos užklausos vaizdas",
     "items": {
       "airport-pickup": {
         "title": "Pavėžėjimas iš oro uosto",

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="Translation category artwork">
+  <defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#eefcff"/><stop offset="1" stop-color="#0891b2"/></linearGradient></defs>
+  <rect width="1200" height="760" fill="url(#g)"/>
+  <rect x="210" y="220" width="330" height="260" rx="34" fill="#ffffff" opacity=".9"/>
+  <rect x="660" y="280" width="330" height="260" rx="34" fill="#e6fbff" opacity=".92"/>
+  <text x="310" y="385" font-family="Arial, sans-serif" font-size="116" font-weight="800" fill="#0f2930">A</text>
+  <text x="755" y="445" font-family="Arial, sans-serif" font-size="98" font-weight="800" fill="#0f2930">LT</text>
+  <path d="M550 350h85m0 0l-32-32m32 32l-32 32" stroke="#0f2930" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

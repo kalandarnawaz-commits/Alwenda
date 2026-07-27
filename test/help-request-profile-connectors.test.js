@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const supabaseClient = await readFile(new URL("../src/services/auth/supabaseClient.js", import.meta.url), "utf8");
 
 function extractFunction(source, name) {
@@ -72,12 +73,91 @@ test("help request display model keeps UUID ids as strings and separates author 
 
 test("real help request cards expose distinct request and profile destinations", () => {
   const card = extractFunction(main, "renderRealOpportunityCard");
+  const authorRow = extractFunction(main, "renderHelpRequestAuthorRow");
   assert.match(card, /people-request-card/);
   assert.match(card, /data-view="liveOpportunityDetail"/);
   assert.match(card, /data-opportunity-id/);
-  assert.match(card, /data-user-profile-target/, "author/profile controls must link to public profile routing");
+  assert.match(card, /renderHelpRequestAuthorRow\(request\)/, "cards must use the shared author row");
+  assert.match(authorRow, /data-user-profile-target/, "author/profile controls must link to public profile routing");
   assert.match(card, /opportunities\.viewRequest/);
-  assert.match(card, /common\.viewProfile/);
+});
+
+test("help request image resolver prefers uploaded media, category art, then neutral fallback", () => {
+  const resolver = extractFunction(main, "resolveHelpRequestImage");
+  const categoryArtwork = extractFunction(main, "helpRequestCategoryArtwork");
+  const uploaded = extractFunction(main, "firstValidHelpRequestUploadedImage");
+  assert.match(main, /const HELP_REQUEST_CATEGORY_IMAGE_MAP = Object\.freeze\(/);
+  for (const category of ["cleaning", "transport", "mechanic", "food", "moving", "childcare", "homeRepairs", "repairs", "teaching", "technology", "errands", "other"]) {
+    assert.match(main, new RegExp(`${category}:`), `${category} must have a deterministic category image entry`);
+  }
+  assert.match(uploaded, /image_url/);
+  assert.match(uploaded, /photo_url/);
+  assert.match(uploaded, /media\.map/);
+  assert.match(resolver, /const uploaded = firstValidHelpRequestUploadedImage\(record\)/);
+  assert.match(resolver, /if \(uploaded\)/, "uploaded request media must win before category art");
+  assert.match(resolver, /HELP_REQUEST_CATEGORY_IMAGE_MAP\[categoryId\]/);
+  assert.match(resolver, /helpRequestCategoryArtwork\(categoryId\)/);
+  assert.match(categoryArtwork, /HELP_REQUEST_CATEGORY_IMAGE_FALLBACK/);
+  assert.doesNotMatch(resolver, /unsplash|pexels|picsum|source\.unsplash/i, "resolver must not fetch arbitrary third-party images");
+});
+
+test("help request cards and details render lazy category imagery without leaking private profile fields", () => {
+  const card = extractFunction(main, "renderRealOpportunityCard");
+  const detail = extractFunction(main, "renderRealHelpRequestDetail");
+  const heroImage = extractFunction(main, "renderHelpRequestHeroImage");
+  assert.match(card, /renderHelpRequestHeroImage\(request, "people-request-image"\)/);
+  assert.match(heroImage, /src="\$\{escapeHtml\(request\.image\.src\)\}"/);
+  assert.match(heroImage, /alt="\$\{escapeHtml\(request\.image\.alt\)\}"/);
+  assert.match(heroImage, /loading="lazy" decoding="async"/);
+  assert.match(detail, /class="opportunity-detail-hero people-request-detail-hero"/);
+  assert.match(detail, /renderHelpRequestHeroImage\(request, "people-request-detail-hero-image"\)/);
+  assert.match(extractFunction(main, "resolveHelpRequestImage"), /requestImageAlt/);
+  assert.doesNotMatch(`${card}\n${detail}\n${heroImage}`, /contact_email|contact_phone|private_profiles|auth\.users|reputation_score/);
+});
+
+test("help request image clicks do not override author profile navigation", () => {
+  const card = extractFunction(main, "renderRealOpportunityCard");
+  const imageStart = card.indexOf('renderHelpRequestHeroImage(request, "people-request-image")');
+  const authorStart = card.indexOf("renderHelpRequestAuthorRow(request)");
+  assert.ok(imageStart !== -1 && authorStart !== -1 && imageStart < authorStart, "image area should be separate from author profile controls");
+  const imageMarkup = card.slice(imageStart, authorStart);
+  assert.doesNotMatch(imageMarkup, /data-user-profile-target/, "image taps should keep the card's request-detail target");
+  assert.match(extractFunction(main, "renderHelpRequestAuthorRow"), /data-user-profile-target/, "author name/avatar retains public-profile navigation");
+});
+
+test("fixture help requests use the same resolver and stop rendering external fixture URLs", () => {
+  const card = extractFunction(main, "renderOpportunityCard");
+  const detail = extractFunction(main, "renderLiveOpportunityDetail");
+  const fixtureShape = extractFunction(main, "shapeFixtureHelpRequestOpportunityForDisplay");
+  assert.match(fixtureShape, /image: resolveHelpRequestImage\(item\)/);
+  assert.match(card, /renderHelpRequestHeroImage\(request, "people-request-image"\)/);
+  assert.match(extractFunction(main, "renderHelpRequestHeroImage"), /loading="lazy" decoding="async"/);
+  assert.match(detail, /const image = resolveHelpRequestImage\(item\)/);
+  assert.match(detail, /class="opportunity-detail-hero opportunity-detail-hero-image"/);
+  assert.doesNotMatch(card, /background-image:url\('\$\{item\.image\}'\)/);
+  assert.doesNotMatch(detail, /background-image:url\('\$\{item\.image\}'\)/);
+});
+
+test("help request cards share premium visual components and reserve stable image space", () => {
+  for (const name of ["renderHelpRequestHeroImage", "renderHelpRequestMetaRow", "renderHelpRequestAuthorRow", "renderUrgencyBadge", "renderCategoryBadge"]) {
+    assert.match(main, new RegExp(`function ${name}\\(`), `${name} must exist as a shared renderer`);
+  }
+  assert.match(extractFunction(main, "renderRealOpportunityCard"), /renderCategoryBadge\(request\)/);
+  assert.match(extractFunction(main, "renderRealOpportunityCard"), /renderUrgencyBadge\(request\)/);
+  assert.match(extractFunction(main, "renderOpportunityCard"), /renderCategoryBadge\(request\)/);
+  assert.match(extractFunction(main, "renderOpportunityCard"), /renderUrgencyBadge\(request\)/);
+  assert.match(styles, /\.people-request-card\s*\{[\s\S]*min-height:\s*430px/, "cards should reserve stable height");
+  assert.match(styles, /\.people-request-image\s*\{[\s\S]*aspect-ratio:\s*16 \/ 10/, "image area should reserve stable space and reduce CLS");
+  assert.match(styles, /\.help-request-hero-image img\s*\{[\s\S]*object-fit:\s*cover/, "request images should crop predictably");
+});
+
+test("marketplace listing photos remain independent from help-request category artwork", () => {
+  const marketplaceCard = extractFunction(main, "renderMarketplaceListing");
+  const listingDetail = extractFunction(main, "renderListingDetailBody");
+  assert.match(marketplaceCard, /background-image: url\('\$\{item\.image\}'\)/);
+  assert.match(listingDetail, /galleryPhotos/);
+  assert.doesNotMatch(marketplaceCard, /resolveHelpRequestImage|HELP_REQUEST_CATEGORY_IMAGE_MAP|people-request-image/);
+  assert.doesNotMatch(listingDetail, /resolveHelpRequestImage|HELP_REQUEST_CATEGORY_IMAGE_MAP|people-request-image/);
 });
 
 test("real help request detail never falls back to the first fixture for unknown ids", () => {
