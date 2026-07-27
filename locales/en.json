@@ -2333,6 +2333,19 @@
     }
   },
   "opportunities": {
+    "profileUnavailable": "Profile unavailable",
+    "untitledRequest": "Help request",
+    "sourceSystem": "Posted by Alwen",
+    "sourceLegacy": "Legacy request",
+    "sourcePerson": "Posted by a neighbour",
+    "openAuthorProfile": "Open {name}'s profile",
+    "viewRequest": "View request",
+    "requestAuthorHidden": "Author profile unavailable",
+    "replyComingSoon": "Reply flow coming soon",
+    "detailLoadError": "This request could not be loaded. Please try again.",
+    "detailNotFound": "This request is no longer available.",
+    "moreNearbyWork": "More work nearby",
+    "moreNearbyWorkHint": "Other live requests in the same category.",
     "items": {
       "airport-pickup": {
         "title": "Airport pickup",

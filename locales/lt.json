@@ -2333,6 +2333,19 @@
     }
   },
   "opportunities": {
+    "profileUnavailable": "Profilis nepasiekiamas",
+    "untitledRequest": "Pagalbos užklausa",
+    "sourceSystem": "Paskelbė Alwen",
+    "sourceLegacy": "Sena užklausa",
+    "sourcePerson": "Paskelbė kaimynas",
+    "openAuthorProfile": "Atidaryti {name} profilį",
+    "viewRequest": "Žiūrėti užklausą",
+    "requestAuthorHidden": "Autoriaus profilis nepasiekiamas",
+    "replyComingSoon": "Atsakymo eiga netrukus",
+    "detailLoadError": "Nepavyko įkelti šios užklausos. Bandykite dar kartą.",
+    "detailNotFound": "Ši užklausa nebepasiekiama.",
+    "moreNearbyWork": "Daugiau darbų netoliese",
+    "moreNearbyWorkHint": "Kitos aktyvios tos pačios kategorijos užklausos.",
     "items": {
       "airport-pickup": {
         "title": "Pavėžėjimas iš oro uosto",

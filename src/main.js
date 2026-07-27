@@ -82,6 +82,7 @@ import {
   createHelpRequest,
   fetchMyHelpRequests,
   fetchOpenHelpRequests,
+  fetchHelpRequestById,
   fetchPublicListings,
   fetchListingById,
   fetchCommunityPosts,
@@ -256,6 +257,7 @@ const state = {
      different listing correctly re-fetches instead of showing stale
      data. status: "idle" | "loading" | "loaded" | "notFound" | "error". */
   remoteListingDetail: { status: "idle", id: null, item: null },
+  remoteHelpRequestDetail: { status: "idle", id: null, item: null },
   selectedPlaceId: null,
   selectedOpportunityId: null,
   selectedEventId: null,
@@ -7702,6 +7704,64 @@ function realOpportunityCardTitle(record, isListing) {
   return description.length > 80 ? `${description.slice(0, 77)}…` : description;
 }
 
+function publicHelpRequestAuthor(record) {
+  const profile = record?.author || null;
+  const userId = record?.requester_user_id || profile?.user_id || null;
+  const displayName = String(profile?.display_name || "").trim();
+  const handle = String(profile?.handle || "").trim();
+  return {
+    userId,
+    displayName: displayName || t("opportunities.profileUnavailable"),
+    avatarUrl: profile?.avatar_url || "",
+    handle: handle ? `@${handle}` : "",
+    verified: profile?.verification_status === "verified",
+    profileUrlAvailable: Boolean(userId && profile)
+  };
+}
+
+function shapeHelpRequestOpportunityForDisplay(record) {
+  const categoryId = normalizeOpportunityCategory(record);
+  const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === record.urgency);
+  const description = String(record.description || "").trim();
+  return {
+    id: String(record.id),
+    title: description || t("opportunities.untitledRequest"),
+    description,
+    categoryId,
+    categoryLabel: t(categoryConfigFor(categoryId).labelKey),
+    createdAt: record.created_at || null,
+    neighbourhood: record.area || record.city || "",
+    urgency: matchedUrgency ? t(matchedUrgency[1]) : "",
+    status: record.status ? t(`status.${record.status}`) : t("status.open"),
+    author: publicHelpRequestAuthor(record),
+    sourceType: record.requester_user_id ? "user" : record.created_by_alwen ? "system" : "legacy",
+    requestUrlAvailable: Boolean(record.id)
+  };
+}
+
+function helpRequestSourceLabel(item) {
+  if (item.sourceType === "system") return t("opportunities.sourceSystem");
+  if (item.sourceType === "legacy") return t("opportunities.sourceLegacy");
+  return t("opportunities.sourcePerson");
+}
+
+function findLoadedHelpRequestById(id) {
+  return (state.opportunityFeed.helpRequests || []).find((request) => String(request.id) === String(id)) || null;
+}
+
+async function refreshRemoteHelpRequestDetail(id) {
+  if (!id) return;
+  state.remoteHelpRequestDetail = { status: "loading", id, item: null };
+  try {
+    const item = await fetchHelpRequestById(id);
+    state.remoteHelpRequestDetail = { status: item ? "loaded" : "notFound", id, item };
+  } catch (error) {
+    console.warn("[helpRequestDetail] Failed to load request.", error);
+    state.remoteHelpRequestDetail = { status: "error", id, item: null };
+  }
+  if (state.activeView === "liveOpportunityDetail" && String(state.selectedOpportunityId) === String(id)) render();
+}
+
 function renderRealOpportunityCard(record) {
   const isListing = "title" in record && Boolean(record.title);
   const categoryId = normalizeOpportunityCategory(record);
@@ -7711,19 +7771,40 @@ function renderRealOpportunityCard(record) {
   const priceLabel = isListing && record.price_amount != null ? formatCurrency(record.price_amount, record.price_currency || "EUR") : null;
   const urgencyOption = !isListing ? HELP_URGENCY_OPTIONS.find(([value]) => value === record.urgency) : null;
   const postedLabel = record.created_at ? formatDate(record.created_at, { dateStyle: "medium" }) : null;
-  // Informational only, deliberately not click-through: the existing
-  // listingDetail screen reads from the mock `listings` array
-  // (renderListingDetail, ~main.js:6904), not real Supabase rows, and
-  // help_requests has no detail/contact screen at all yet. Wiring a real
-  // detail + contact flow for these Supabase-backed records is future
-  // work, not part of this taxonomy sprint — a broken or misleading link
-  // would be worse than an honest, non-interactive card.
-  return `<article class="opportunity-card real-opportunity-card" aria-label="${escapeHtml(title)}" data-opportunity-record-id="${escapeHtml(String(record.id))}" data-opportunity-record-type="${isListing ? "listing" : "helpRequest"}">
+  if (isListing) {
+    return `<article class="opportunity-card real-opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(title)}" data-view="listingDetail" data-listing-id="${escapeHtml(String(record.id))}" data-opportunity-record-id="${escapeHtml(String(record.id))}" data-opportunity-record-type="listing">
+      <div class="opportunity-body">
+        <div class="opportunity-price-row"><span class="chip real-opportunity-category-chip">${escapeHtml(categoryLabel)}</span>${priceLabel ? `<b>${priceLabel}</b>` : ""}</div>
+        <h2>${escapeHtml(title)}</h2>
+        ${record.description ? `<p>${escapeHtml(record.description)}</p>` : ""}
+        <p class="opportunity-meta">${[locationLabel ? escapeHtml(locationLabel) : null, postedLabel].filter(Boolean).join(" · ")}</p>
+      </div>
+    </article>`;
+  }
+
+  const request = shapeHelpRequestOpportunityForDisplay(record);
+  const authorProfileButton = request.author.profileUrlAvailable
+    ? `data-user-profile-target="${escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId)}" aria-label="${escapeHtml(t("opportunities.openAuthorProfile", { name: request.author.displayName }))}"`
+    : `disabled aria-disabled="true"`;
+  return `<article class="opportunity-card real-opportunity-card people-request-card" role="button" tabindex="0" aria-label="${escapeHtml(request.title)}" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}" data-opportunity-record-id="${escapeHtml(request.id)}" data-opportunity-record-type="helpRequest">
+    <div class="people-request-author-row">
+      <button type="button" class="people-request-author" ${authorProfileButton}>
+        <span class="people-request-avatar">${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}</span>
+        <span class="people-request-author-copy">
+          <strong>${escapeHtml(request.author.displayName)}${request.author.verified ? verifiedCheck(t("status.verified")) : ""}</strong>
+          <small>${[request.author.handle, postedLabel].filter(Boolean).map(escapeHtml).join(" · ") || escapeHtml(helpRequestSourceLabel(request))}</small>
+        </span>
+      </button>
+    </div>
     <div class="opportunity-body">
-      <div class="opportunity-price-row"><span class="chip real-opportunity-category-chip">${escapeHtml(categoryLabel)}</span>${priceLabel ? `<b>${priceLabel}</b>` : ""}</div>
-      <h2>${escapeHtml(title)}</h2>
-      ${isListing && record.description ? `<p>${escapeHtml(record.description)}</p>` : ""}
-      <p class="opportunity-meta">${[locationLabel ? escapeHtml(locationLabel) : null, postedLabel, urgencyOption ? t(urgencyOption[1]) : null].filter(Boolean).join(" · ")}</p>
+      <div class="opportunity-price-row"><span class="chip real-opportunity-category-chip">${escapeHtml(request.categoryLabel)}</span><b>${escapeHtml(request.status)}</b></div>
+      <h2>${escapeHtml(request.title)}</h2>
+      ${request.description && request.description !== request.title ? `<p>${escapeHtml(request.description)}</p>` : ""}
+      <p class="opportunity-meta">${[locationLabel ? escapeHtml(locationLabel) : null, urgencyOption ? t(urgencyOption[1]) : null, helpRequestSourceLabel(request)].filter(Boolean).join(" · ")}</p>
+      <div class="opportunity-actions people-request-actions">
+        <button type="button" class="opportunity-primary" data-view="liveOpportunityDetail" data-opportunity-id="${escapeHtml(request.id)}">${t("opportunities.viewRequest")}</button>
+        ${request.author.profileUrlAvailable ? `<button type="button" data-user-profile-target="${escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId)}">${t("common.viewProfile")}</button>` : `<span class="people-request-profile-muted">${t("opportunities.profileUnavailable")}</span>`}
+      </div>
     </div>
   </article>`;
 }
@@ -7737,12 +7818,65 @@ function liveOpportunityHref(id) {
 }
 
 function openLiveOpportunityDetail(id) {
-  const item = findOpportunityById(id) || LIVE_OPPORTUNITIES[0];
-  state.selectedOpportunityId = item.id;
+  state.selectedOpportunityId = String(id || "");
   state.activeView = "liveOpportunityDetail";
   state.activeSheet = null;
   state.quickTranslateOpen = false;
+  if (state.remoteHelpRequestDetail.id !== state.selectedOpportunityId) {
+    state.remoteHelpRequestDetail = { status: "idle", id: state.selectedOpportunityId, item: null };
+  }
   render();
+}
+
+function renderRealHelpRequestDetail(record) {
+  const request = shapeHelpRequestOpportunityForDisplay(record);
+  const postedLabel = request.createdAt ? formatDate(request.createdAt, { dateStyle: "medium" }) : null;
+  const authorTarget = request.author.profileUrlAvailable ? escapeHtml(request.author.handle.replace(/^@/, "") || request.author.userId) : "";
+  const related = opportunityRecordsForCategory(request.categoryId, state.opportunityFilter.surface)
+    .filter((candidate) => String(candidate.id) !== request.id)
+    .slice(0, 3);
+  return `<section class="section-shell opportunity-detail-shell people-request-detail-shell">
+    ${renderTransactionSafetyNotice()}
+    <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+    <article class="opportunity-detail-card people-request-detail-card">
+      <div class="opportunity-detail-body">
+        <div class="people-request-detail-author">
+          ${request.author.avatarUrl ? `<img src="${escapeHtml(request.author.avatarUrl)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials(request.author.displayName))}</span>`}
+          <div>
+            <p class="eyebrow">${escapeHtml(helpRequestSourceLabel(request))}</p>
+            <h2>${escapeHtml(request.author.displayName)}${request.author.verified ? verifiedCheck(t("status.verified")) : ""}</h2>
+            <p>${[request.author.handle, postedLabel].filter(Boolean).map(escapeHtml).join(" · ") || escapeHtml(t("opportunities.requestAuthorHidden"))}</p>
+          </div>
+          ${authorTarget ? `<button type="button" data-user-profile-target="${authorTarget}">${t("common.viewProfile")}</button>` : ""}
+        </div>
+        <div class="opportunity-detail-title people-request-detail-title">
+          <div>
+            <p class="eyebrow">${escapeHtml(request.categoryLabel)} · ${escapeHtml(currentAreaLabel())}</p>
+            <h1>${escapeHtml(request.title)}</h1>
+            <p>${[request.neighbourhood ? escapeHtml(request.neighbourhood) : null, request.urgency ? escapeHtml(request.urgency) : null, request.status ? escapeHtml(request.status) : null].filter(Boolean).join(" · ")}</p>
+          </div>
+        </div>
+        <div class="opportunity-detail-grid">
+          <article><span>${t("common.postedBy")}</span><strong>${escapeHtml(request.author.displayName)}</strong></article>
+          <article><span>${t("common.category")}</span><strong>${escapeHtml(request.categoryLabel)}</strong></article>
+          <article><span>${t("common.response")}</span><strong>${escapeHtml(request.status)}</strong></article>
+        </div>
+        <div class="opportunity-detail-section">
+          <h2>${t("common.whatTheyNeed")}</h2>
+          <p>${escapeHtml(request.description || request.title)}</p>
+        </div>
+        <div class="opportunity-detail-actions">
+          ${state.auth.status !== "signedIn" ? `<button type="button" class="opportunity-primary" data-view="auth">${t("common.signIn")}</button>` : `<button type="button" class="opportunity-primary" disabled aria-disabled="true">${t("opportunities.replyComingSoon")}</button>`}
+          ${authorTarget ? `<button type="button" data-user-profile-target="${authorTarget}">${t("common.viewProfile")}</button>` : ""}
+          <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
+        </div>
+      </div>
+    </article>
+    ${related.length ? `<section class="opportunity-related">
+      <div class="section-title"><div><h2>${t("opportunities.moreNearbyWork")}</h2><p>${t("opportunities.moreNearbyWorkHint")}</p></div></div>
+      <div class="opportunity-feed">${related.map(renderRealOpportunityCard).join("")}</div>
+    </section>` : ""}
+  </section>`;
 }
 
 /** Fixture-only filterer — feeds renderOpportunityCard's LIVE_OPPORTUNITIES
@@ -7790,7 +7924,39 @@ function renderOpportunityCard(item) {
 }
 
 function renderLiveOpportunityDetail() {
-  const item = findOpportunityById(state.selectedOpportunityId) || LIVE_OPPORTUNITIES[0];
+  const realRequest = findLoadedHelpRequestById(state.selectedOpportunityId)
+    || (state.remoteHelpRequestDetail.id === String(state.selectedOpportunityId) ? state.remoteHelpRequestDetail.item : null);
+  if (realRequest) return renderRealHelpRequestDetail(realRequest);
+
+  const fixtureItem = findOpportunityById(state.selectedOpportunityId);
+  if (!fixtureItem) {
+    const detailState = state.remoteHelpRequestDetail;
+    if (detailState.id !== String(state.selectedOpportunityId) || detailState.status === "idle") {
+      refreshRemoteHelpRequestDetail(state.selectedOpportunityId);
+    }
+    if (detailState.id === String(state.selectedOpportunityId) && detailState.status === "error") {
+      return `<section class="section-shell opportunity-detail-shell">
+        ${renderTransactionSafetyNotice()}
+        <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+        ${renderEmptyState(t("opportunities.detailLoadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-help-request-detail">${t("alwen.alwenChatRetry")}</button>
+      </section>`;
+    }
+    if (detailState.id === String(state.selectedOpportunityId) && detailState.status === "notFound") {
+      return `<section class="section-shell opportunity-detail-shell">
+        ${renderTransactionSafetyNotice()}
+        <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+        ${renderEmptyState(t("opportunities.detailNotFound"), "search")}
+      </section>`;
+    }
+    return `<section class="section-shell opportunity-detail-shell">
+      ${renderTransactionSafetyNotice()}
+      <button type="button" class="back-button" data-view="liveOpportunities">${icon("arrow")}${t("common.back")} · ${t("common.liveRequests")}</button>
+      <div class="profile-listing-grid-loading" aria-busy="true"></div>
+    </section>`;
+  }
+
+  const item = fixtureItem;
   state.selectedOpportunityId = item.id;
   const title = opportunityText(item, "title");
   const category = opportunityText(item, "category");
@@ -11814,7 +11980,7 @@ function bindEvents() {
       if (event.target.closest(".floating-card-actions, .mini-save")) return;
       if (event.target.closest("button") && event.target.closest("button") !== card) return;
       const opportunityId = card.dataset.opportunityId;
-      if (!findOpportunityById(opportunityId)) return;
+      if (!findOpportunityById(opportunityId) && !findLoadedHelpRequestById(opportunityId)) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -11904,6 +12070,12 @@ function bindEvents() {
       if (button.dataset.view === "explore") {
         state.exploreCategory = "All";
         state.exploreCategoryChosen = false;
+      }
+      if (button.dataset.view === "liveOpportunityDetail" && button.dataset.opportunityId) {
+        state.selectedOpportunityId = String(button.dataset.opportunityId);
+        if (state.remoteHelpRequestDetail.id !== state.selectedOpportunityId) {
+          state.remoteHelpRequestDetail = { status: "idle", id: state.selectedOpportunityId, item: null };
+        }
       }
       state.activeView = button.dataset.view;
       state.activeSheet = null;
@@ -12358,6 +12530,11 @@ function bindEvents() {
 
   document.querySelectorAll('[data-action="retry-listing-detail"]').forEach((button) => button.addEventListener("click", () => {
     refreshRemoteListingDetail(state.selectedListingId);
+    render();
+  }));
+
+  document.querySelectorAll('[data-action="retry-help-request-detail"]').forEach((button) => button.addEventListener("click", () => {
+    refreshRemoteHelpRequestDetail(state.selectedOpportunityId);
     render();
   }));
 

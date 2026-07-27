@@ -832,12 +832,30 @@ export async function fetchOpenHelpRequests({ limit = OPEN_HELP_REQUESTS_DEFAULT
   const boundedLimit = Math.min(Math.max(1, Number(limit) || OPEN_HELP_REQUESTS_DEFAULT_LIMIT), OPEN_HELP_REQUESTS_MAX_LIMIT);
   const { data, error } = await supabase
     .from("help_requests")
-    .select("id, category, category_id, description, urgency, area, city, status, created_at")
+    .select("id, requester_user_id, category, category_id, description, urgency, area, city, status, created_by_alwen, created_at")
     .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(boundedLimit);
   if (error) throwIfError(error, "fetchOpenHelpRequests");
-  return data || [];
+  const requests = data || [];
+  const requesterIds = [...new Set(requests.map((request) => request.requester_user_id).filter(Boolean))];
+  const profiles = await fetchProfilesByIds(requesterIds);
+  const profileByUserId = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  return requests.map((request) => ({ ...request, author: profileByUserId.get(request.requester_user_id) || null }));
+}
+
+export async function fetchHelpRequestById(id) {
+  if (!isSupabaseConfigured() || !id) return null;
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("help_requests")
+    .select("id, requester_user_id, category, category_id, description, urgency, area, city, status, created_by_alwen, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throwIfError(error, "fetchHelpRequestById");
+  if (!data) return null;
+  const profiles = data.requester_user_id ? await fetchProfilesByIds([data.requester_user_id]) : [];
+  return { ...data, author: profiles[0] || null };
 }
 
 export async function fetchMyHelpRequests() {
@@ -1171,7 +1189,7 @@ export async function fetchFollowCounts(userId) {
  * auth.users). verification_status/reputation_score are included so
  * callers like fetchCommunityPosts/fetchListingById can show a real
  * verified badge and reputation without a second round-trip. */
-async function fetchProfilesByIds(userIds) {
+export async function fetchProfilesByIds(userIds) {
   if (!userIds.length) return [];
   const supabase = await getClient();
   const { data, error } = await supabase
