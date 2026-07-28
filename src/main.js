@@ -17,8 +17,7 @@ import {
   notifications,
   professionalCategories,
   profileReviews,
-  SEED_CITY_META,
-  serviceProfessionals
+  SEED_CITY_META
 } from "./data/mockData.js?v=vilnius-neighbourhoods-1";
 import { integrations } from "./services/integrationPlaceholders.js";
 import {
@@ -504,15 +503,16 @@ function openPublicProfile(dataset) {
 }
 
 /** Looks a person up by the stable id introduced alongside publicProfileAttrs
- * (see mockData.js: sellerId, authorId, review id, pro-<id>) so a public
- * profile URL can be rehydrated after a refresh or a shared link, not just
- * reached by clicking through the app in the same session. Same "no shared
- * person table" caveat as publicProfileAttrs above — each source is checked
- * independently, not merged into one identity. */
+ * (see mockData.js: sellerId, authorId, review id) so a public profile URL
+ * can be rehydrated after a refresh or a shared link, not just reached by
+ * clicking through the app in the same session. Same "no shared person
+ * table" caveat as publicProfileAttrs above — each source is checked
+ * independently, not merged into one identity. No "pro-<id>" branch —
+ * there is no real professional identity concept yet (see renderHire()),
+ * so an old pro-<id> link now honestly resolves to nothing rather than
+ * resurrecting a mock person. */
 function findPersonById(id) {
   if (!id) return null;
-  const pro = serviceProfessionals.find((item) => `pro-${item.id}` === id);
-  if (pro) return { id, name: pro.name, area: pro.area, category: t(pro.categoryKey), rating: pro.rating, reviews: pro.reviews, verified: pro.verified, context: "hire", skills: pro.skills, responseTime: pro.responseTime, price: pro.price, availability: pro.availability, distance: pro.distance };
   const review = profileReviews.find((item) => item.id === id);
   if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
   const post = state.communityFeed.posts.find((item) => item.authorId === id);
@@ -2881,32 +2881,13 @@ function filteredImportedBusinesses() {
     .sort(EXPLORE_SORTERS[state.exploreSort] || EXPLORE_SORTERS.nearest);
 }
 
-/** Hire's category chips ("plumber", "IT support") use everyday search
- * words, while each professional's own `category` field bundles two
- * concepts ("Plumbing & repairs"). Substring-match against both the
- * category and the finer-grained skills array so word-stem differences
- * ("plumber" vs "plumbing") still resolve. */
-function hireCategoryMatches(item, chipLabel) {
-  const chipWords = chipLabel.toLowerCase().split(/\s+/).filter(Boolean);
-  const haystackWords = [item.category, ...item.skills].join(" ").toLowerCase().split(/[^a-z]+/).filter(Boolean);
-  return chipWords.some((chipWord) => {
-    const stem = chipWord.slice(0, 5);
-    // The `chipWord.includes(word)` fallback exists for short, meaningful
-    // haystack words (stems shorter than 5 chars don't clear the check
-    // above), but without a length floor it also matches generic short
-    // words that happen to be substrings — e.g. "carpenter" contains
-    // "car", so a mechanic listing "car check" as a skill matched the
-    // Carpenter chip. Require at least 4 letters before trusting it.
-    return haystackWords.some((word) => word.slice(0, 5) === stem || word.includes(chipWord) || (word.length >= 4 && chipWord.includes(word)));
-  });
-}
-
+/** There is no real professional-listing concept in the schema yet (see
+ * renderHire()) — always honestly empty rather than fabricating a card.
+ * Kept as its own function (not inlined at each call site) so Hire's own
+ * page, Alwen's hire_service search, and Search's topMatches() all share
+ * one place to wire up a real source later. */
 function filteredProfessionals() {
-  return serviceProfessionals.filter((item) => {
-    const areaMatch = state.area === "All" || item.area === state.area;
-    const categoryMatch = !state.hireCategory || hireCategoryMatches(item, state.hireCategory);
-    return areaMatch && categoryMatch && matchesQuery(`${item.name} ${item.category} ${item.area} ${item.skills.join(" ")} ${item.availability}`);
-  });
+  return [];
 }
 
 function filteredHelpRequests() {
@@ -3830,9 +3811,10 @@ function searchAlwenPlaces(rawQuery) {
 
 /** Same narrowing idea as exploreCategoryForQuery, mapped into Hire's
  * professionalCategories values via CATEGORY_CONFIG.hireCategoryValues
- * instead. Only the first mapped value is used — hireCategoryMatches/
- * filteredProfessionals take one category at a time, and free-text
- * state.query still does the actual matching regardless. */
+ * instead. Only the first mapped value is used — filteredProfessionals
+ * takes one category at a time (though it is always honestly empty
+ * right now, see filteredProfessionals()), and free-text state.query
+ * still does the actual matching regardless. */
 function hireCategoryForQuery(rawQuery) {
   const categoryId = classifyTextToCategory(rawQuery);
   if (!categoryId) return null;
@@ -3974,12 +3956,11 @@ function renderAlwenStructuredResultMessage(message) {
       </div>
     `;
   }
-  const cards =
-    message.resultType === "place"
-      ? items.map(renderPlaceCardCompact).join("")
-      : message.resultType === "professional"
-        ? items.map(renderProfessional).join("")
-        : "";
+  // resultType "professional" never reaches here with a non-empty items
+  // array — there is no real professional-listing concept yet (see
+  // renderHire()), so searchAlwenProfessionals() always returns [],
+  // which the !items.length branch above already catches honestly.
+  const cards = message.resultType === "place" ? items.map(renderPlaceCardCompact).join("") : "";
   return `
     <div class="alwen-message alwen-message-structured">
       ${message.text ? `<p class="alwen-structured-intro">${escapeHtml(message.text)}</p>` : ""}
@@ -4046,17 +4027,12 @@ function renderAlwenContextualActions(message) {
       </div>
     `;
   }
+  // resultType "professional" never has a result item — there is no real
+  // professional-listing concept yet (see renderHire()), so this is
+  // always the honest "no match, see Hire" nudge, never the
+  // view-profile/message actions a real match would otherwise get.
   if (message.messageType === "structured_result" && message.resultType === "professional") {
-    const item = (message.results || [])[0];
-    if (!item) return `<div class="alwen-contextual-actions"><button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button></div>`;
-    const profileAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire" });
-    return `
-      <div class="alwen-contextual-actions">
-        <button type="button" ${profileAttrs} data-alwen-contextual-action="viewProfile" data-alwen-contextual-result-type="professional">${t("common.viewProfile")}</button>
-        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact" data-alwen-contextual-action="message" data-alwen-contextual-result-type="professional">${t("common.message")}</button>
-        <button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button>
-      </div>
-    `;
+    return `<div class="alwen-contextual-actions"><button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button></div>`;
   }
   return "";
 }
@@ -4482,9 +4458,12 @@ async function clearActiveAlwenConversation() {
 /** Reconstructs one persisted alwen_messages row into the shape the
  * conversation timeline renders. Structured-result rows only ever stored
  * ids (see persistAlwenStructuredSearchTurn) — this re-hydrates them
- * against the live in-memory place/professional lists on every load, so a
- * reopened conversation always shows current data, never a frozen
- * snapshot (a business could have changed since the row was written). */
+ * against the live in-memory place list on every load, so a reopened
+ * conversation always shows current data, never a frozen snapshot (a
+ * business could have changed since the row was written). A historical
+ * "professional" row re-hydrates against no source (there is no real
+ * professional-listing concept — see renderHire()) and so honestly comes
+ * back empty, rather than resurrecting a since-deleted mock person. */
 function mapAlwenMessageRow(row) {
   const base = { id: String(row.id), conversationId: row.conversation_id, role: row.role, messageType: row.message_type || "text", createdAt: row.created_at, status: "success" };
   if (row.message_type === "translation" && row.role === "assistant") {
@@ -4498,7 +4477,7 @@ function mapAlwenMessageRow(row) {
   }
   if (row.message_type === "structured_result" && row.role === "assistant") {
     const ids = Array.isArray(row.result_payload?.ids) ? row.result_payload.ids : [];
-    const source = row.result_type === "place" ? importedBusinesses : row.result_type === "professional" ? serviceProfessionals : [];
+    const source = row.result_type === "place" ? importedBusinesses : [];
     const results = ids.map((id) => source.find((item) => String(item.id) === String(id))).filter(Boolean);
     return { ...base, resultType: row.result_type, results, text: results.length ? "" : t("alwen.noResultsFound") };
   }
@@ -6246,7 +6225,6 @@ function renderMarketplace() {
   }
 
   const items = filteredListings();
-  const pros = filteredProfessionals();
 
   return `
     <section class="section-shell marketplace-shell">
@@ -6272,16 +6250,16 @@ function renderMarketplace() {
           ? items.map(renderMarketplaceListing).join("")
           : `${renderEmptyState(t("marketplace.marketplaceEmptyTitle"), "tag")}<div class="opportunity-post-cta"><p>${t("marketplace.marketplaceEmptyHint")}</p><button type="button" data-view="createListing">${t("common.sellSomething")}</button></div>`}
       </div>
-      <div class="section-title">
-        <div><h2>${t("common.verifiedPros")}</h2><p>${t("common.verifiedProsHint")}</p></div>
-        <button data-view="needHelp">${t("common.requestQuote")}</button>
-      </div>
-      <div class="pro-list">
-        ${pros.map(renderProfessional).join("")}
-      </div>
     </section>
   `;
 }
+/* The "Verified Pros" cross-sell section that used to sit here is gone —
+   it read from filteredProfessionals(), which is now honestly always
+   empty (no real professional-listing concept exists yet, see
+   renderHire()), so it would only ever have rendered a permanently
+   empty grid under a live heading and "Request Quote" button. Need
+   Help's own real, signed-in-gated flow (the .need-help-card section
+   above) is still the one real cross-sell into Hire on this page. */
 
 /** Real signals only — every count here traces to something the user
  * actually did (myListings/myHelpRequests carry a real created_at from
@@ -6893,30 +6871,7 @@ function renderListingDetailBody(item) {
   `;
 }
 
-function renderProfessional(item) {
-  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-  return `
-    <article class="pro-card">
-      <div class="pro-card-identity" role="button" tabindex="0" ${personAttrs}>
-        <div class="business-logo pro-card-avatar">${initials(item.name)}</div>
-        <div>
-          <h3>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h3>
-          <p>${t(item.categoryKey)} · ${item.area}</p>
-          <div class="pro-card-stats">
-            <span class="pro-stat-rating">${icon("star")} ${item.rating} <small>(${item.reviews})</small></span>
-            <span class="pro-stat-price">${item.price}</span>
-            <span class="pro-stat-availability">${item.availability}</span>
-          </div>
-        </div>
-      </div>
-      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
-      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
-    </article>
-  `;
-}
-
 function renderHire() {
-  const pros = filteredProfessionals();
   return `
     <section class="section-shell hire-shell">
       ${renderTransactionSafetyNotice()}
@@ -6935,7 +6890,7 @@ function renderHire() {
         ${professionalCategories.map(({ value, labelKey }) => `<button type="button" class="${state.hireCategory === value ? "is-selected" : ""}" data-hire-category="${escapeHtml(value)}">${t(labelKey)}</button>`).join("")}
       </div>
       <div class="pro-list">
-        ${pros.map(renderProfessional).join("") || renderEmptyState(t("common.noResults"), "people")}
+        ${renderEmptyState(t("common.noResults"), "people")}
       </div>
     </section>
   `;
@@ -7158,7 +7113,7 @@ async function refreshOpportunityFeed() {
     console.warn("[opportunityFeed] Failed to load real opportunity data.", error);
     state.opportunityFeed = { status: "error", helpRequests: [], listings: [], loadedAt: state.opportunityFeed.loadedAt };
   }
-  if (["home", "liveOpportunities", "needHelp", "community"].includes(state.activeView)) render();
+  if (["home", "liveOpportunities", "needHelp", "community", "marketplace"].includes(state.activeView)) render();
 }
 
 const COMMUNITY_FEED_FETCH_LIMIT = 20;
@@ -8302,11 +8257,10 @@ const HELP_URGENCY_OPTIONS = [
    live AI call per keystroke — a network round-trip per character would
    never feel "smooth", and the real conversational AI (submitAlwenChat)
    is a multi-turn assistant, the wrong shape for instant-typing expansion.
-   matchQuery is the exact string handed to the existing hireCategoryMatches()
-   (used everywhere else in this file for real pro matching) so the pre-submit
-   AI summary, the post-submit results, and the posted help_requests.category
-   all agree on the same real data — never three different numbers for the
-   same request. */
+   matchQuery becomes state.hireCategory (see startNeedHelpTypewriter) and
+   is submitted as the real help_requests.category on post — there is no
+   real professional-matching concept yet (see renderHire()), so this is
+   purely category tagging for the request itself now. */
 const NEED_HELP_INTENTS = [
   { id: "furniture", keywords: ["ikea", "furniture", "assemble", "assembly", "wardrobe"], matchQuery: "ikea assembly", icon: "🪑", chipLabel: "Assemble furniture", sentence: "I need someone to assemble my IKEA wardrobe tomorrow evening." },
   { id: "cleaning", keywords: ["clean", "cleaning", "cleaner", "tidy"], matchQuery: "cleaning", icon: "🧹", chipLabel: "Cleaning", sentence: "I need a trusted cleaner for my apartment this Friday." },
@@ -8335,13 +8289,17 @@ function matchNeedHelpIntent(rawText) {
   return NEED_HELP_INTENTS.find((intent) => intent.keywords.some((keyword) => keyword === trimmed || keyword.startsWith(trimmed) || trimmed.startsWith(keyword))) || null;
 }
 
-function professionalsForIntent(intent) {
-  return serviceProfessionals.filter((item) => hireCategoryMatches(item, intent.matchQuery));
+/** No real professional-listing concept exists yet (see renderHire()) —
+ * always honestly empty. intent is accepted (unused) so every call site
+ * stays unchanged and ready for a real source later. */
+function professionalsForIntent() {
+  return [];
 }
 
-/* Every stat below is computed from the same real serviceProfessionals
-   records hireCategoryMatches() already surfaces elsewhere in this file
-   (renderInlineProSuggestions, filteredProfessionals) — never invented. */
+/* Every stat below is computed from professionalsForIntent(), which is
+   always honestly empty right now — the null-coalescing below (avgResponse,
+   minPrice) already renders that as "—"/a fallback rather than a fabricated
+   number, so this degrades correctly with no code change needed here. */
 function needHelpSummaryStats(intent) {
   const matches = professionalsForIntent(intent);
   const responseTimes = matches.map((item) => parseInt(item.responseTime, 10)).filter((value) => Number.isFinite(value));
@@ -8455,32 +8413,8 @@ function renderNeedHelpSummary(intent) {
   `;
 }
 
-/* Reuses the exact opportunity-card shell (Events/Live Opportunities/
-   Marketplace) — professionals have no photo, so opportunity-cover-avatar
-   swaps the background-image cover for a centered initials circle rather
-   than faking a photo, everything else (price row, meta, trust row, tag
-   chips, dual-action footer) is the same class, same look. */
-function renderProCard(item) {
-  const categoryName = t(item.categoryKey);
-  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: categoryName, rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-  return `<article class="opportunity-card pro-opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${item.name} ${categoryName}`)}" ${personAttrs}>
-    <div class="opportunity-cover opportunity-cover-avatar"><span class="opportunity-cover-avatar-circle">${initials(item.name)}</span><span>${categoryName}</span></div>
-    <div class="opportunity-body">
-      <div class="opportunity-price-row"><h2>${escapeHtml(item.name)}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h2><b>${item.price}</b></div>
-      <p class="opportunity-meta">${escapeHtml(item.area)}${item.distance ? ` · ${escapeHtml(item.distance)}` : ""} · ${escapeHtml(item.availability)}</p>
-      <div class="opportunity-trust"><span>★ ${item.rating} (${item.reviews})</span>${item.responseTime ? `<span>${t("needHelp.aiSummaryResponseValue", { minutes: parseInt(item.responseTime, 10) })}</span>` : ""}</div>
-      <div class="opportunity-tags">${item.skills.slice(0, 3).map((skill) => `<span>${escapeHtml(skill)}</span>`).join("")}</div>
-      <div class="opportunity-actions">
-        <button type="button" class="opportunity-primary" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
-        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
-      </div>
-    </div>
-  </article>`;
-}
-
 function renderNeedHelpResults(intent) {
   if (!intent) return "";
-  const matches = professionalsForIntent(intent);
   return `
     <section class="need-help-results-reveal">
       <div class="post-request-success need-help-posted-confirmation">
@@ -8489,7 +8423,7 @@ function renderNeedHelpResults(intent) {
         <p>${t("needHelp.postedHint")}</p>
       </div>
       <div class="section-title"><div><h2>${t("common.matchingPros")}</h2><p>${t("common.matchingProsHint")}</p></div></div>
-      <div class="opportunity-feed">${matches.map(renderProCard).join("") || renderEmptyState(t("common.noResults"), "people")}</div>
+      <div class="opportunity-feed">${renderEmptyState(t("common.noResults"), "people")}</div>
       <button type="button" class="auth-primary-button" data-role="post-another-request">${t("needHelp.postAnother")}</button>
     </section>
   `;
@@ -8551,41 +8485,14 @@ function renderPostRequestForm() {
   `;
 }
 
-/* Live preview of matching professionals right where the category chip
-   was clicked — previously the only feedback for picking "Plumber" was
-   the chip itself changing state; the actual matches only showed up in
-   a "Matching pros" list much further down the page, so most users
-   never realized the filter had already worked. */
+/** Live preview of matching professionals right where the category chip
+ * was clicked. There is no real professional-listing concept yet (see
+ * renderHire()), so this always honestly reports zero matches rather
+ * than fabricating a chip. */
 function renderInlineProSuggestions(category) {
   const categoryLabelKey = professionalCategories.find((item) => item.value === category)?.labelKey;
   const categoryName = categoryLabelKey ? t(categoryLabelKey) : category;
-  const matches = serviceProfessionals.filter((item) => hireCategoryMatches(item, category));
-
-  if (!matches.length) {
-    return `<p class="inline-pro-suggestions-empty">${t("needHelp.instantMatchesNone").replace("{category}", categoryName)}</p>`;
-  }
-
-  const top = matches.slice(0, 3);
-  return `
-    <div class="inline-pro-suggestions">
-      <p class="inline-pro-suggestions-label">${t("needHelp.instantMatchesFound").replace("{count}", matches.length).replace("{category}", categoryName)}</p>
-      <div class="inline-pro-suggestions-list">
-        ${top.map((item) => {
-          const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-          return `
-            <button type="button" class="inline-pro-chip" ${personAttrs}>
-              <span class="inline-pro-avatar">${initials(item.name)}</span>
-              <span class="inline-pro-chip-body">
-                <strong>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</strong>
-                <small>${icon("star")} ${item.rating} · ${item.availability}</small>
-              </span>
-            </button>
-          `;
-        }).join("")}
-      </div>
-      ${matches.length > top.length ? `<button type="button" class="inline-pro-suggestions-more" data-view="hire">${t("needHelp.instantMatchesSeeAll")} (${matches.length})</button>` : ""}
-    </div>
-  `;
+  return `<p class="inline-pro-suggestions-empty">${t("needHelp.instantMatchesNone").replace("{category}", categoryName)}</p>`;
 }
 
 /** Shared shape for a real help_requests row (whichever path created it —
@@ -9141,22 +9048,6 @@ function startOpportunityConversation(opportunityId) {
     contextMeta: `${item.priceLabel} · ${opportunityText(item, "time")} · ${opportunityText(item, "category")}`,
     userMessage: `Hi, I can help with ${title}. I’m available to discuss details.`,
     firstMessage: `Great — share your availability and any quote details here so we can confirm.`
-  });
-}
-
-function startProfessionalConversation(personId, mode = "contact") {
-  const pro = serviceProfessionals.find((item) => String(item.id) === String(personId));
-  if (!pro) return;
-  openGeneratedConversation({
-    type: "professional",
-    participant: pro.name,
-    verified: Boolean(pro.verified),
-    preview: mode === "book" ? `Booking request sent to ${pro.name}` : `New conversation with ${pro.name}`,
-    contextKind: mode === "book" ? "booking" : "quote",
-    contextTitle: t(pro.categoryKey),
-    contextMeta: `${pro.price} · ${pro.availability} · ${pro.distance}`,
-    userMessage: mode === "book" ? `Hi ${pro.name}, I’d like to book your service.` : `Hi ${pro.name}, I’d like to ask about your service.`,
-    firstMessage: `Thanks — send your preferred time, location, and any details here.`
   });
 }
 
@@ -10393,7 +10284,6 @@ function renderPublicProfile() {
   const metaLine = [person.category, person.area, city.name].filter(Boolean).join(" · ");
   const contextKey = PUBLIC_PROFILE_CONTEXT_HINT[person.context];
   const skillsList = (person.skills || "").split(",").map((skill) => skill.trim()).filter(Boolean);
-  const isHireContext = person.context === "hire";
 
   const stats = [
     person.rating ? { label: t("common.rating"), value: `${icon("star")} ${person.rating}${person.reviews ? ` (${person.reviews})` : ""}` } : null,
@@ -10425,8 +10315,7 @@ function renderPublicProfile() {
       ${contextKey ? `<p class="public-profile-context-hint">${t(contextKey)}</p>` : ""}
 
       <div class="public-profile-primary-actions">
-        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="request-booking">${t("nav.book")}</button>` : ""}
-        <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
+        <button type="button" class="auth-primary-button" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
       ${
@@ -10459,7 +10348,7 @@ function renderPublicProfile() {
       ` : ""}
 
       <div class="public-profile-secondary-actions">
-        <span class="badge offeror-status-badge">${person.context === "hire" ? "Trader/business" : "Private seller/provider"}</span>
+        <span class="badge offeror-status-badge">Private seller/provider</span>
         <button type="button" data-report-target="user" data-report-id="${escapeHtml(person.id)}">Report user</button>
         <button type="button" data-person-action="block" ${isBlocked ? "disabled" : ""}>${isBlocked ? t("common.blockedConfirmation") : t("common.blockPersonCta")}</button>
       </div>
@@ -12068,14 +11957,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll('[data-action="start-pro-conversation"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      startProfessionalConversation(button.dataset.proId, button.dataset.conversationMode || "contact");
-    });
-  });
-
   document.querySelectorAll("[data-category]").forEach((button) => {
     button.addEventListener("click", () => {
       state.category = button.dataset.category;
@@ -13252,11 +13133,6 @@ function bindPublicProfileEvents() {
         element.click();
       });
     }
-  });
-
-  document.querySelector('[data-person-action="request-booking"]')?.addEventListener("click", () => {
-    const personId = state.publicProfile?.id || "";
-    startProfessionalConversation(personId.replace(/^pro-/, ""), "book");
   });
 
   document.querySelector('[data-person-action="message"]')?.addEventListener("click", () => {

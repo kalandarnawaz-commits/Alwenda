@@ -194,9 +194,9 @@ test("retry-opportunity-feed handler re-triggers the same shared refresh — no 
   assert.match(handler, /refreshOpportunityFeed\(\)/);
 });
 
-test("refreshOpportunityFeed's own re-render trigger includes needHelp and community — without these, the fetch resolves but their pages never re-render (caught live: Need Help's loading skeleton hung forever, and Community's own embedded Live Requests preview silently stayed empty on a direct-link landing, until these views were added)", () => {
+test("refreshOpportunityFeed's own re-render trigger includes needHelp, community, and marketplace — without these, the fetch resolves but their pages never re-render (caught live: Need Help's loading skeleton hung forever, and Community's own embedded Live Requests preview silently stayed empty on a direct-link landing, until these views were added; Marketplace had the same bug — its own market-grid stayed stuck on the loading skeleton forever on a direct landing, caught during Phase 6 live verification)", () => {
   const fn = extractFunction(main, "refreshOpportunityFeed");
-  assert.match(fn, /\["home", "liveOpportunities", "needHelp", "community"\]\.includes\(state\.activeView\)\) render\(\)/);
+  assert.match(fn, /\["home", "liveOpportunities", "needHelp", "community", "marketplace"\]\.includes\(state\.activeView\)\) render\(\)/);
 });
 
 test("renderCommunity also idle-guards state.opportunityFeed — its own embedded Live Requests preview reads the same real filteredHelpRequests() now, so it needs the same trigger Need Help/Marketplace already have", () => {

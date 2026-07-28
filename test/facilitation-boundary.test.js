@@ -17,16 +17,12 @@ test("the fake in-app booking-confirmation flow is fully removed from the Hire/N
   assert.doesNotMatch(main, /status: "Confirmed"/, "no code path may fabricate a confirmed booking status");
 });
 
-test("the Hire public-profile Book button opens a real conversation instead of a fake confirmation sheet", async () => {
+test("the Hire public-profile Book button (and its underlying fake-professional conversation starter) is fully removed — there is no real professional-listing concept to book against", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /data-person-action="request-booking"/);
+  assert.doesNotMatch(main, /data-person-action="request-booking"/);
   assert.doesNotMatch(main, /data-person-action="book"/, "the old fake-booking action name must not remain anywhere");
-
-  const handlerStart = main.indexOf('querySelector(\'[data-person-action="request-booking"]\')');
-  assert.ok(handlerStart > -1, "expected a querySelector click handler bound to the request-booking action");
-  const handlerSection = main.slice(handlerStart);
-  const handlerBody = handlerSection.slice(0, handlerSection.indexOf("});") + 3);
-  assert.match(handlerBody, /startProfessionalConversation\(/, "clicking Book must route through the same honest, message-based flow as the pro cards");
+  assert.doesNotMatch(main, /function startProfessionalConversation\(/);
+  assert.doesNotMatch(main, /isHireContext/, "the public-profile view no longer branches on a hire-professional identity that can't exist");
 });
 
 test("common.bookPay no longer implies Alwenda handles in-app payment", async () => {

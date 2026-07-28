@@ -351,10 +351,11 @@ test("loadAlwenConversation re-checks convo.loaded after each await, so a clear 
   assert.match(afterSecondAwait, /if \(convo\.loaded\) return;/, "must re-check convo.loaded immediately after the second await too, before assigning convo.id/messages");
 });
 
-test("mapAlwenMessageRow re-hydrates structured results from live data by id, never a frozen snapshot", () => {
+test("mapAlwenMessageRow re-hydrates structured results from live data by id, never a frozen snapshot — and a historical 'professional' row honestly resolves empty rather than resurrecting a mock person", () => {
   const fn = extractFunction(main, "mapAlwenMessageRow");
   assert.match(fn, /source\.find\(\(item\) => String\(item\.id\) === String\(id\)\)/);
-  assert.match(fn, /row\.result_type === "place" \? importedBusinesses : row\.result_type === "professional" \? serviceProfessionals/);
+  assert.match(fn, /row\.result_type === "place" \? importedBusinesses : \[\]/);
+  assert.doesNotMatch(fn, /serviceProfessionals/);
 });
 
 test("persistAlwenStructuredSearchTurn is best-effort — a persistence failure is logged, never thrown to the caller", () => {
