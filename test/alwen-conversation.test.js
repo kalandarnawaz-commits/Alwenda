@@ -100,12 +100,15 @@ test("searchAlwenPlaces saves and restores every Explore filter field it touches
   assert.match(fn, /return filteredImportedBusinesses\(\)\.slice\(0, 5\)/, "must reuse the real Explore filter and cap at 5");
 });
 
-test("searchAlwenProfessionals saves and restores Hire filter state in a finally block, capped at 5", () => {
+test("searchAlwenProfessionals is always honestly empty — no real professional-listing concept exists yet, and hire_service intent routing still reaches it exactly as before (Phase 7)", () => {
   const fn = extractFunction(main, "searchAlwenProfessionals");
-  assert.match(fn, /previousQuery = state\.query/);
-  assert.match(fn, /previousCategory = state\.hireCategory/);
-  assert.match(fn, /try \{[\s\S]*\} finally \{/);
-  assert.match(fn, /return filteredProfessionals\(\)\.slice\(0, 5\)/);
+  assert.match(fn, /return \[\];/);
+  assert.doesNotMatch(fn, /serviceProfessionals|filteredProfessionals|hireCategoryForQuery/);
+});
+
+test("filteredProfessionals and hireCategoryForQuery are fully deleted — topMatches()'s proMatches branch and Alwen's Hire search no longer depend on a professional-listing helper that only ever returned [] (Phase 7)", () => {
+  assert.doesNotMatch(main, /function filteredProfessionals\(/);
+  assert.doesNotMatch(main, /function hireCategoryForQuery\(/);
 });
 
 test("submitAlwenStructuredSearchTurn never calls the AI chat client — place/hire search is deterministic-first", () => {

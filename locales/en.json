@@ -1652,7 +1652,6 @@
     "intentDeliverDescriptionPlaceholder": "Describe your delivery service, area, and availability."
   },
   "entity": {
-    "professional": "Professional",
     "helpRequest": "Help request",
     "importedPlace": "Place",
     "post": "Post",

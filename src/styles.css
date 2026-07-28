@@ -3566,18 +3566,6 @@ body.has-open-sheet {
   background: linear-gradient(135deg, rgba(52, 211, 153, 0.18), rgba(52, 211, 153, 0.06)) var(--surface-soft);
 }
 
-.match-tile-initials {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--surface);
-  font-weight: 800;
-  font-size: 0.9rem;
-}
-
 .match-tile-fallback-icon {
   display: grid;
   place-items: center;

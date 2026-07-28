@@ -1652,7 +1652,6 @@
     "intentDeliverDescriptionPlaceholder": "Beschreibe deinen Lieferservice, dein Gebiet und deine Verfügbarkeit."
   },
   "entity": {
-    "professional": "Fachkraft",
     "helpRequest": "Hilfeanfrage",
     "importedPlace": "Ort",
     "post": "Beitrag",

@@ -2881,15 +2881,6 @@ function filteredImportedBusinesses() {
     .sort(EXPLORE_SORTERS[state.exploreSort] || EXPLORE_SORTERS.nearest);
 }
 
-/** There is no real professional-listing concept in the schema yet (see
- * renderHire()) — always honestly empty rather than fabricating a card.
- * Kept as its own function (not inlined at each call site) so Hire's own
- * page, Alwen's hire_service search, and Search's topMatches() all share
- * one place to wire up a real source later. */
-function filteredProfessionals() {
-  return [];
-}
-
 function filteredHelpRequests() {
   return helpRequestPool().filter((request) => {
     const areaMatch = state.area === "All" || request.area === state.area;
@@ -2924,13 +2915,6 @@ function topMatches(limit = 4, context = "home") {
     action: "needHelp",
     tileIcon: "help"
   }));
-  const proMatches = filteredProfessionals().map((item) => ({
-    kind: t("entity.professional"),
-    title: item.name,
-    meta: `${t(item.categoryKey)} · ★ ${item.rating} · ${item.availability}`,
-    action: "hire",
-    initials: initials(item.name)
-  }));
   const importedMatches = filteredImportedBusinesses().map((item) => {
     const distance = formatDistance(distanceFromCenter(item));
     const open = isOpenNow(item.openingHours);
@@ -2952,18 +2936,18 @@ function topMatches(limit = 4, context = "home") {
   }));
   const ordered =
     routed === "hire"
-      ? [...proMatches, ...helpMatches, ...listingMatches]
+      ? [...helpMatches, ...listingMatches]
       : routed === "marketplace"
-        ? [...listingMatches, ...proMatches, ...helpMatches, ...importedMatches]
+        ? [...listingMatches, ...helpMatches, ...importedMatches]
         : routed === "translate"
           ? [...translationMatches, ...importedMatches]
           : routed === "explore"
-            ? [...importedMatches, ...listingMatches, ...proMatches, ...helpMatches]
+            ? [...importedMatches, ...listingMatches, ...helpMatches]
             : routed === "community"
-              ? [...helpMatches, ...proMatches, ...listingMatches, ...importedMatches]
+              ? [...helpMatches, ...listingMatches, ...importedMatches]
               : routed === "contribute"
-                ? [...helpMatches, ...proMatches, ...listingMatches, ...importedMatches]
-                : [...importedMatches, ...proMatches, ...listingMatches, ...helpMatches];
+                ? [...helpMatches, ...listingMatches, ...importedMatches]
+                : [...importedMatches, ...listingMatches, ...helpMatches];
 
   return ordered.slice(0, limit);
 }
@@ -3757,12 +3741,11 @@ function alwenMessageId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** place_search/hire_service never call OpenAI — they search real
- * Explore/Hire data via the exact filters those screens already use.
- * filteredImportedBusinesses()/filteredProfessionals() read global
- * state.* and take no args, so the search state is saved and restored
- * around the call — an Alwen search must never permanently change what
- * the user sees when they later open Explore/Hire themselves. */
+/** place_search never calls OpenAI — it searches real Explore data via
+ * the exact filters that screen already uses. filteredImportedBusinesses()
+ * reads global state.* and takes no args, so the search state is saved
+ * and restored around the call — an Alwen search must never permanently
+ * change what the user sees when they later open Explore themselves. */
 /** Additional deterministic signal on top of the free-text query match
  * below (Part 8) — narrows Explore's own CITY_ENTITY_CATEGORIES taxonomy
  * via CATEGORY_CONFIG's cityEntityCategory mapping when the query
@@ -3809,31 +3792,17 @@ function searchAlwenPlaces(rawQuery) {
   }
 }
 
-/** Same narrowing idea as exploreCategoryForQuery, mapped into Hire's
- * professionalCategories values via CATEGORY_CONFIG.hireCategoryValues
- * instead. Only the first mapped value is used — filteredProfessionals
- * takes one category at a time (though it is always honestly empty
- * right now, see filteredProfessionals()), and free-text state.query
- * still does the actual matching regardless. */
-function hireCategoryForQuery(rawQuery) {
-  const categoryId = classifyTextToCategory(rawQuery);
-  if (!categoryId) return null;
-  return categoryConfigFor(categoryId).hireCategoryValues[0] || null;
-}
-
-function searchAlwenProfessionals(rawQuery) {
-  const previousQuery = state.query;
-  const previousArea = state.area;
-  const previousCategory = state.hireCategory;
-  try {
-    state.query = rawQuery;
-    state.hireCategory = hireCategoryForQuery(rawQuery);
-    return filteredProfessionals().slice(0, 5);
-  } finally {
-    state.query = previousQuery;
-    state.area = previousArea;
-    state.hireCategory = previousCategory;
-  }
+/** hire_service is a real, deterministic intent classification (see
+ * ALWEN_INTENTS.HIRE_SERVICE/classifyAlwenIntent) — a query like "I need
+ * a plumber" is genuinely routed here, not misrouted into general chat.
+ * But there is no real professional-listing concept in the schema yet
+ * (see renderHire()), so this always honestly returns zero results;
+ * submitAlwenStructuredSearchTurn's existing !results.length branch
+ * already renders that as the honest "no results" message plus the
+ * real "see more in Hire" nudge (renderAlwenContextualActions), never a
+ * fabricated card. */
+function searchAlwenProfessionals() {
+  return [];
 }
 
 function alwenLanguageLabel(code) {
@@ -3844,8 +3813,11 @@ function alwenLanguageLabel(code) {
 
 /** The 3 example prompts shown before the user's first turn — each is a
  * real capability this branch actually implements (translation, live
- * conversation mode, real Explore search, real Hire search), never a
- * placeholder for something unbuilt. */
+ * conversation mode, real Explore search, real hire_service intent
+ * routing), never a placeholder for something unbuilt. The Hire example
+ * genuinely routes through classifyAlwenIntent/submitAlwenStructuredSearchTurn
+ * exactly as typed — it just always finds zero results honestly, since
+ * there is no real professional-listing concept yet (see renderHire()). */
 const ALWEN_CONVERSATION_EXAMPLES = ["alwen.examplePlace", "alwen.exampleHire", "alwen.exampleTranslate", "alwen.exampleLiveTranslate"];
 
 /** Round 2, Part 5 — proactive category starters shown before the user
@@ -5381,9 +5353,7 @@ function renderQuickTranslateDock() {
 function renderMatch(match) {
   const visual = match.image
     ? `<img src="${match.image}" alt="" loading="lazy" onerror="this.closest('.match-tile-photo').classList.add('is-fallback')" />`
-    : match.initials
-      ? `<span class="match-tile-initials">${match.initials}</span>`
-      : `<span class="match-tile-fallback-icon">${icon(match.tileIcon || "pin")}</span>`;
+    : `<span class="match-tile-fallback-icon">${icon(match.tileIcon || "pin")}</span>`;
   return `
     <article class="match-row" data-view="${match.action}">
       <div class="match-tile-photo ${match.image ? "" : "is-fallback"}">${visual}</div>
@@ -6254,8 +6224,8 @@ function renderMarketplace() {
   `;
 }
 /* The "Verified Pros" cross-sell section that used to sit here is gone —
-   it read from filteredProfessionals(), which is now honestly always
-   empty (no real professional-listing concept exists yet, see
+   it read from the professional-listing mock array, which no longer
+   exists (no real professional-listing concept exists yet, see
    renderHire()), so it would only ever have rendered a permanently
    empty grid under a live heading and "Request Quote" button. Need
    Help's own real, signed-in-gated flow (the .need-help-card section

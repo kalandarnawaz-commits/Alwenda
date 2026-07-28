@@ -86,15 +86,12 @@ test("professionalCategories (static chip labels, not fake content) is preserved
 });
 
 /* ---------------------------------------------------------------------
-   2. filteredProfessionals() is always honestly empty — no fabricated
-      card, no mock fallback.
+   2. professionalsForIntent() is always honestly empty — no fabricated
+      card, no mock fallback. (filteredProfessionals() — Hire's own
+      Phase 6 equivalent — was deleted outright in Phase 7 once its last
+      caller, topMatches()'s proMatches branch, was removed; see
+      test/alwen-conversation.test.js for that deletion coverage.)
 --------------------------------------------------------------------- */
-
-test("filteredProfessionals always returns an empty array — no real professional-listing concept exists yet", () => {
-  const fn = extractFunction(main, "filteredProfessionals");
-  assert.match(fn, /return \[\];/);
-  assert.doesNotMatch(fn, /serviceProfessionals/);
-});
 
 test("professionalsForIntent always returns an empty array too, so needHelpSummaryStats degrades to honest zeros/nulls rather than fabricated numbers", () => {
   const fn = extractFunction(main, "professionalsForIntent");
