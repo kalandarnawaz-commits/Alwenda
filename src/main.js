@@ -16,7 +16,6 @@ import {
   NOTIFICATION_FILTERS,
   notifications,
   professionalCategories,
-  profileReviews,
   SEED_CITY_META
 } from "./data/mockData.js?v=vilnius-neighbourhoods-1";
 import { integrations } from "./services/integrationPlaceholders.js";
@@ -503,18 +502,20 @@ function openPublicProfile(dataset) {
 }
 
 /** Looks a person up by the stable id introduced alongside publicProfileAttrs
- * (see mockData.js: sellerId, authorId, review id) so a public profile URL
- * can be rehydrated after a refresh or a shared link, not just reached by
+ * (see mockData.js: sellerId, authorId) so a public profile URL can be
+ * rehydrated after a refresh or a shared link, not just reached by
  * clicking through the app in the same session. Same "no shared person
  * table" caveat as publicProfileAttrs above — each source is checked
  * independently, not merged into one identity. No "pro-<id>" branch —
  * there is no real professional identity concept yet (see renderHire()),
  * so an old pro-<id> link now honestly resolves to nothing rather than
- * resurrecting a mock person. */
+ * resurrecting a mock person. Likewise no "review-<id>" branch — the old
+ * mockData.js profileReviews fixture it looked up was never linked to
+ * from anywhere reachable, and real reviews live in the Supabase
+ * profile_reviews table via fetchProfileReviews() (see renderUserProfile()),
+ * not this id-lookup path. */
 function findPersonById(id) {
   if (!id) return null;
-  const review = profileReviews.find((item) => item.id === id);
-  if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
   const post = state.communityFeed.posts.find((item) => item.authorId === id);
   if (post) return { id, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.authorVerified, context: "community" };
   const listing = myListingsPool.find((item) => item.sellerId === id);
@@ -10114,9 +10115,7 @@ function renderTranslation() {
 
 const PUBLIC_PROFILE_CONTEXT_HINT = {
   community: "profile.public.publicProfileContextCommunity",
-  marketplace: "profile.public.publicProfileContextMarketplace",
-  hire: "profile.public.publicProfileContextHire",
-  review: "profile.public.publicProfileContextReview"
+  marketplace: "profile.public.publicProfileContextMarketplace"
 };
 
 /** Everything below reads only real, currently-tracked fields — Supabase

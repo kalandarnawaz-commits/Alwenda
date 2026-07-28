@@ -172,7 +172,6 @@ button {
 :root[data-theme="dark"] .living-section,
 :root[data-theme="dark"] .market-card,
 :root[data-theme="dark"] .place-card,
-:root[data-theme="dark"] .pro-card,
 :root[data-theme="dark"] .food-card,
 :root[data-theme="dark"] .visual-card,
 :root[data-theme="dark"] .live-card,
@@ -246,7 +245,6 @@ button {
    specifically in dark mode. Light mode is untouched. */
 :root[data-theme="dark"] .conversation-you .conversation-avatar,
 :root[data-theme="dark"] .post-request-success-icon,
-:root[data-theme="dark"] .pro-stat-availability,
 :root[data-theme="dark"] .live-status-pill,
 :root[data-theme="dark"] .mini-price-line em,
 :root[data-theme="dark"] .post-alwen-summary,
@@ -1730,13 +1728,10 @@ body.has-open-sheet {
 .ai-search button,
 .section-title button,
 .content-card button,
-.business-card button,
-.offer-card button,
 .request-form button,
 .match-row button,
 .need-help-card button,
 .market-card button,
-.pro-card button,
 .help-meta button,
 .compact-form button,
 .claim-form button,
@@ -2091,18 +2086,6 @@ body.has-open-sheet {
   background-image:
     linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
     url("https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=1400&q=80");
-}
-
-.businesses-hero-photo.city-hero {
-  background-image:
-    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
-    url("https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1400&q=80");
-}
-
-.reservations-hero-photo.city-hero {
-  background-image:
-    linear-gradient(180deg, rgba(52, 211, 153, 0.16) 0%, rgba(15, 31, 27, 0.35) 42%, rgba(15, 31, 27, 0.88) 100%),
-    url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1400&q=80");
 }
 
 .intent-suggestions,
@@ -2609,14 +2592,12 @@ body.has-open-sheet {
 }
 
 .seller-row strong,
-.business-card h3,
 .profile-badges span,
 .verified-meta {
   align-items: center;
 }
 
-.seller-row strong,
-.business-card h3 {
+.seller-row strong {
   display: inline-flex;
   gap: 6px;
   min-width: 0;
@@ -3217,9 +3198,7 @@ body.has-open-sheet {
 .section-title p,
 .screen-heading p,
 .content-card h3,
-.business-card h3,
 .pulse-card h3,
-.offer-card h3,
 .match-row h3 {
   margin: 0;
 }
@@ -3227,7 +3206,6 @@ body.has-open-sheet {
 .section-title p,
 .screen-heading p,
 .content-card p,
-.business-card p,
 .pulse-card p,
 .match-row p,
 .integration-list p,
@@ -3290,11 +3268,8 @@ body.has-open-sheet {
 .content-card,
 .market-card,
 .contribution-card,
-.offer-card,
 .match-row,
 .pulse-card,
-.business-card,
-.pro-card,
 .reputation-card,
 .reputation-grid article,
 .need-help-card,
@@ -3671,149 +3646,10 @@ body.has-open-sheet {
   white-space: nowrap;
 }
 
-.reservation-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.reservation-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg, 18px);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-
-.reservation-card-photo {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
-  background-position: center;
-  background-size: cover;
-  background-color: var(--surface-soft);
-}
-
-.reservation-card-icon {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  color: var(--muted);
-  font-size: 1.3rem;
-}
-
-.reservation-card-body {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-
-.reservation-card-body h3 {
-  margin: 0;
-}
-
-.reservation-card-body p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.reservation-card > button {
-  flex: 0 0 auto;
-  min-height: 38px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.status-badge-amber {
-  background: rgba(245, 158, 11, 0.14);
-  color: #92400e;
-}
-
-.status-badge-sky {
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
-}
-
-.status-badge-muted {
-  background: var(--surface-soft);
-  color: var(--muted);
-}
-
-.status-badge-green {
-  background: rgba(52, 211, 153, 0.14);
-  color: var(--emerald-text);
-}
-
-:root[data-theme="dark"] .status-badge-amber {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-}
-
-:root[data-theme="dark"] .status-badge-sky {
-  background: rgba(96, 165, 250, 0.2);
-  color: #60a5fa;
-}
-
-:root[data-theme="dark"] .status-badge-green {
-  background: rgba(52, 211, 153, 0.22);
-}
-
-.reservation-suggestion-card {
-  display: grid;
-  gap: 6px;
-  width: 220px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg, 18px);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  cursor: pointer;
-}
-
-.reservation-suggestion-card .card-photo {
-  min-height: 130px;
-  margin: -12px -12px 4px;
-  border-radius: var(--radius-lg, 18px) var(--radius-lg, 18px) 0 0;
-}
-
-.reservation-suggestion-card h3,
-.reservation-suggestion-card p {
-  margin: 0;
-}
-
-.reservation-suggestion-card p {
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.reservation-suggestion-card button {
-  margin-top: 4px;
-  min-height: 38px;
-  border-radius: 999px;
-  background: #111;
-  color: white;
-  font-weight: 800;
-}
-
-/* Matching professionals — up to four tiles per row on wide screens
-   (three on tablet, one on phone) instead of one full-width card eating
-   the whole row. auto-fit + minmax handles the step-down on its own, no
-   separate breakpoints needed. Pairs with the vertical .pro-card tile
-   layout above, which is what actually makes four-per-row legible. */
+/* Hire's pro-list is always the honest empty state now (see renderHire())
+   — no real professional-listing concept exists yet — but keeps this
+   grid sizing so a future real card grid drops in without a second CSS
+   pass. */
 .pro-list {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -4018,7 +3854,6 @@ body.has-open-sheet {
   .earning-grid article,
   .briefing-grid article,
   .market-card,
-  .pro-card,
   .notification-list article,
   .message-list article {
     transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -4028,8 +3863,7 @@ body.has-open-sheet {
   .workflow-card:hover,
   .earning-grid article:hover,
   .briefing-grid article:hover,
-  .market-card:hover,
-  .pro-card:hover {
+  .market-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 18px 48px rgba(28, 25, 20, 0.1);
   }
@@ -4135,7 +3969,6 @@ input,
 .social-post-card,
 .create-primary-action,
 .create-secondary-action,
-.pro-card,
 .alwen-card {
   transition:
     transform var(--motion-fast) var(--ease),
@@ -4267,14 +4100,11 @@ select:focus-visible,
 .food-card,
 .social-post-card,
 .visual-market-card.market-card,
-.pro-card,
 .reputation-card,
 .alwen-card,
 .need-help-card,
 .request-card,
-.content-card,
-.business-card,
-.offer-card {
+.content-card {
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-soft) !important;
 }
@@ -4300,7 +4130,6 @@ select:focus-visible,
 .food-card:hover,
 .social-post-card:hover,
 .visual-market-card.market-card:hover,
-.pro-card:hover,
 .create-primary-action:hover,
 .create-secondary-action:hover {
   transform: translateY(-2px);
@@ -7487,7 +7316,6 @@ body {
 .social-post-card,
 .market-card,
 .visual-market-card,
-.pro-card,
 .need-help-card,
 .alwen-card,
 .reputation-card,
@@ -7496,9 +7324,7 @@ body {
 .achievement-grid article,
 .review-grid article,
 .request-card,
-.content-card,
-.business-card,
-.offer-card {
+.content-card {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -7763,53 +7589,6 @@ body {
   margin-left: auto;
   background: rgba(52, 211, 153, 0.16);
   text-align: right;
-}
-
-/* Vertical tile layout unconditionally (not just on narrow viewports) —
-   identity block on top spanning both columns, Book/Contact as an even
-   two-up row underneath. This is what actually holds up when .pro-list
-   packs several cards per row (see minmax() below): the old single-row
-   layout (identity | Book | Contact all side by side) only ever worked
-   at full card width and visibly broke — overlapping text, a button
-   sitting on top of the avatar — as soon as cards got narrower than
-   roughly one-per-row. */
-/* ProfileCard — same radius/shadow token family as the rest of the
- * shared card system. */
-.pro-card {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr;
-  align-items: start;
-  gap: 10px;
-  padding: 14px !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-soft);
-}
-
-.pro-card-identity {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.pro-card-identity > div:nth-child(2) {
-  min-width: 0;
-}
-
-.pro-card button {
-  min-height: 38px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: #111;
-  color: #fff;
-  font-weight: 840;
-}
-
-.pro-card button + button {
-  background: var(--surface-soft);
-  color: var(--ink);
 }
 
 @media (max-width: 640px) {
@@ -11285,66 +11064,6 @@ strong:has(> .verified-check) {
   line-height: 1.6;
 }
 
-/* === Professional list cards ("Matching professionals") — bigger avatar,
-   a real stat row instead of a flat wall of grey text, and a fixed
-   .verified-meta stretch bug (see .verified-meta above) that was rendering
-   the verified badge as a stretched oval instead of a circle. === */
-.pro-card-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  font-size: 1.05rem;
-}
-
-.pro-card-stats {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.pro-card-stats span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.pro-stat-rating {
-  color: var(--ink);
-  font-weight: 700;
-  font-size: 0.86rem;
-}
-
-.pro-stat-rating small {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.pro-stat-price,
-.pro-stat-availability {
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.pro-stat-price {
-  background: var(--surface-soft);
-  color: var(--ink);
-}
-
-.pro-stat-availability {
-  background: var(--mint);
-  color: #0f5132;
-}
-
-:root[data-theme="dark"] .pro-stat-availability {
-  color: #b3f5d1;
-}
-
 /* ==========================================================================
    Inbox & Notification Centre — premium redesign
    ========================================================================== */
@@ -13420,31 +13139,6 @@ strong:has(> .verified-check) {
 
 .opportunity-cover strong {
   background: #d75332;
-}
-
-/* Professionals have no photo, so the Need Help pro cards swap the
-   background-image cover for a centered initials circle instead of
-   faking a photo — everything else about the card shell is unchanged. */
-.opportunity-cover-avatar {
-  background: linear-gradient(135deg, var(--surface-2), var(--surface));
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-}
-
-.opportunity-cover-avatar .opportunity-cover-avatar-circle {
-  width: 60px;
-  height: 60px;
-  padding: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.2rem;
-  backdrop-filter: none;
 }
 
 .opportunity-body {

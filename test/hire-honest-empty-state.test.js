@@ -142,10 +142,9 @@ test("renderProfessional, renderProCard, hireCategoryMatches, and startProfessio
       resolves to nothing instead of resurrecting a mock person.
 --------------------------------------------------------------------- */
 
-test("findPersonById no longer has a pro-<id> branch — real sources (review/community/marketplace) are unchanged", () => {
+test("findPersonById no longer has a pro-<id> branch — the real community/marketplace sources are unchanged (Phase 8 also removed the profileReviews branch as a separate, older, already-unreachable fixture — see test/repository-cleanup.test.js)", () => {
   const fn = extractFunction(main, "findPersonById");
-  assert.doesNotMatch(fn, /serviceProfessionals|pro-\$\{item\.id\}/);
-  assert.match(fn, /profileReviews\.find/);
+  assert.doesNotMatch(fn, /serviceProfessionals|pro-\$\{item\.id\}|profileReviews/);
   assert.match(fn, /state\.communityFeed\.posts\.find/);
   assert.match(fn, /myListingsPool\.find/);
 });

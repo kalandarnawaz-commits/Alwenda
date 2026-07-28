@@ -184,12 +184,6 @@ export const cityGraph = {
   governmentOffices: 14
 };
 
-export const profileReviews = [
-  { id: "review-1", author: "Ieva", rating: 5, textKey: "mock.review.review1Text", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" },
-  { id: "review-2", author: "Mantas", rating: 5, textKey: "mock.review.review2Text", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80" },
-  { id: "review-3", author: "Austėja", rating: 5, textKey: "mock.review.review3Text", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" }
-];
-
 export const neighbourhoods = [
   "Old Town",
   "Naujamiestis",
