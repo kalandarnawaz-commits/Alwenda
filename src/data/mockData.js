@@ -323,8 +323,7 @@ export const notifications = [
     timeGroup: "today",
     unread: true,
     completed: false,
-    primaryActionKey: "mock.notif.notif3Action",
-    primaryActionView: "reservations"
+    primaryActionKey: "mock.notif.notif3Action"
   },
   {
     id: 806,
