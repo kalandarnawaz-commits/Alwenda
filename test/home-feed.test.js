@@ -11,8 +11,8 @@ import { readFile } from "node:fs/promises";
    small, reconstructable dependency tree (buildUnifiedHomeFeed,
    findCommunityPostById, shapeCommunityPostForDisplay) are extracted as
    source text and actually executed via new Function(...) with their free
-   variables (state, feedPosts) mocked — real behavioural coverage, not
-   just text matching. Render functions with a large DOM/i18n dependency
+   variable (state) mocked — real behavioural coverage, not just text
+   matching. Render functions with a large DOM/i18n dependency
    tree (renderHomeFeedListingItem, renderHomeFeedCommunityItem,
    renderLiveAroundYou) are asserted on structurally instead.
 --------------------------------------------------------------------- */
@@ -224,21 +224,20 @@ test("buildUnifiedHomeFeed returns an empty array when both real sources are emp
    numeric id.
 --------------------------------------------------------------------- */
 
-function runFindCommunityPostById(mockPosts, realPosts, id) {
-  const feedPosts = mockPosts;
+function runFindCommunityPostById(realPosts, id) {
   const state = { communityFeed: { posts: realPosts } };
   const body = [extractFunction(main, "findCommunityPostById"), `return findCommunityPostById(${JSON.stringify(id)});`].join("\n");
-  const fn = new Function("feedPosts", "state", body);
-  return fn(feedPosts, state);
+  const fn = new Function("state", body);
+  return fn(state);
 }
 
-test("findCommunityPostById resolves a real UUID post id, a mock numeric post id, and returns null for neither", () => {
-  const mockPosts = [{ id: 1, author: "Austėja" }];
-  const realPosts = [{ id: "3f6a2e10-uuid-example", authorName: "Real User" }];
-  assert.equal(runFindCommunityPostById(mockPosts, realPosts, "3f6a2e10-uuid-example").authorName, "Real User");
-  assert.equal(runFindCommunityPostById(mockPosts, realPosts, 1).author, "Austėja");
-  assert.equal(runFindCommunityPostById(mockPosts, realPosts, "1").author, "Austėja");
-  assert.equal(runFindCommunityPostById(mockPosts, realPosts, "does-not-exist"), null);
+test("findCommunityPostById resolves a real UUID post id, coerces id types via String(), and returns null when nothing matches — no fixture fallback exists", () => {
+  const realPosts = [{ id: "3f6a2e10-uuid-example", authorName: "Real User" }, { id: 42, authorName: "Numeric Id User" }];
+  assert.equal(runFindCommunityPostById(realPosts, "3f6a2e10-uuid-example").authorName, "Real User");
+  assert.equal(runFindCommunityPostById(realPosts, 42).authorName, "Numeric Id User");
+  assert.equal(runFindCommunityPostById(realPosts, "42").authorName, "Numeric Id User");
+  assert.equal(runFindCommunityPostById(realPosts, "does-not-exist"), null);
+  assert.equal(runFindCommunityPostById(realPosts, null), null);
 });
 
 test("no Community post-id lookup anywhere in bindEvents still casts through Number() — the UUID bug is fixed at every call site, not just one", () => {

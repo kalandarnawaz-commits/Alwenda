@@ -5,7 +5,6 @@ import {
   COMMUNITY_POST_TYPES,
   cityGraph,
   earnToday,
-  feedPosts,
   helpRequests,
   businessClaims,
   importedBusinesses,
@@ -19,7 +18,6 @@ import {
   notifications,
   professionalCategories,
   profileReviews,
-  reputationProfile,
   SEED_CITY_META,
   serviceProfessionals
 } from "./data/mockData.js?v=vilnius-neighbourhoods-1";
@@ -80,6 +78,7 @@ import {
   fetchPublicListings,
   fetchListingById,
   fetchCommunityPosts,
+  createCommunityPost,
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
@@ -209,11 +208,10 @@ const state = {
      never renders a false empty state while still loading or after a
      genuine query failure (see refreshOpportunityFeed()). */
   opportunityFeed: { status: "idle", helpRequests: [], listings: [], loadedAt: null },
-  /* Real Supabase data backing the Unified Home Feed's Community source
-     (see HOME_FEED_SOURCE_ADAPTERS.community) — same idle/loading/loaded/
-     error state machine as opportunityFeed above, for the same reason.
-     Community's own page still reads the local feedPosts fixture (see
-     that decision's comment near fetchCommunityPosts' call site). */
+  /* Real Supabase data backing both the Unified Home Feed's Community
+     source (see HOME_FEED_SOURCE_ADAPTERS.community) and Community's own
+     page (renderCommunity()) — same idle/loading/loaded/error state
+     machine as opportunityFeed above, for the same reason. */
   communityFeed: { status: "idle", posts: [], loadedAt: null },
   headerSolid: false,
   quickTranslateOpen: false,
@@ -290,7 +288,6 @@ const state = {
   userProfile: null,
   reportedPeople: [],
   blockedPeople: [],
-  helpfulPostIds: [],
   savedPostIds: [],
   hiddenPostIds: [],
   mutedTopics: [],
@@ -298,6 +295,7 @@ const state = {
   activePostId: null,
   communityPostDraft: { title: "", body: "", type: "discussion" },
   communityPostSubmitStatus: "idle",
+  communityPostSubmitError: null,
   savedListingIds: [],
   reportedListings: [],
   hireCategory: null,
@@ -518,8 +516,8 @@ function findPersonById(id) {
   if (pro) return { id, name: pro.name, area: pro.area, category: t(pro.categoryKey), rating: pro.rating, reviews: pro.reviews, verified: pro.verified, context: "hire", skills: pro.skills, responseTime: pro.responseTime, price: pro.price, availability: pro.availability, distance: pro.distance };
   const review = profileReviews.find((item) => item.id === id);
   if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
-  const post = feedPosts.find((item) => item.authorId === id);
-  if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.verified, context: "community" };
+  const post = state.communityFeed.posts.find((item) => item.authorId === id);
+  if (post) return { id, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.authorVerified, context: "community" };
   const listing = myListingsPool.find((item) => item.sellerId === id);
   if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
   return null;
@@ -1822,8 +1820,8 @@ function sharePlace(item) {
 }
 
 function sharePost(post) {
-  const title = post.titleKey ? t(post.titleKey) : post.title || "";
-  const text = `${title} — ${post.bodyKey ? t(post.bodyKey) : post.body || ""}`;
+  const title = post.title || "";
+  const text = `${title} — ${post.body || ""}`;
   if (navigator.share) {
     navigator.share({ title, text }).catch(() => {});
     return;
@@ -5423,27 +5421,19 @@ function renderMatch(match) {
   `;
 }
 
-/* type meta drives the post-type label/emoji shown on every card, the
- * filter chips, and which primary action a card offers (the action
- * itself is one of three real, already-existing behaviours — save,
- * share, or reply-in-detail-sheet — not nine bespoke flows; see
- * COMMUNITY_PRIMARY_ACTION_KIND below). */
+/* type meta drives the post-type label/emoji shown on every card and the
+ * filter chips, plus the reply-composer placeholder in the post-detail
+ * sheet (actionKey). */
 const COMMUNITY_POST_TYPE_META = {
-  question: { emoji: "❓", labelKey: "community.postType.question", actionKey: "community.postAction.question" },
-  recommendation: { emoji: "⭐", labelKey: "community.postType.recommendation", actionKey: "community.postAction.recommendation" },
-  alert: { emoji: "🚨", labelKey: "community.postType.alert", actionKey: "community.postAction.alert" },
-  offer: { emoji: "🎁", labelKey: "community.postType.offer", actionKey: "community.postAction.offer" },
-  help: { emoji: "🤝", labelKey: "community.postType.help", actionKey: "community.postAction.help" },
-  lostFound: { emoji: "🐾", labelKey: "community.postType.lostFound", actionKey: "community.postAction.lostFound" },
-  event: { emoji: "📅", labelKey: "community.postType.event", actionKey: "community.postAction.event" },
-  update: { emoji: "📣", labelKey: "community.postType.update", actionKey: "community.postAction.update" },
-  discussion: { emoji: "💬", labelKey: "community.postType.discussion", actionKey: "community.postAction.discussion" }
-};
-
-const COMMUNITY_PRIMARY_ACTION_KIND = {
-  recommendation: "save",
-  alert: "share"
-  // every other type falls back to "reply" (opens the post-detail sheet)
+  question: { emoji: "❓", labelKey: "community.postType.question" },
+  recommendation: { emoji: "⭐", labelKey: "community.postType.recommendation" },
+  alert: { emoji: "🚨", labelKey: "community.postType.alert" },
+  offer: { emoji: "🎁", labelKey: "community.postType.offer" },
+  help: { emoji: "🤝", labelKey: "community.postType.help" },
+  lostFound: { emoji: "🐾", labelKey: "community.postType.lostFound" },
+  event: { emoji: "📅", labelKey: "community.postType.event" },
+  update: { emoji: "📣", labelKey: "community.postType.update" },
+  discussion: { emoji: "💬", labelKey: "community.postType.discussion" }
 };
 
 const COMMUNITY_FILTER_META = [
@@ -5466,89 +5456,89 @@ function communityPostTypeMeta(type) {
  * one place rather than three separate checks scattered through the
  * render path. */
 function visibleFeedPosts() {
-  return feedPosts.filter(
-    (post) => !state.hiddenPostIds.includes(String(post.id)) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.author)
+  return state.communityFeed.posts.filter(
+    (post) => !state.hiddenPostIds.includes(String(post.id)) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.authorName)
   );
 }
 
 /* "For you" and "Nearby" both show everything — there's no real
- * personalization or geo-distance signal in this mock data to
- * meaningfully tell them apart yet, so faking a difference between them
- * would be exactly the kind of dishonest signal the rest of this
- * redesign is trying to remove. Every other filter is a genuine
- * post.type match. */
+ * personalization or geo-distance signal on a real post to meaningfully
+ * tell them apart yet, so faking a difference between them would be
+ * exactly the kind of dishonest signal this migration is removing. Every
+ * other filter is a genuine post.type match. */
 function filteredCommunityPosts() {
   const visible = visibleFeedPosts();
   if (state.communityFilter === "forYou" || state.communityFilter === "nearby") return visible;
   return visible.filter((post) => post.type === state.communityFilter);
 }
 
-function renderPulse(post) {
-  const isHelpful = state.helpfulPostIds.includes(String(post.id));
-  const isSaved = state.savedPostIds.includes(String(post.id));
-  const helpfulCount = (post.helpful || 0) + (isHelpful ? 1 : 0);
-  const savesCount = (post.saves || 0) + (isSaved ? 1 : 0);
+/** The one real-post card — every fabricated per-type primary action
+ * (save/share/reply) and every fabricated engagement count (helpful/
+ * replies/saves — none backed by a durable write path, see
+ * HOME_FEED_SOURCE_ADAPTERS.community) is gone.
+ * Only Open (the real post-detail sheet) and Share remain. The "⋯"
+ * overflow menu stays — hide/mute/report/block are genuine client-side
+ * moderation prefs, not engagement numbers, so they're not in scope for
+ * this honesty pass. */
+function renderCommunityPostCard(post) {
   const meta = communityPostTypeMeta(post.type);
-  const primaryKind = COMMUNITY_PRIMARY_ACTION_KIND[post.type] || "reply";
-  const primaryAttrs =
-    primaryKind === "save"
-      ? `data-action="toggle-post-save" data-post-id="${post.id}"`
-      : primaryKind === "share"
-        ? `data-action="share-post" data-post-id="${post.id}"`
-        : `data-action="open-post-detail" data-post-id="${post.id}"`;
+  const postedLabel = post.createdAt ? formatDate(post.createdAt, { dateStyle: "medium" }) : "";
   return `
     <article class="pulse-card visual-pulse-card social-post-card type-${post.type}" data-post-id="${post.id}">
       <div class="pulse-card-header">
-        <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t(meta.labelKey), verified: post.verified, context: "community" })}>
-          <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
+        <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, category: t(meta.labelKey), verified: post.authorVerified, context: "community" })}>
+          ${post.authorAvatar ? `<img class="post-avatar" src="${escapeHtml(post.authorAvatar)}" alt="" />` : `<span class="post-avatar post-avatar-fallback">${icon("profile")}</span>`}
           <div class="pulse-author-copy">
-            <span class="pulse-author-name">${escapeHtml(post.author)}${post.verified ? verifiedCheck(t("messages.verified")) : ""}</span>
-            <span class="pulse-meta-line">${escapeHtml(post.area)} · ${escapeHtml(post.time)}</span>
+            <span class="pulse-author-name">${escapeHtml(post.authorName)}${post.authorVerified ? verifiedCheck(t("messages.verified")) : ""}</span>
+            <span class="pulse-meta-line">${joinNonEmpty([escapeHtml(post.neighbourhood), postedLabel])}</span>
           </div>
         </div>
         <span class="post-type-label type-${post.type}">${meta.emoji} ${t(meta.labelKey)}</span>
         <button type="button" class="pulse-overflow" data-action="open-post-actions" data-post-id="${post.id}" aria-label="${t("community.postActionsTitle")}">⋯</button>
       </div>
-      ${post.type === "alert"
-        ? `
-          <div class="pulse-alert-context">
-            <span class="${post.active ? "is-active" : "is-resolved"}">${post.active ? t("community.alertActive") : t("community.alertResolved")}</span>
-            ${post.verified ? `<span class="pulse-alert-source">${t("messages.verified")} · ${escapeHtml(post.author)}</span>` : ""}
-          </div>
-        `
-        : ""}
-      ${post.image ? `<div class="pulse-photo" style="background-image: url('${post.image}')"></div>` : ""}
+      ${post.mediaUrl ? `<div class="pulse-photo" style="background-image: url('${post.mediaUrl}')"></div>` : ""}
       <div class="pulse-content">
-        <h3>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h3>
-        <p>${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
-        ${post.alwenSummaryKey ? `<div class="post-alwen-summary">${icon("spark")}<span>${t(post.alwenSummaryKey)}</span></div>` : ""}
-        <div class="tag-row">${(post.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        <h3>${escapeHtml(post.title)}</h3>
+        <p>${escapeHtml(post.body)}</p>
       </div>
       <div class="post-actions">
-        <button type="button" class="post-primary-action" ${primaryAttrs}>${t(meta.actionKey)}</button>
-        <button type="button" class="post-icon-action ${isHelpful ? "is-active" : ""}" data-action="toggle-helpful" data-post-id="${post.id}" aria-label="${t("common.helpful")}">${icon("star")}<span>${helpfulCount}</span></button>
-        <button type="button" class="post-icon-action" data-action="open-post-detail" data-post-id="${post.id}" aria-label="${t("common.comments")}">${icon("message")}<span>${post.replies || 0}</span></button>
-        <button type="button" class="post-icon-action ${isSaved ? "is-active" : ""}" data-action="toggle-post-save" data-post-id="${post.id}" aria-label="${t("common.favourite")}">${icon("heart")}<span>${savesCount}</span></button>
+        <button type="button" class="post-primary-action" data-action="open-post-detail" data-post-id="${post.id}">${t("common.viewDetails")}</button>
+        <button type="button" class="post-icon-action" data-action="share-post" data-post-id="${post.id}" aria-label="${t("common.share")}">${icon("arrow")}<span>${t("common.share")}</span></button>
       </div>
     </article>
   `;
 }
 
+/** A category filter yielding nothing is a different situation from a
+ * genuinely empty production feed — the former just needs a small
+ * in-context nudge (still filtered, try another chip), the latter is a
+ * brand-new pilot with zero real posts and gets the same premium
+ * renderEmptyState() + Create Post CTA treatment as Marketplace's
+ * zero-listings state. */
 function renderCommunityFeedEmptyState() {
   const isFiltered = state.communityFilter !== "forYou" && state.communityFilter !== "nearby";
+  if (isFiltered) {
+    return `
+      <div class="notification-empty-state">
+        <span class="notification-empty-icon" aria-hidden="true">${icon("people")}</span>
+        <h3>${t("community.emptyFilterTitle")}</h3>
+        <p>${t("community.emptyFilterHint")}</p>
+      </div>
+    `;
+  }
   return `
-    <div class="notification-empty-state">
-      <span class="notification-empty-icon" aria-hidden="true">${icon("people")}</span>
-      <h3>${isFiltered ? t("community.emptyFilterTitle") : t("community.emptyFeedTitle")}</h3>
-      <p>${isFiltered ? t("community.emptyFilterHint") : t("community.emptyFeedHint")}</p>
+    ${renderEmptyState(t("community.emptyFeedTitle"), "people")}
+    <div class="opportunity-post-cta">
+      <p>${t("community.emptyFeedHint")}</p>
+      <button type="button" data-sheet="communityComposer">${t("community.createPost")}</button>
     </div>
   `;
 }
 
 function renderCommunitySignalStrip() {
   const needHelpCount = filteredHelpRequests().length;
-  const newPostsCount = feedPosts.length;
-  const alertsCount = feedPosts.filter((post) => post.type === "alert" && post.active).length;
+  const newPostsCount = state.communityFeed.posts.length;
+  const alertsCount = state.communityFeed.posts.filter((post) => post.type === "alert").length;
   return `
     <div class="community-signal-strip">
       <span class="community-signal-label">${t("community.aroundYouToday")}</span>
@@ -5620,6 +5610,7 @@ function renderCommunityComposerSheet() {
     `;
   }
   const draft = state.communityPostDraft;
+  const isSubmitting = state.communityPostSubmitStatus === "loading";
   return `
     <div class="sheet-backdrop" data-sheet-close="true">
       <section class="selection-sheet community-composer-sheet" aria-label="${t("community.createPost")}">
@@ -5644,7 +5635,8 @@ function renderCommunityComposerSheet() {
             <span>${t("community.composerBodyLabel")}</span>
             <textarea name="body" placeholder="${t("community.composerBodyPlaceholder")}" required>${escapeHtml(draft.body)}</textarea>
           </label>
-          <button type="submit" class="auth-primary-button">${t("community.composerSubmit")}</button>
+          ${state.communityPostSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.communityPostSubmitError)}</p>` : ""}
+          <button type="submit" class="auth-primary-button" ${isSubmitting ? "disabled" : ""}>${isSubmitting ? t("community.composerSubmitting") : t("community.composerSubmit")}</button>
         </form>
       </section>
     </div>
@@ -5654,8 +5646,8 @@ function renderCommunityComposerSheet() {
 function renderPostActionsSheet() {
   const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
-  const isReported = state.reportedPeople.includes(post.author);
-  const isBlocked = state.blockedPeople.includes(post.author);
+  const isReported = state.reportedPeople.includes(post.authorName);
+  const isBlocked = state.blockedPeople.includes(post.authorName);
   const isHidden = state.hiddenPostIds.includes(String(post.id));
   const isMuted = state.mutedTopics.includes(post.type);
   return `
@@ -5679,12 +5671,14 @@ function renderPostActionsSheet() {
   `;
 }
 
-/* The only place a post's full text + replies are shown together —
- * "Answer"/"Offer help"/"I've seen this"/"Join discussion"/"View" all
- * open this same sheet (see COMMUNITY_PRIMARY_ACTION_KIND), since the
- * underlying mechanic for all of them is the same: read the post, reply
- * to it. Replies are a flat list, not threaded — proportionate to a
- * feed that has no comment system anywhere else in the app yet. */
+/* The full-text destination "Open" leads to. There is no real comment/
+ * reply system backing Community posts yet (see the plan's own deferred
+ * "real peer-to-peer messaging" follow-up) — an earlier version of this
+ * sheet let a reply be typed in and pushed straight into an in-memory,
+ * non-durable counter, which is exactly the fabricated engagement this
+ * honesty pass removes. Only real fields (title/body/author) are shown;
+ * Share is the one real action available here, matching the card's own
+ * Open+Share restriction. */
 function renderPostDetailSheet() {
   const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
@@ -5696,27 +5690,12 @@ function renderPostDetailSheet() {
         <div class="sheet-title">
           <div>
             <p class="eyebrow">${meta.emoji} ${t(meta.labelKey)}</p>
-            <h2>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h2>
+            <h2>${escapeHtml(post.title || "")}</h2>
           </div>
           <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
         </div>
-        <p class="post-detail-body">${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
-        <div class="post-detail-replies">
-          ${(post.replyList || [])
-            .map(
-              (reply) => `
-                <div class="post-detail-reply">
-                  <strong>${escapeHtml(reply.author)}</strong>
-                  <p>${escapeHtml(reply.text)}</p>
-                </div>
-              `
-            )
-            .join("") || `<p class="post-detail-no-replies">${t("community.emptyFeedHint")}</p>`}
-        </div>
-        <form class="post-detail-composer" data-action="reply-to-post" data-post-id="${post.id}">
-          <input type="text" name="reply" placeholder="${t(meta.actionKey)}…" aria-label="${t(meta.actionKey)}" autocomplete="off" />
-          <button type="submit">${t("messages.send")}</button>
-        </form>
+        <p class="post-detail-body">${escapeHtml(post.body || "")}</p>
+        <button type="button" class="post-icon-action" data-action="share-post" data-post-id="${post.id}" aria-label="${t("common.share")}">${icon("arrow")}<span>${t("common.share")}</span></button>
       </section>
     </div>
   `;
@@ -5781,21 +5760,24 @@ function renderCreate() {
 }
 
 function renderCommunityRail() {
-  const trending = [...visibleFeedPosts()].sort((a, b) => (b.helpful || 0) - (a.helpful || 0)).slice(0, 3);
-  const activeAlerts = visibleFeedPosts().filter((post) => post.type === "alert" && post.active).slice(0, 3);
+  // visibleFeedPosts() is already recency-ordered (fetchCommunityPosts
+  // orders by created_at desc) — real posts have no popularity signal to
+  // sort "trending" by, so recency is the one honest ordering left.
+  const recent = visibleFeedPosts().slice(0, 3);
+  const alerts = visibleFeedPosts().filter((post) => post.type === "alert").slice(0, 3);
   const suggestedPeople = [...new Map(visibleFeedPosts().map((post) => [post.authorId, post])).values()].slice(0, 3);
   return `
     <aside class="community-rail">
       <div class="notification-rail-card">
         <h3>${t("community.trendingNearby")}</h3>
-        ${trending.length
-          ? `<ul class="notification-rail-list">${trending.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+        ${recent.length
+          ? `<ul class="notification-rail-list">${recent.map((post) => `<li>${escapeHtml(post.title)}</li>`).join("")}</ul>`
           : `<p class="notification-rail-empty">${t("community.emptyFeedHint")}</p>`}
       </div>
       <div class="notification-rail-card">
         <h3>${t("community.alertsChip")}</h3>
-        ${activeAlerts.length
-          ? `<ul class="notification-rail-list">${activeAlerts.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+        ${alerts.length
+          ? `<ul class="notification-rail-list">${alerts.map((post) => `<li>${escapeHtml(post.title)}</li>`).join("")}</ul>`
           : `<p class="notification-rail-empty">${t("community.alertResolved")}</p>`}
       </div>
       <div class="notification-rail-card">
@@ -5804,9 +5786,9 @@ function renderCommunityRail() {
           ${suggestedPeople
             .map(
               (post) => `
-                <li role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, verified: post.verified, context: "community" })}>
-                  <img src="${post.avatar || reputationProfile.portrait}" alt="" />
-                  <span>${escapeHtml(post.author)}<small>${escapeHtml(post.area)}</small></span>
+                <li role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, verified: post.authorVerified, context: "community" })}>
+                  ${post.authorAvatar ? `<img src="${escapeHtml(post.authorAvatar)}" alt="" />` : `<span class="post-avatar post-avatar-fallback">${icon("profile")}</span>`}
+                  <span>${escapeHtml(post.authorName)}<small>${escapeHtml(post.neighbourhood)}</small></span>
                 </li>
               `
             )
@@ -5827,20 +5809,45 @@ function renderCommunityRail() {
 }
 
 function renderCommunity() {
+  if (state.communityFeed.status === "idle") refreshCommunityFeed();
+
+  const hero = `
+    <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
+      <div class="city-hero-copy">
+        <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
+        <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
+        <p>${t("community.communityHeroSubtitle")}</p>
+      </div>
+      <div class="community-header-actions">
+        <button type="button" class="community-header-primary" data-sheet="communityComposer">${t("community.createPost")}</button>
+        <button type="button" class="community-header-secondary" data-alwen-toggle>${t("community.askAlwen")}</button>
+      </div>
+    </section>
+  `;
+
+  if (state.communityFeed.status === "loading") {
+    return `
+      <section class="section-shell community-shell">
+        ${hero}
+        <div class="profile-listing-grid-loading" aria-busy="true"></div>
+      </section>
+    `;
+  }
+
+  if (state.communityFeed.status === "error") {
+    return `
+      <section class="section-shell community-shell">
+        ${hero}
+        ${renderEmptyState(t("opportunities.loadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-community-feed">${t("alwen.alwenChatRetry")}</button>
+      </section>
+    `;
+  }
+
   const posts = filteredCommunityPosts();
   return `
     <section class="section-shell community-shell">
-      <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
-          <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
-          <p>${t("community.communityHeroSubtitle")}</p>
-        </div>
-        <div class="community-header-actions">
-          <button type="button" class="community-header-primary" data-sheet="communityComposer">${t("community.createPost")}</button>
-          <button type="button" class="community-header-secondary" data-alwen-toggle>${t("community.askAlwen")}</button>
-        </div>
-      </section>
+      ${hero}
       <div class="community-layout">
         <div class="community-main">
           ${renderAiSearch("community")}
@@ -5848,7 +5855,7 @@ function renderCommunity() {
           ${renderCommunitySignalStrip()}
           ${renderCommunityFilterRow()}
           <div class="pulse-list">
-            ${posts.length ? posts.map(renderPulse).join("") : renderCommunityFeedEmptyState()}
+            ${posts.length ? posts.map(renderCommunityPostCard).join("") : renderCommunityFeedEmptyState()}
           </div>
           ${posts.length ? `<p class="community-end-of-feed">${t("community.endOfFeed")}</p>` : ""}
           ${/* Community's own feed and stats are the neighbourhood's actual
@@ -6275,13 +6282,15 @@ function renderMarketplace() {
 
 /** Real signals only — every count here traces to something the user
  * actually did (myListings/myHelpRequests carry a real created_at from
- * Supabase, ownedBusinesses() reflects a real claim, feedPosts is
- * filtered to posts this signed-in user actually composed, saved counts
- * are real toggle state) rather than a fabricated 0-100 "trust score" or
- * percentile claim. No leaderboard exists, so there is no "Top 4%" —
- * that would require knowing every other user's score. */
+ * Supabase, ownedBusinesses() reflects a real claim, community posts are
+ * filtered to the signed-in user's own real authorId within the shared
+ * communityFeed cache — same cap-related caveat as any other capped real
+ * pool in this file, never fabricated — saved counts are real toggle
+ * state) rather than a fabricated 0-100 "trust score" or percentile
+ * claim. No leaderboard exists, so there is no "Top 4%" — that would
+ * require knowing every other user's score. */
 function contributeRealActivityBreakdown(user) {
-  const myPosts = feedPosts.filter((post) => post.author === user.name);
+  const myPosts = state.communityFeed.posts.filter((post) => post.authorId === user.id);
   const savedCount = state.savedListingIds.length + state.savedPlaceIds.length;
   return [
     { key: "marketplace", icon: "tag", count: state.myListings.length, labelKey: "contribute.activity.marketplaceLabel", emptyKey: "contribute.activity.marketplaceEmpty", emptyCtaKey: "contribute.activity.marketplaceEmptyCta", emptyView: "createListing", activeCtaKey: "contribute.activity.marketplaceActiveCta", activeView: "profile" },
@@ -7114,15 +7123,18 @@ async function refreshOpportunityFeed() {
 
 const COMMUNITY_FEED_FETCH_LIMIT = 20;
 
-/** Maps a raw fetchCommunityPosts() row into the shape renderPostDetailSheet/
- * renderPulse/sharePost already expect from a feedPosts mock entry (.type,
- * .title, .body — never .titleKey/.bodyKey, so those functions' `post.key ?
- * t(key) : plain field` fallback always takes the plain-field branch for a
- * real post). Every nullable real column (neighbourhood, author embed,
- * media) is guarded here once, at the source, rather than at every render
- * call site. No replies/helpful/saves fields are set at all — omitted, not
- * defaulted to 0, so nothing downstream can mistake "field absent" for
- * "zero real engagement" (see HOME_FEED_SOURCE_ADAPTERS.community). */
+/** Maps a raw fetchCommunityPosts() row (or a freshly-inserted
+ * createCommunityPost() row with a synthetic author attached, see
+ * applyCreatedCommunityPost) into the one display shape every Community
+ * consumer reads — renderCommunityPostCard/renderPostDetailSheet/sharePost/
+ * findCommunityPostById/renderCommunityRail. Every nullable real column
+ * (neighbourhood, author embed, media) is guarded here once, at the
+ * source, rather than at every render call site. No replies/helpful/saves
+ * fields are set at all — omitted, not defaulted to 0, so nothing
+ * downstream can mistake "field absent" for "zero real engagement" (see
+ * HOME_FEED_SOURCE_ADAPTERS.community). authorId is the real
+ * author_user_id — the one field needed to link a card back to the
+ * author's real public profile. */
 function shapeCommunityPostForDisplay(row) {
   return {
     id: row.id,
@@ -7131,6 +7143,7 @@ function shapeCommunityPostForDisplay(row) {
     body: row.body || "",
     neighbourhood: row.neighbourhood || "",
     createdAt: row.created_at,
+    authorId: row.author_user_id || null,
     authorName: row.author?.display_name || "",
     authorAvatar: row.author?.avatar_url || "",
     authorVerified: row.author?.verification_status === "verified",
@@ -7140,8 +7153,9 @@ function shapeCommunityPostForDisplay(row) {
 }
 
 /** Same fire-and-forget, idle-guarded convention as refreshOpportunityFeed()
- * above — real Community posts for the Unified Home Feed's Community
- * source. Unauthenticated (published community_posts is public RLS). */
+ * above — real Community posts for both the Unified Home Feed's Community
+ * source and Community's own page. Unauthenticated (published
+ * community_posts is public RLS). */
 async function refreshCommunityFeed() {
   state.communityFeed = { ...state.communityFeed, status: "loading" };
   try {
@@ -7151,21 +7165,39 @@ async function refreshCommunityFeed() {
     console.warn("[communityFeed] Failed to load real community data.", error);
     state.communityFeed = { status: "error", posts: [], loadedAt: state.communityFeed.loadedAt };
   }
-  if (state.activeView === "home") render();
+  if (["home", "community"].includes(state.activeView)) render();
 }
 
-/** Shared lookup for a Community post by id, across BOTH sources — the
- * local feedPosts fixture (Community's own page, numeric ids) and real
- * Community posts loaded via fetchCommunityPosts() (UUID string ids).
- * String()-coerced comparison on both sides, matching the same pattern
- * already used for real listing ids (state.savedListingIds.includes(
- * String(item.id)), see toggle-listing-save) — this is what actually
- * fixes the bug where every one of these lookups used to do
- * `item.id === Number(button.dataset.postId)`: Number() on a real UUID is
- * NaN, so a real post could never be found by id anywhere in this file. */
+/** Maps createCommunityPost()'s raw inserted row (no author embed — a
+ * plain insert, unlike fetchCommunityPosts()'s two-step fetch) through
+ * the same shapeCommunityPostForDisplay() every other post uses, using
+ * the current session's own real profile fields for the author embed
+ * (same convention as shapeListingForDisplay's use of state.auth.user
+ * for a just-created listing). Unshifts into the shared communityFeed
+ * cache so the new post appears immediately without a refetch — mirrors
+ * applyCreatedListing/applyCreatedHelpRequest. */
+function applyCreatedCommunityPost(created) {
+  const user = state.auth.user;
+  const shaped = shapeCommunityPostForDisplay({
+    ...created,
+    author: user ? { user_id: user.id, display_name: user.name, avatar_url: user.avatar, verification_status: user.publicProfile?.verification_status } : null
+  });
+  state.communityFeed = { ...state.communityFeed, posts: [shaped, ...state.communityFeed.posts] };
+  trackEvent("community_post_created", { category: created.category });
+  return shaped;
+}
+
+/** Shared lookup for a Community post by id — real posts loaded via
+ * fetchCommunityPosts()/createCommunityPost() (UUID string ids).
+ * String()-coerced comparison, matching the same pattern already used for
+ * real listing ids (state.savedListingIds.includes(String(item.id)), see
+ * toggle-listing-save) — this is what actually fixes the bug where every
+ * one of these lookups used to do `item.id === Number(button.dataset.postId)`:
+ * Number() on a real UUID is NaN, so a real post could never be found by
+ * id anywhere in this file. */
 function findCommunityPostById(id) {
   if (id == null) return null;
-  return feedPosts.find((item) => String(item.id) === String(id)) || state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
+  return state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
 }
 
 /** Shared lookup for a listing by id, across BOTH pools — myListingsPool
@@ -7258,9 +7290,9 @@ async function refreshRemoteListingDetail(id) {
      interactions         { open, share, like, comment, save } — each true
                            ONLY if backed by a real DB write path that
                            persists across a refresh. Verified empirically
-                           for this PR: state.savedListingIds/savedPostIds/
-                           helpfulPostIds are never written to localStorage
-                           or Supabase anywhere in this file (grepped every
+                           for this PR: state.savedListingIds/savedPostIds
+                           are never written to localStorage or Supabase
+                           anywhere in this file (grepped every
                            writeLocalStorage call site) — pure in-memory,
                            lost on reload. So like/comment/save are false
                            for BOTH enabled sources today, even though the
@@ -12226,6 +12258,10 @@ function bindEvents() {
     refreshOpportunityFeed();
   }));
 
+  document.querySelectorAll('[data-action="retry-community-feed"]').forEach((button) => button.addEventListener("click", () => {
+    refreshCommunityFeed();
+  }));
+
   document.querySelectorAll('[data-action="retry-listing-detail"]').forEach((button) => button.addEventListener("click", () => {
     refreshRemoteListingDetail(state.selectedListingId);
     render();
@@ -12250,19 +12286,6 @@ function bindEvents() {
       const item = importedBusinesses.find((business) => business.id === button.dataset.placeId);
       if (item) sharePlace(item);
       trackEvent("place_shared", { placeId: button.dataset.placeId });
-    });
-  });
-
-  document.querySelectorAll('[data-action="toggle-helpful"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      // Raw dataset string, not Number() — real Community posts loaded via
-      // fetchCommunityPosts() have UUID ids; Number() on a UUID is NaN,
-      // which silently broke this toggle for any real post (same class of
-      // bug as toggle-listing-save's own id, see that handler's comment).
-      const id = button.dataset.postId;
-      state.helpfulPostIds = state.helpfulPostIds.includes(id) ? state.helpfulPostIds.filter((existing) => existing !== id) : [...state.helpfulPostIds, id];
-      render();
     });
   });
 
@@ -12304,33 +12327,37 @@ function bindEvents() {
     });
   });
 
-  document.querySelector('[data-action="submit-community-post"]')?.addEventListener("submit", (event) => {
+  document.querySelector('[data-action="submit-community-post"]')?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const title = String(formData.get("title") || "").trim();
     const body = String(formData.get("body") || "").trim();
     if (!title || !body) return;
-    const nextId = feedPosts.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-    feedPosts.unshift({
-      id: nextId,
-      authorId: `community-user-${nextId}`,
-      author: state.auth.user.name,
-      avatar: state.auth.user.avatar || null,
-      area: currentAreaLabel(),
-      time: t("notification.groupNow"),
-      type: state.communityPostDraft.type,
-      verified: false,
-      title,
-      body,
-      tags: [],
-      replies: 0,
-      helpful: 0,
-      saves: 0,
-      replyList: []
-    });
-    state.communityPostDraft = { title: "", body: "", type: "discussion" };
-    state.activeSheet = null;
-    trackEvent("community_post_created", { type: feedPosts[0].type });
+    if (state.auth.status !== "signedIn") {
+      state.communityPostSubmitStatus = "error";
+      state.communityPostSubmitError = t("community.composerSignInHint");
+      render();
+      return;
+    }
+    state.communityPostSubmitStatus = "loading";
+    state.communityPostSubmitError = null;
+    render();
+    try {
+      const created = await createCommunityPost({
+        title,
+        body,
+        category: state.communityPostDraft.type,
+        neighbourhood: state.area === "All" ? null : state.area
+      });
+      applyCreatedCommunityPost(created);
+      state.communityPostDraft = { title: "", body: "", type: "discussion" };
+      state.communityPostSubmitStatus = "idle";
+      state.activeSheet = null;
+    } catch (error) {
+      console.warn("[community] Failed to create post.", error);
+      state.communityPostSubmitStatus = "error";
+      state.communityPostSubmitError = error?.message || t("community.postError");
+    }
     render();
   });
 
@@ -12368,28 +12395,13 @@ function bindEvents() {
 
   document.querySelector('[data-action="report-post-author"]')?.addEventListener("click", () => {
     const post = findCommunityPostById(state.activePostId);
-    if (post && !state.reportedPeople.includes(post.author)) state.reportedPeople.push(post.author);
+    if (post && !state.reportedPeople.includes(post.authorName)) state.reportedPeople.push(post.authorName);
     render();
   });
 
   document.querySelector('[data-action="block-post-author"]')?.addEventListener("click", () => {
     const post = findCommunityPostById(state.activePostId);
-    if (post && !state.blockedPeople.includes(post.author)) state.blockedPeople.push(post.author);
-    render();
-  });
-
-  document.querySelector('[data-action="reply-to-post"]')?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const text = String(formData.get("reply") || "").trim();
-    if (!text) return;
-    const post = findCommunityPostById(form.dataset.postId);
-    if (post) {
-      post.replyList = post.replyList || [];
-      post.replyList.push({ author: t("common.you"), text });
-      post.replies = (post.replies || 0) + 1;
-    }
+    if (post && !state.blockedPeople.includes(post.authorName)) state.blockedPeople.push(post.authorName);
     render();
   });
 

@@ -4696,6 +4696,17 @@ select:focus-visible,
   object-fit: cover;
 }
 
+/* A real Community author with no avatar yet — same "omit, don't
+   fabricate" placeholder discipline as .listing-photo-placeholder, never
+   a stock/mock portrait. */
+.post-avatar.post-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
 /* Truncate to a single line instead of letting long names/areas wrap —
    without this, whichever card had the longest text got a taller author
    row than its neighbours, which pushed its photo (and everything below
@@ -12547,69 +12558,12 @@ strong:has(> .verified-check) {
   opacity: 0.8;
 }
 
-/* Post detail sheet — full text + a flat reply list + composer */
+/* Post detail sheet — full text + the same Open+Share actions as the card */
 .post-detail-body {
   margin: 0;
   color: var(--ink);
   font-size: 0.92rem;
   line-height: 1.5;
-}
-
-.post-detail-replies {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.post-detail-reply {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
-}
-
-.post-detail-reply strong {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 0.78rem;
-}
-
-.post-detail-reply p {
-  margin: 0;
-  font-size: 0.86rem;
-  color: var(--muted);
-}
-
-.post-detail-no-replies {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.post-detail-composer {
-  display: flex;
-  gap: 8px;
-}
-
-.post-detail-composer input {
-  flex: 1 1 auto;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-soft);
-  color: var(--ink);
-  font-size: 0.88rem;
-}
-
-.post-detail-composer button {
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: var(--emerald-600);
-  color: var(--ink-inverse);
-  font-weight: 800;
 }
 
 /* Desktop — centred main column + right rail, matching the pattern

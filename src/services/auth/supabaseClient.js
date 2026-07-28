@@ -810,6 +810,33 @@ export async function createHelpRequest({ category, categoryId, description, urg
   return data;
 }
 
+/** Same shape and RLS story as createHelpRequest/createListing above —
+ * "Authors manage community posts" already permits an authenticated
+ * author to insert their own row (202607150001_production_foundation.sql),
+ * so this is a plain insert, no new migration needed. status is always
+ * "published" (drafts/moderation states exist in the column's check
+ * constraint but nothing in this app writes them). */
+export async function createCommunityPost({ title, body, category, neighbourhood }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const { data, error } = await supabase
+    .from("community_posts")
+    .insert({
+      author_user_id: user.id,
+      title,
+      body,
+      category: category || "discussion",
+      neighbourhood: neighbourhood || null,
+      status: "published"
+    })
+    .select("*")
+    .single();
+  if (error) throwIfError(error, "createCommunityPost");
+  return data;
+}
+
 /** Public "what's live right now" feed — every requester's open help_requests,
  * not just the signed-in user's own (contrast fetchMyHelpRequests below).
  * RLS already permits this (see "Open help requests are public readable" in
@@ -1091,11 +1118,10 @@ export async function fetchListingById(id) {
  * readable", 202607150001_production_foundation.sql — `status =
  * 'published'` is already public, no auth required). This is the Home
  * redesign's Unified Home Feed's Community source (see
- * HOME_FEED_SOURCE_ADAPTERS.community, main.js) — Community's own page
- * still renders from the local feedPosts fixture for now (see that
- * file's comment for why), this function only backs Home's real-data
- * feed slice. Bounded, deterministic, explicit column list (no `select
- * *`) — no private field is ever selected.
+ * HOME_FEED_SOURCE_ADAPTERS.community, main.js) and also backs
+ * Community's own page (renderCommunity()) directly. Bounded,
+ * deterministic, explicit column list (no `select *`) — no private
+ * field is ever selected.
  *
  * Two-step fetch (post rows, then a batched profile lookup via the same
  * fetchProfilesByIds() fetchFollowers/fetchFollowing already use below),
