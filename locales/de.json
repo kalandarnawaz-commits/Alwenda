@@ -1543,6 +1543,7 @@
     "needHelpBody": "Beschreibe einmal, was du brauchst. Fachkräfte in der Nähe können mit Verfügbarkeit, Angeboten und Chat antworten. Zahlungen und Vereinbarungen erfolgen direkt zwischen den Nutzern.",
     "needHelpCta": "Anfrage posten",
     "needHelpPosting": "Wird gepostet...",
+    "emptyRequestsHint": "In deiner Nähe wurden noch keine Anfragen gepostet. Sei die Erste oder der Erste, die oder der die Community um Hilfe bittet.",
     "postError": "Das hat nicht geklappt. Bitte versuche es erneut.",
     "myRequestsTitle": "Meine Anfragen",
     "needHelpPlaceholder": "Ich brauche heute Abend jemanden, der IKEA-Möbel aufbaut.",
@@ -1895,14 +1896,6 @@
       "explore5Title": "Museum heute geöffnet",
       "explore5Type": "Kultur",
       "explore5Signal": "Guter Plan bei Regen"
-    },
-    "help": {
-      "help1Title": "Jemand soll heute Abend IKEA-Möbel aufbauen",
-      "help1Urgency": "Heute Abend",
-      "help1Status": "3 verifizierte Profis können antworten",
-      "help2Title": "Gründliche Reinigung einer 2-Zimmer-Wohnung vor dem Einzug",
-      "help2Urgency": "Morgen",
-      "help2Status": "2 Profis verfügbar"
     },
     "briefing": {
       "briefing1Signal": "Guten Morgen",

@@ -449,27 +449,6 @@ export const professionalCategories = [
   { value: "computer repair", labelKey: "category.profession.profComputerRepair" }
 ];
 
-export const helpRequests = [
-  {
-    id: 601,
-    titleKey: "mock.help.help1Title",
-    area: "Naujamiestis",
-    budget: "€60-90",
-    urgencyKey: "mock.help.help1Urgency",
-    statusKey: "mock.help.help1Status",
-    quotes: ["Mantas Home Fix · €70 · 19:30", "FixLab Vilnius · €85 · 20:00"]
-  },
-  {
-    id: 602,
-    titleKey: "mock.help.help2Title",
-    area: "Žvėrynas",
-    budget: "€80-120",
-    urgencyKey: "mock.help.help2Urgency",
-    statusKey: "mock.help.help2Status",
-    quotes: ["CleanNest Vilnius · €95 · 10:00"]
-  }
-];
-
 /**
  * type: which source/category a notification belongs to — drives icon,
  * filter chip, and grouping. priority: "urgent" | "high" | "normal" |

@@ -5,7 +5,6 @@ import {
   COMMUNITY_POST_TYPES,
   cityGraph,
   earnToday,
-  helpRequests,
   businessClaims,
   importedBusinesses,
   importSources,
@@ -2911,11 +2910,9 @@ function filteredProfessionals() {
 }
 
 function filteredHelpRequests() {
-  return helpRequests.filter((request) => {
+  return helpRequestPool().filter((request) => {
     const areaMatch = state.area === "All" || request.area === state.area;
-    const title = request.title || t(request.titleKey);
-    const status = request.status || t(request.statusKey);
-    return areaMatch && matchesQuery(`${title} ${request.area} ${request.budget || ""} ${status} ${request.quotes.join(" ")}`);
+    return areaMatch && matchesQuery(`${request.title} ${request.area} ${request.budget || ""} ${request.status}`);
   });
 }
 
@@ -2941,8 +2938,8 @@ function topMatches(limit = 4, context = "home") {
       : [];
   const helpMatches = filteredHelpRequests().map((item) => ({
     kind: t("entity.helpRequest"),
-    title: item.title || t(item.titleKey),
-    meta: `${item.area} · ${item.budget || item.urgency} · ${item.status || t(item.statusKey)}`,
+    title: item.title,
+    meta: `${item.area} · ${item.budget || item.urgency} · ${item.status}`,
     action: "needHelp",
     tileIcon: "help"
   }));
@@ -5810,6 +5807,12 @@ function renderCommunityRail() {
 
 function renderCommunity() {
   if (state.communityFeed.status === "idle") refreshCommunityFeed();
+  // This page's own embedded "Live Requests" preview reads
+  // filteredHelpRequests(), which is now real (state.opportunityFeed) —
+  // same idle-guard Need Help/Marketplace already use, so landing here
+  // directly (e.g. a direct link) doesn't leave that preview silently
+  // empty for the rest of the session.
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
 
   const hero = `
     <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
@@ -6939,7 +6942,7 @@ function renderHire() {
 }
 
 function renderNeedHelp() {
-  const requests = filteredHelpRequests();
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
   const intent = NEED_HELP_INTENTS.find((item) => item.id === state.needHelpDetectedIntentId) || null;
   const posted = state.helpRequestPosted;
   // TYT_ACTIONS.volunteer also lands here (browse and respond to real
@@ -6972,13 +6975,50 @@ function renderNeedHelp() {
         <article><strong>2</strong><span>${t("common.prosRespond")}</span></article>
         <article><strong>3</strong><span>${t("common.chatAndArrange")}</span></article>
       </div>
-      <div class="section-title">
-        <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
-      </div>
-      <div class="request-list">
-        ${requests.map(renderHelpRequest).join("")}
-      </div>
+      ${renderNeedHelpLiveRequestsSection()}
     </section>
+  `;
+}
+
+/** The read-only browse list at the bottom of Need Help — separate from
+ * the compose flow above it (renderNeedHelpComposer() etc.), which stays
+ * interactive regardless of this section's status so a slow/failed
+ * public fetch never blocks posting a new request. Shares
+ * state.opportunityFeed (idle/loading/loaded/error), the same real cache
+ * Marketplace/Home already read — no second Help Request cache, no
+ * per-render refetch. */
+function renderNeedHelpLiveRequestsSection() {
+  const header = `
+    <div class="section-title">
+      <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
+    </div>
+  `;
+  if (state.opportunityFeed.status === "idle" || state.opportunityFeed.status === "loading") {
+    return `${header}<div class="profile-listing-grid-loading" aria-busy="true"></div>`;
+  }
+  if (state.opportunityFeed.status === "error") {
+    return `
+      ${header}
+      ${renderEmptyState(t("opportunities.loadError"), "search")}
+      <button type="button" class="opportunity-primary" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button>
+    `;
+  }
+  const requests = filteredHelpRequests();
+  if (!requests.length) {
+    return `
+      ${header}
+      ${renderEmptyState(t("needHelp.needHelpTitle"), "help")}
+      <div class="opportunity-post-cta">
+        <p>${t("needHelp.emptyRequestsHint")}</p>
+        <button type="button" data-action="focus-help-request-composer">${t("needHelp.needHelpCta")}</button>
+      </div>
+    `;
+  }
+  return `
+    ${header}
+    <div class="request-list">
+      ${requests.map(renderHelpRequest).join("")}
+    </div>
   `;
 }
 
@@ -7118,7 +7158,7 @@ async function refreshOpportunityFeed() {
     console.warn("[opportunityFeed] Failed to load real opportunity data.", error);
     state.opportunityFeed = { status: "error", helpRequests: [], listings: [], loadedAt: state.opportunityFeed.loadedAt };
   }
-  if (["home", "liveOpportunities"].includes(state.activeView)) render();
+  if (["home", "liveOpportunities", "needHelp", "community"].includes(state.activeView)) render();
 }
 
 const COMMUNITY_FEED_FETCH_LIMIT = 20;
@@ -8551,6 +8591,11 @@ function renderInlineProSuggestions(category) {
 /** Shared shape for a real help_requests row (whichever path created it —
  * see applyCreatedHelpRequest below) so Hire/Need Help renders it the same
  * way regardless of source. */
+/** budget is always null — help_requests has no price/budget column, so
+ * this is an honest permanent omission (renderHelpRequest()'s `?` guard
+ * simply never shows it), never a fabricated figure. There is likewise
+ * no real "pro responses" concept yet (no quotes/bids table), so no
+ * quotes field is produced here at all — see renderHelpRequest(). */
 function shapeHelpRequestForDisplay(created) {
   const matchedCategory = professionalCategories.find((item) => item.value.toLowerCase() === String(created.category || "").toLowerCase());
   const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === created.urgency);
@@ -8561,9 +8606,25 @@ function shapeHelpRequestForDisplay(created) {
     budget: null,
     urgency: t(matchedUrgency?.[1] || "needHelp.urgencyFlexible"),
     status: t(`status.${created.status}`) || t("status.open"),
-    quotes: [],
     category: matchedCategory ? t(matchedCategory.labelKey) : created.category
   };
+}
+
+/** The visible "Live Requests" list — merges the current user's own real
+ * requests (state.myHelpRequests, always the full, freshly-fetched set
+ * from refreshMyHelpRequests()/applyCreatedHelpRequest()) with the
+ * public real feed (state.opportunityFeed.helpRequests, from
+ * refreshOpportunityFeed()), deduplicated by real id so a request never
+ * appears twice after creation. Both real sources map through the same
+ * shapeHelpRequestForDisplay() used for the post-submit confirmation, so
+ * there is exactly one display shape for a real help request — no
+ * second shaper, matching marketplaceListingPool()'s established
+ * own-pool-first, dedupe-by-id pattern. */
+function helpRequestPool() {
+  const ownIds = new Set(state.myHelpRequests.map((item) => String(item.id)));
+  const own = state.myHelpRequests.map(shapeHelpRequestForDisplay);
+  const others = state.opportunityFeed.helpRequests.filter((raw) => !ownIds.has(String(raw.id))).map(shapeHelpRequestForDisplay);
+  return [...own, ...others];
 }
 
 /** Called after a real insert — either the manual Need Help form
@@ -8573,7 +8634,6 @@ function shapeHelpRequestForDisplay(created) {
  * not as a second, differently-shaped kind of card. */
 function applyCreatedHelpRequest(created, { source = "manual" } = {}) {
   const request = shapeHelpRequestForDisplay(created);
-  helpRequests.unshift(request);
   state.myHelpRequests.unshift(created);
   trackEvent("help_request_posted", { hasCategory: Boolean(created.category), urgency: created.urgency, source });
   return request;
@@ -8581,15 +8641,15 @@ function applyCreatedHelpRequest(created, { source = "manual" } = {}) {
 
 /** Fire-and-forget, called both right after sign-in and every time the user
  * opens Profile or Hire — mirrors refreshMyListings() so a transient network
- * hiccup doesn't leave "My Requests" empty for the rest of the session. */
+ * hiccup doesn't leave "My Requests" empty for the rest of the session.
+ * Wholesale-replaces state.myHelpRequests with the fresh fetch — unlike
+ * refreshMyListings()/myListingsPool, there is no separate shaped pool to
+ * keep in sync here: helpRequestPool() derives directly from this array
+ * on every call, so it is always current the moment this assignment
+ * lands, without a second array to maintain. */
 async function refreshMyHelpRequests() {
   try {
     state.myHelpRequests = await fetchMyHelpRequests();
-    for (const item of state.myHelpRequests) {
-      if (!helpRequests.some((existing) => String(existing.id) === String(item.id))) {
-        helpRequests.unshift(shapeHelpRequestForDisplay(item));
-      }
-    }
     // Home never reads state.myHelpRequests (Profile/Contribute do) — see
     // the same note on refreshMyListings() below.
     if (state.activeView !== "home") render();
@@ -8895,15 +8955,11 @@ async function submitListingForm() {
 }
 
 function renderHelpRequest(request) {
-  const title = request.title || t(request.titleKey);
-  const urgency = request.urgency || t(request.urgencyKey);
-  const status = request.status || t(request.statusKey);
   return `
     <article class="request-card">
-      <span class="badge">${escapeHtml(urgency)}</span>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(request.area)}${request.budget ? ` · ${escapeHtml(request.budget)}` : ""} · ${escapeHtml(status)}</p>
-      ${request.quotes.length ? `<div class="quote-list">${request.quotes.map((quote) => `<span>${escapeHtml(quote)}</span>`).join("")}</div>` : ""}
+      <span class="badge">${escapeHtml(request.urgency)}</span>
+      <h3>${escapeHtml(request.title)}</h3>
+      <p>${escapeHtml(request.area)}${request.budget ? ` · ${escapeHtml(request.budget)}` : ""} · ${escapeHtml(request.status)}</p>
     </article>
   `;
 }
@@ -12256,6 +12312,15 @@ function bindEvents() {
   });
   document.querySelectorAll('[data-action="retry-opportunity-feed"]').forEach((button) => button.addEventListener("click", () => {
     refreshOpportunityFeed();
+  }));
+
+  // Zero-requests empty state's CTA — scrolls to and focuses the same
+  // composer already at the top of Need Help, rather than opening a
+  // second form.
+  document.querySelectorAll('[data-action="focus-help-request-composer"]').forEach((button) => button.addEventListener("click", () => {
+    const composer = document.getElementById("need-help-composer");
+    composer?.scrollIntoView({ behavior: "smooth", block: "center" });
+    composer?.focus();
   }));
 
   document.querySelectorAll('[data-action="retry-community-feed"]').forEach((button) => button.addEventListener("click", () => {

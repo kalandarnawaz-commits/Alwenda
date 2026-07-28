@@ -1543,6 +1543,7 @@
     "needHelpBody": "Aprašykite poreikį vieną kartą. Netoliese esantys specialistai gali atsakyti dėl laiko, kainos ir pokalbio. Mokėjimus ir susitarimus naudotojai tvarko tiesiogiai.",
     "needHelpCta": "Skelbti užklausą",
     "needHelpPosting": "Skelbiama...",
+    "emptyRequestsHint": "Kol kas niekas nepaskelbė užklausų netoliese. Būkite pirmas, kuris paprašys savo bendruomenės pagalbos.",
     "postError": "Nepavyko paskelbti. Bandykite dar kartą.",
     "myRequestsTitle": "Mano užklausos",
     "needHelpPlaceholder": "Reikia, kad kas nors šį vakarą surinktų IKEA baldus.",
@@ -1895,14 +1896,6 @@
       "explore5Title": "Muziejus atviras šiandien",
       "explore5Type": "Kultūra",
       "explore5Signal": "Tinka lietingam orui"
-    },
-    "help": {
-      "help1Title": "Reikia kažko surinkti IKEA baldus šįvakar",
-      "help1Urgency": "Šįvakar",
-      "help1Status": "3 patikrinti profesionalai gali atsakyti",
-      "help2Title": "Kruopščiai išvalyti 2 kambarių butą prieš įsikeliant",
-      "help2Urgency": "Rytoj",
-      "help2Status": "2 profesionalai laisvi"
     },
     "briefing": {
       "briefing1Signal": "Labas rytas",

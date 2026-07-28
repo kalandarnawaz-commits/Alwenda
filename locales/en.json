@@ -1543,6 +1543,7 @@
     "needHelpBody": "Describe what you need once. Nearby professionals can respond with availability, quotes and chat. Payments and agreements are arranged directly between users.",
     "needHelpCta": "Post request",
     "needHelpPosting": "Posting...",
+    "emptyRequestsHint": "No requests have been posted nearby yet. Be the first to ask your community.",
     "postError": "That didn't post. Please try again.",
     "myRequestsTitle": "My Requests",
     "needHelpPlaceholder": "Need someone to assemble IKEA furniture tonight.",
@@ -1895,14 +1896,6 @@
       "explore5Title": "Museum open today",
       "explore5Type": "Culture",
       "explore5Signal": "Rain-safe plan"
-    },
-    "help": {
-      "help1Title": "Need someone to assemble IKEA furniture tonight",
-      "help1Urgency": "Tonight",
-      "help1Status": "3 verified pros can respond",
-      "help2Title": "Deep clean a 2-room apartment before move-in",
-      "help2Urgency": "Tomorrow",
-      "help2Status": "2 pros available"
     },
     "briefing": {
       "briefing1Signal": "Good morning",
