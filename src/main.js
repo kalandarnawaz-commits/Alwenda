@@ -271,6 +271,13 @@ const state = {
   conversationDetail: { status: "idle", id: null, otherUserId: null, otherProfile: null, contextType: null, contextId: null, contextLabel: null, messages: [] },
   conversationSendStatus: "idle",
   conversationSendError: null,
+  // Set when openRealConversation() (Message button on a listing/help
+  // request) fails — findOrCreateConversation threw before ever navigating
+  // to the conversation view, so there is nowhere else to show the real
+  // reason than back on the page the user was already on. Previously this
+  // failure was only console.error'd with no render(), so the button
+  // appeared to silently do nothing.
+  conversationOpenError: null,
   composerDraft: "",
   notificationFilter: "all",
   savedPlaceIds: [],
@@ -6865,6 +6872,7 @@ function renderListingDetailBody(item) {
         <button type="button" data-action="share-listing" data-listing-id="${item.id}">${t("common.share")}</button>
         <button type="button" data-report-target="listing" data-report-id="${item.id}">Report listing</button>
       </div>
+      ${state.conversationOpenError ? `<p class="auth-error" role="alert">${escapeHtml(state.conversationOpenError)}</p>` : ""}
     </section>
   `;
 }
@@ -7845,6 +7853,7 @@ function renderRealHelpRequestDetail(record) {
           ${authorTarget ? `<button type="button" data-user-profile-target="${authorTarget}">${t("common.viewProfile")}</button>` : ""}
           <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
         </div>
+        ${state.conversationOpenError ? `<p class="auth-error" role="alert">${escapeHtml(state.conversationOpenError)}</p>` : ""}
       </div>
     </article>
     ${related.length ? `<section class="opportunity-related">
@@ -9015,6 +9024,7 @@ function markAllNotificationsRead() {
  * protected view and already excluded from URL restoration — no routing
  * change needed), and kicks off loading its message history. */
 async function openRealConversation({ contextType, contextId, recipientUserId }) {
+  state.conversationOpenError = null;
   try {
     const conversation = await findOrCreateConversation({ contextType, contextId, recipientUserId });
     state.activeConversationId = conversation.id;
@@ -9024,6 +9034,13 @@ async function openRealConversation({ contextType, contextId, recipientUserId })
     await loadConversationDetail(conversation.id);
   } catch (error) {
     console.error("openRealConversation failed", error);
+    // Failing here means findOrCreateConversation threw before any
+    // navigation happened, so the user is still on the listing/help-request
+    // page they clicked Message from — that page renders this error inline
+    // (see renderListingDetailBody/renderRealHelpRequestDetail) instead of
+    // the button silently appearing to do nothing.
+    state.conversationOpenError = error?.message || t("messages.openError");
+    render();
   }
 }
 

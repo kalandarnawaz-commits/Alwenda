@@ -1186,7 +1186,8 @@
     "conversationTypeHelpRequest": "Pagalbos prašymas",
     "contextHelpRequest": "Pagalbos prašymas",
     "participantUnknown": "Kažkas",
-    "sendError": "Nepavyko išsiųsti žinutės. Bandykite dar kartą."
+    "sendError": "Nepavyko išsiųsti žinutės. Bandykite dar kartą.",
+    "openError": "Nepavyko atidaryti šio pokalbio. Bandykite dar kartą."
   },
   "business": {
     "dashboard": {
