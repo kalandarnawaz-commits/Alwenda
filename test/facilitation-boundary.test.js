@@ -17,15 +17,12 @@ test("the fake in-app booking-confirmation flow is fully removed from the Hire/N
   assert.doesNotMatch(main, /status: "Confirmed"/, "no code path may fabricate a confirmed booking status");
 });
 
-test("the Hire public-profile Book button is fully removed, not routed to any fake or real flow", async () => {
+test("the Hire public-profile Book button (and its underlying fake-professional conversation starter) is fully removed — there is no real professional-listing concept to book against", async () => {
   const main = await readRepoFile("src/main.js");
-  // serviceProfessionals is fabricated placeholder data with no real user
-  // account behind it — there is nothing real to book or message, so the
-  // honest choice (same reasoning applied to the pro-card Book/Contact
-  // buttons) is to remove the CTA outright rather than route it anywhere.
   assert.doesNotMatch(main, /data-person-action="request-booking"/);
   assert.doesNotMatch(main, /data-person-action="book"/, "the old fake-booking action name must not remain anywhere");
   assert.doesNotMatch(main, /startProfessionalConversation\(/, "the deleted mock-conversation function must not be reintroduced");
+  assert.doesNotMatch(main, /isHireContext/, "the public-profile view no longer branches on a hire-professional identity that can't exist");
 });
 
 test("common.bookPay no longer implies Alwenda handles in-app payment", async () => {
@@ -60,12 +57,16 @@ test("the transaction-safety notice (already present) and the Need Help 3-step e
   assert.match(needHelpBody, /common\.chatAndArrange/);
 });
 
-test("the out-of-scope Hotels/Food & Drink reservations flow (common.bookNow, renderReservations) is untouched", async () => {
+test("the fake Businesses/Reservations system (renderBusinesses, renderBusinessProfile, renderReservations, common.bookNow) is fully removed", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /t\("common\.bookNow"\)/, "Hotels/Food & Drink reservations button must still exist — only the Hire fake-confirm flow was in scope");
-  assert.match(main, /function renderReservations/);
-  const enLocale = JSON.parse(await readRepoFile("locales/en.json"));
-  assert.equal(enLocale.common.bookNow, "Book now");
+  assert.doesNotMatch(main, /function renderBusinesses\(/);
+  assert.doesNotMatch(main, /function renderBusinessProfile\(/);
+  assert.doesNotMatch(main, /function renderReservations\(/);
+  assert.doesNotMatch(main, /t\("common\.bookNow"\)/);
+  for (const locale of ["en", "lt", "de"]) {
+    const json = JSON.parse(await readRepoFile(`locales/${locale}.json`));
+    assert.equal(json.common.bookNow, undefined, `locales/${locale}.json must not keep the dead bookNow key`);
+  }
 });
 
 test("Marketplace listing detail/card (Rentals, Property included) offer contact actions only — no booking or price-setting language", async () => {

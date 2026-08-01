@@ -35,15 +35,18 @@ test("renderTrendingMarketplace stays removed; renderMarketplaceMiniCard still o
   assert.match(miniCard, /data-listing-id="\$\{item\.id\}"/);
 });
 
-test("marketplace landing shows top ten trending listing cards above category tiles", () => {
+test("marketplace landing shows top ten recently-listed cards above category tiles", () => {
+  // Real listings have no honest popularity/trending signal (see
+  // shapeListingSummaryForDisplay in main.js) — this rail is ordered by
+  // genuine createdAt instead, see recentListingItems().
   const picker = extractFunction(main, "renderMarketplacePicker");
-  const railIndex = picker.indexOf('marketplaceListingRail("home.rail.trendingMarketplace"');
+  const railIndex = picker.indexOf('marketplaceListingRail("home.rail.recentlyListed"');
   const gridIndex = picker.indexOf('<div class="explore-hub-grid">');
 
-  assert.ok(railIndex !== -1, "marketplace picker should render a trending rail");
+  assert.ok(railIndex !== -1, "marketplace picker should render a recently-listed rail");
   assert.ok(gridIndex !== -1, "marketplace picker should still render category tiles");
-  assert.ok(railIndex < gridIndex, "trending listings should appear before category tiles");
-  assert.match(picker, /trendingListingItems\(10\)/);
+  assert.ok(railIndex < gridIndex, "recently-listed items should appear before category tiles");
+  assert.match(picker, /recentListingItems\(10\)/);
 });
 
 test("marketplace carousel rails use the dedicated shelf shell", () => {

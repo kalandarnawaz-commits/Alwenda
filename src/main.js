@@ -1,32 +1,21 @@
 import {
   adminStats,
-  alwenBusinessDraft,
-  alwenListingDraft,
-  businesses,
   categories,
   city,
   COMMUNITY_POST_TYPES,
   cityGraph,
   earnToday,
-  feedPosts,
-  helpRequests,
   businessClaims,
   importedBusinesses,
   importSources,
-  listings,
   liveAroundYou,
   livingCitySignals,
   marketplaceCapabilities,
   neighbourhoods,
   NOTIFICATION_FILTERS,
   notifications,
-  offers,
   professionalCategories,
-  profileReviews,
-  reservations,
-  reputationProfile,
-  SEED_CITY_META,
-  serviceProfessionals
+  SEED_CITY_META
 } from "./data/mockData.js?v=vilnius-neighbourhoods-1";
 import { integrations } from "./services/integrationPlaceholders.js";
 import {
@@ -85,6 +74,7 @@ import {
   fetchPublicListings,
   fetchListingById,
   fetchCommunityPosts,
+  createCommunityPost,
   recordLegalAcceptance,
   createModerationReport,
   createPrivacyRequest,
@@ -220,11 +210,10 @@ const state = {
      never renders a false empty state while still loading or after a
      genuine query failure (see refreshOpportunityFeed()). */
   opportunityFeed: { status: "idle", helpRequests: [], listings: [], loadedAt: null },
-  /* Real Supabase data backing the Unified Home Feed's Community source
-     (see HOME_FEED_SOURCE_ADAPTERS.community) — same idle/loading/loaded/
-     error state machine as opportunityFeed above, for the same reason.
-     Community's own page still reads the local feedPosts fixture (see
-     that decision's comment near fetchCommunityPosts' call site). */
+  /* Real Supabase data backing both the Unified Home Feed's Community
+     source (see HOME_FEED_SOURCE_ADAPTERS.community) and Community's own
+     page (renderCommunity()) — same idle/loading/loaded/error state
+     machine as opportunityFeed above, for the same reason. */
   communityFeed: { status: "idle", posts: [], loadedAt: null },
   headerSolid: false,
   quickTranslateOpen: false,
@@ -253,7 +242,6 @@ const state = {
     delivery: "Pickup today",
     boost: "48-hour local boost"
   },
-  selectedBusinessId: null,
   selectedListingId: null,
   /* Full real listing record for a listing not in the local `listings`
      pool (i.e. someone else's published listing, reached from the Home
@@ -314,7 +302,6 @@ const state = {
   userProfile: null,
   reportedPeople: [],
   blockedPeople: [],
-  helpfulPostIds: [],
   savedPostIds: [],
   hiddenPostIds: [],
   mutedTopics: [],
@@ -322,6 +309,7 @@ const state = {
   activePostId: null,
   communityPostDraft: { title: "", body: "", type: "discussion" },
   communityPostSubmitStatus: "idle",
+  communityPostSubmitError: null,
   savedListingIds: [],
   reportedListings: [],
   hireCategory: null,
@@ -531,23 +519,24 @@ function openPublicProfile(dataset) {
 }
 
 /** Looks a person up by the stable id introduced alongside publicProfileAttrs
- * (see mockData.js: sellerId, authorId, review id, pro-<id>) so a public
- * profile URL can be rehydrated after a refresh or a shared link, not just
- * reached by clicking through the app in the same session. Same "no shared
- * person table" caveat as publicProfileAttrs above — each source is checked
- * independently, not merged into one identity. */
+ * (see mockData.js: sellerId, authorId) so a public profile URL can be
+ * rehydrated after a refresh or a shared link, not just reached by
+ * clicking through the app in the same session. Same "no shared person
+ * table" caveat as publicProfileAttrs above — each source is checked
+ * independently, not merged into one identity. No "pro-<id>" branch —
+ * there is no real professional identity concept yet (see renderHire()),
+ * so an old pro-<id> link now honestly resolves to nothing rather than
+ * resurrecting a mock person. Likewise no "review-<id>" branch — the old
+ * mockData.js profileReviews fixture it looked up was never linked to
+ * from anywhere reachable, and real reviews live in the Supabase
+ * profile_reviews table via fetchProfileReviews() (see renderUserProfile()),
+ * not this id-lookup path. */
 function findPersonById(id) {
   if (!id) return null;
-  const pro = serviceProfessionals.find((item) => `pro-${item.id}` === id);
-  if (pro) return { id, name: pro.name, area: pro.area, category: t(pro.categoryKey), rating: pro.rating, reviews: pro.reviews, verified: pro.verified, context: "hire", skills: pro.skills, responseTime: pro.responseTime, price: pro.price, availability: pro.availability, distance: pro.distance };
-  const review = profileReviews.find((item) => item.id === id);
-  if (review) return { id, name: review.author, avatar: review.avatar, context: "review" };
-  const post = feedPosts.find((item) => item.authorId === id);
-  if (post) return { id, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.verified, context: "community" };
-  const listing = listings.find((item) => item.sellerId === id);
+  const post = state.communityFeed.posts.find((item) => item.authorId === id);
+  if (post) return { id, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, category: t((COMMUNITY_POST_TYPE_META[post.type] || COMMUNITY_POST_TYPE_META.discussion).labelKey), verified: post.authorVerified, context: "community" };
+  const listing = myListingsPool.find((item) => item.sellerId === id);
   if (listing) return { id, name: listing.seller, avatar: listing.sellerAvatar, area: listing.area, verified: listing.verifiedSeller, context: "marketplace" };
-  const offer = offers.find((item) => `offer-${item.id}` === id);
-  if (offer) return { id, name: offer.vendor, area: offer.area, context: "marketplace" };
   return null;
 }
 
@@ -1150,7 +1139,6 @@ const DEEP_LINK_VIEWS = new Set([
   "home",
   "explore",
   "marketplace",
-  "listings",
   "listingDetail",
   "create",
   "community",
@@ -1161,12 +1149,8 @@ const DEEP_LINK_VIEWS = new Set([
   "liveOpportunityDetail",
   "events",
   "eventDetail",
-  "businesses",
-  "businessProfile",
   "businessCreate",
   "businessClaim",
-  "offers",
-  "reservations",
   "translate",
   "profile",
   "account",
@@ -1190,7 +1174,7 @@ const DEEP_LINK_VIEWS = new Set([
 /* Views whose deep link needs a companion ?id= to mean anything — read
    from and written to the URL alongside `view` by syncStateFromUrl /
    syncUrlToState below. */
-const ID_LINKED_VIEWS = new Set(["publicProfile", "userProfile", "businessProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
+const ID_LINKED_VIEWS = new Set(["publicProfile", "userProfile", "listingDetail", "businessClaim", "liveOpportunityDetail", "eventDetail"]);
 
 /* Handles are lowercase a-z0-9_ only (mirrors public_profiles_handle_format
    in supabase/migrations/202607240001_profile_social_identity.sql) and a
@@ -1214,7 +1198,6 @@ let lastPushedUrlKey = null;
 function currentDeepLinkId() {
   if (state.activeView === "publicProfile") return state.publicProfile?.id || null;
   if (state.activeView === "userProfile") return state.userProfile?.handle || state.userProfile?.userId || null;
-  if (state.activeView === "businessProfile") return state.selectedBusinessId != null ? String(state.selectedBusinessId) : null;
   if (state.activeView === "listingDetail") return state.selectedListingId != null ? String(state.selectedListingId) : null;
   if (state.activeView === "businessClaim") return state.selectedPlaceId != null ? String(state.selectedPlaceId) : null;
   if (state.activeView === "liveOpportunityDetail") return state.selectedOpportunityId != null ? String(state.selectedOpportunityId) : null;
@@ -1280,7 +1263,6 @@ function syncStateFromUrl() {
   if (!id || !ID_LINKED_VIEWS.has(view)) return;
   if (view === "publicProfile") openPublicProfileById(id);
   else if (view === "userProfile") openUserProfile(id);
-  else if (view === "businessProfile") state.selectedBusinessId = Number(id);
   else if (view === "listingDetail") state.selectedListingId = id;
   else if (view === "businessClaim") state.selectedPlaceId = id;
   else if (view === "liveOpportunityDetail") state.selectedOpportunityId = id;
@@ -1815,16 +1797,13 @@ function appleMapsUrl(item) {
 }
 
 /** Which category-specific quick action(s) apply beyond the universal
- * Directions/Waze/Call/Website row. Kept intentionally small — each one
- * routes to a real, already-existing flow (reservations view, tel:/site
- * links) rather than a new backend that doesn't exist. */
+ * Directions/Waze/Call/Website row. Kept intentionally small — no
+ * reserve/book action exists here since no booking backend exists;
+ * "menu" just links out to the place's own website. */
 function categoryActionsFor(item) {
   const actions = [];
   if (item.category === "Food & Drink") {
     if (item.website) actions.push("menu");
-    actions.push("reserve");
-  } else if (item.category === "Hotels") {
-    actions.push("book");
   } else if (item.category === "Pharmacy" || item.category === "Healthcare") {
     actions.push("hours");
   } else if (item.category === "Public Services") {
@@ -1858,8 +1837,8 @@ function sharePlace(item) {
 }
 
 function sharePost(post) {
-  const title = post.titleKey ? t(post.titleKey) : post.title || "";
-  const text = `${title} — ${post.bodyKey ? t(post.bodyKey) : post.body || ""}`;
+  const title = post.title || "";
+  const text = `${title} — ${post.body || ""}`;
   if (navigator.share) {
     navigator.share({ title, text }).catch(() => {});
     return;
@@ -2212,13 +2191,15 @@ function pharmacySignal() {
 }
 
 /* Events/Jobs/Apartments values are computed from the real underlying
-   collections (EVENTS, listings) on every call — never hardcoded — so the
-   hero tile can never drift out of sync with what its destination screen
-   actually shows, the same discipline already applied to Weather below. */
+   collections (EVENTS, the real Marketplace pool) on every call — never
+   hardcoded — so the hero tile can never drift out of sync with what its
+   destination screen actually shows, the same discipline already applied
+   to Weather below. */
 function currentLivingCitySignals() {
   const eventsNearYouCount = EVENTS.filter((event) => event.outdoor && event.distanceMinutes <= 25).length;
-  const jobsCount = listings.filter((listing) => listing.type === "jobs").length;
-  const rentalsCount = listings.filter((listing) => listing.type === "rentals").length;
+  const listingPool = marketplaceListingPool();
+  const jobsCount = listingPool.filter((listing) => listing.type === "jobs").length;
+  const rentalsCount = listingPool.filter((listing) => listing.type === "rentals").length;
   const base = [
     livingCitySignals[0],
     { ...livingCitySignals[1], value: String(eventsNearYouCount) },
@@ -2839,7 +2820,7 @@ function routeForQuery() {
   if (/(earn|€100|100 today|make money|paid task|contribution points|dog walking|programming|consulting|knowledge sharing)/.test(q)) return "contribute";
   if (/(sell|iphone|bicycle|bike|lost wallet|wallet|apartment|bedroom|under 900|job|vehicle|business for sale)/.test(q)) return "marketplace";
   if (/(claim business)/.test(q)) return "businessClaim";
-  if (/(new italian restaurant|business owner|opening in vilnius)/.test(q)) return "businesses";
+  if (/(new italian restaurant|business owner|opening in vilnius)/.test(q)) return "businessCreate";
   if (/(profile|account|what brings|skills|profession)/.test(q)) return "profile";
   if (/(just moved|moved to|settling|first week|plan my move)/.test(q)) return "home";
   if (/(remind|watch|track|monitor|notify me|tell me when|priority|workspace|alwen)/.test(q)) return "alwen";
@@ -2850,31 +2831,21 @@ function routeForQuery() {
 }
 
 function filteredListings() {
-  return listings.filter((item) => {
+  return marketplaceListingPool().filter((item) => {
     const categoryMatch = state.category === "all" || item.type === state.category;
     const areaMatch = state.area === "All" || item.area === state.area;
     return categoryMatch && areaMatch && matchesQuery(`${listingTitle(item)} ${item.area} ${listingMeta(item)} ${item.status}`);
   }).sort((a, b) => queryScore(`${listingTitle(b)} ${listingTitle(b)} ${listingMeta(b)} ${b.type}`) - queryScore(`${listingTitle(a)} ${listingTitle(a)} ${listingMeta(a)} ${a.type}`));
 }
 
-function listingMovementScore(item) {
-  const popularity = Number.parseInt(String(item.popularity || "").match(/\d+/)?.[0] || "0", 10);
-  const verifiedBoost = item.verifiedSeller ? 8 : 0;
-  const activeBoost = /open|available|hiring|this week|matched/i.test(item.status || "") ? 6 : 0;
-  return popularity + verifiedBoost + activeBoost + Number(item.id || 0) / 1000;
-}
-
-function trendingListingItems(limit = 10) {
-  return [...listings]
-    .sort((a, b) => listingMovementScore(b) - listingMovementScore(a))
+/** Real timestamps only — every real listing carries createdAt (see
+ * shapeListingForDisplay/shapeListingSummaryForDisplay), so "recent" is
+ * always a genuine, verifiable ordering rather than a fabricated
+ * popularity/verified-seller/status heuristic. */
+function recentListingItems(limit = 10) {
+  return [...marketplaceListingPool()]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, limit);
-}
-
-function filteredBusinesses() {
-  return businesses.filter((item) => {
-    const areaMatch = state.area === "All" || item.area === state.area;
-    return areaMatch && matchesQuery(`${item.name} ${item.area} ${item.type} ${item.tagKeys.map((tagKey) => t(tagKey)).join(" ")}`);
-  });
 }
 
 const HAS_PHOTO_STATUSES = new Set(["real", "google", "wikimedia"]);
@@ -2928,40 +2899,10 @@ function filteredImportedBusinesses() {
     .sort(EXPLORE_SORTERS[state.exploreSort] || EXPLORE_SORTERS.nearest);
 }
 
-/** Hire's category chips ("plumber", "IT support") use everyday search
- * words, while each professional's own `category` field bundles two
- * concepts ("Plumbing & repairs"). Substring-match against both the
- * category and the finer-grained skills array so word-stem differences
- * ("plumber" vs "plumbing") still resolve. */
-function hireCategoryMatches(item, chipLabel) {
-  const chipWords = chipLabel.toLowerCase().split(/\s+/).filter(Boolean);
-  const haystackWords = [item.category, ...item.skills].join(" ").toLowerCase().split(/[^a-z]+/).filter(Boolean);
-  return chipWords.some((chipWord) => {
-    const stem = chipWord.slice(0, 5);
-    // The `chipWord.includes(word)` fallback exists for short, meaningful
-    // haystack words (stems shorter than 5 chars don't clear the check
-    // above), but without a length floor it also matches generic short
-    // words that happen to be substrings — e.g. "carpenter" contains
-    // "car", so a mechanic listing "car check" as a skill matched the
-    // Carpenter chip. Require at least 4 letters before trusting it.
-    return haystackWords.some((word) => word.slice(0, 5) === stem || word.includes(chipWord) || (word.length >= 4 && chipWord.includes(word)));
-  });
-}
-
-function filteredProfessionals() {
-  return serviceProfessionals.filter((item) => {
-    const areaMatch = state.area === "All" || item.area === state.area;
-    const categoryMatch = !state.hireCategory || hireCategoryMatches(item, state.hireCategory);
-    return areaMatch && categoryMatch && matchesQuery(`${item.name} ${item.category} ${item.area} ${item.skills.join(" ")} ${item.availability}`);
-  });
-}
-
 function filteredHelpRequests() {
-  return helpRequests.filter((request) => {
+  return helpRequestPool().filter((request) => {
     const areaMatch = state.area === "All" || request.area === state.area;
-    const title = request.title || t(request.titleKey);
-    const status = request.status || t(request.statusKey);
-    return areaMatch && matchesQuery(`${title} ${request.area} ${request.budget || ""} ${status} ${request.quotes.join(" ")}`);
+    return areaMatch && matchesQuery(`${request.title} ${request.area} ${request.budget || ""} ${request.status}`);
   });
 }
 
@@ -2987,24 +2928,10 @@ function topMatches(limit = 4, context = "home") {
       : [];
   const helpMatches = filteredHelpRequests().map((item) => ({
     kind: t("entity.helpRequest"),
-    title: item.title || t(item.titleKey),
-    meta: `${item.area} · ${item.budget || item.urgency} · ${item.status || t(item.statusKey)}`,
+    title: item.title,
+    meta: `${item.area} · ${item.budget || item.urgency} · ${item.status}`,
     action: "needHelp",
     tileIcon: "help"
-  }));
-  const proMatches = filteredProfessionals().map((item) => ({
-    kind: t("entity.professional"),
-    title: item.name,
-    meta: `${t(item.categoryKey)} · ★ ${item.rating} · ${item.availability}`,
-    action: "hire",
-    initials: initials(item.name)
-  }));
-  const placeMatches = filteredBusinesses().map((item) => ({
-    kind: t("entity.place"),
-    title: item.name,
-    meta: `${item.area} · ★ ${item.rating} · ${item.hours}`,
-    action: "reservations",
-    image: item.image
   }));
   const importedMatches = filteredImportedBusinesses().map((item) => {
     const distance = formatDistance(distanceFromCenter(item));
@@ -3025,30 +2952,20 @@ function topMatches(limit = 4, context = "home") {
     action: "marketplace",
     image: item.image
   }));
-  const offerMatches = offers.filter((offer) => matchesQuery(`${offer.vendor} ${t(offer.titleKey)} ${offer.area}`)).map((offer) => ({
-    kind: t("entity.offer"),
-    title: t(offer.titleKey),
-    meta: `${offer.vendor} · ${offer.value}`,
-    action: "offers",
-    tileIcon: "tag"
-  }));
-
   const ordered =
     routed === "hire"
-      ? [...proMatches, ...helpMatches, ...placeMatches, ...listingMatches]
+      ? [...helpMatches, ...listingMatches]
       : routed === "marketplace"
-        ? [...listingMatches, ...offerMatches, ...proMatches, ...helpMatches, ...placeMatches, ...importedMatches]
+        ? [...listingMatches, ...helpMatches, ...importedMatches]
         : routed === "translate"
-          ? [...translationMatches, ...placeMatches, ...importedMatches]
+          ? [...translationMatches, ...importedMatches]
           : routed === "explore"
-            ? [...importedMatches, ...offerMatches, ...listingMatches, ...proMatches, ...helpMatches]
+            ? [...importedMatches, ...listingMatches, ...helpMatches]
             : routed === "community"
-              ? [...helpMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches, ...offerMatches]
+              ? [...helpMatches, ...listingMatches, ...importedMatches]
               : routed === "contribute"
-                ? [...helpMatches, ...offerMatches, ...proMatches, ...listingMatches, ...placeMatches, ...importedMatches]
-                : routed === "reservations" || routed === "businesses"
-                  ? [...placeMatches, ...importedMatches, ...offerMatches, ...proMatches, ...listingMatches, ...helpMatches]
-                  : [...placeMatches, ...importedMatches, ...proMatches, ...listingMatches, ...helpMatches, ...offerMatches];
+                ? [...helpMatches, ...listingMatches, ...importedMatches]
+                : [...importedMatches, ...listingMatches, ...helpMatches];
 
   return ordered.slice(0, limit);
 }
@@ -3774,14 +3691,9 @@ function renderView() {
     events: renderEvents,
     eventDetail: renderEventDetail,
     createListing: renderCreateListingForm,
-    listings: renderListings,
     listingDetail: renderListingDetail,
-    businesses: renderBusinesses,
     businessCreate: renderBusinessCreate,
-    businessProfile: renderBusinessProfile,
     businessClaim: renderBusinessClaim,
-    offers: renderOffers,
-    reservations: renderReservations,
     translate: renderTranslation,
     // "profile" is the entry point clicked in the app chrome (header
     // avatar, "Sign in" prompts, Contribute's identity card) — for a
@@ -3847,12 +3759,11 @@ function alwenMessageId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** place_search/hire_service never call OpenAI — they search real
- * Explore/Hire data via the exact filters those screens already use.
- * filteredImportedBusinesses()/filteredProfessionals() read global
- * state.* and take no args, so the search state is saved and restored
- * around the call — an Alwen search must never permanently change what
- * the user sees when they later open Explore/Hire themselves. */
+/** place_search never calls OpenAI — it searches real Explore data via
+ * the exact filters that screen already uses. filteredImportedBusinesses()
+ * reads global state.* and takes no args, so the search state is saved
+ * and restored around the call — an Alwen search must never permanently
+ * change what the user sees when they later open Explore themselves. */
 /** Additional deterministic signal on top of the free-text query match
  * below (Part 8) — narrows Explore's own CITY_ENTITY_CATEGORIES taxonomy
  * via CATEGORY_CONFIG's cityEntityCategory mapping when the query
@@ -3899,30 +3810,17 @@ function searchAlwenPlaces(rawQuery) {
   }
 }
 
-/** Same narrowing idea as exploreCategoryForQuery, mapped into Hire's
- * professionalCategories values via CATEGORY_CONFIG.hireCategoryValues
- * instead. Only the first mapped value is used — hireCategoryMatches/
- * filteredProfessionals take one category at a time, and free-text
- * state.query still does the actual matching regardless. */
-function hireCategoryForQuery(rawQuery) {
-  const categoryId = classifyTextToCategory(rawQuery);
-  if (!categoryId) return null;
-  return categoryConfigFor(categoryId).hireCategoryValues[0] || null;
-}
-
-function searchAlwenProfessionals(rawQuery) {
-  const previousQuery = state.query;
-  const previousArea = state.area;
-  const previousCategory = state.hireCategory;
-  try {
-    state.query = rawQuery;
-    state.hireCategory = hireCategoryForQuery(rawQuery);
-    return filteredProfessionals().slice(0, 5);
-  } finally {
-    state.query = previousQuery;
-    state.area = previousArea;
-    state.hireCategory = previousCategory;
-  }
+/** hire_service is a real, deterministic intent classification (see
+ * ALWEN_INTENTS.HIRE_SERVICE/classifyAlwenIntent) — a query like "I need
+ * a plumber" is genuinely routed here, not misrouted into general chat.
+ * But there is no real professional-listing concept in the schema yet
+ * (see renderHire()), so this always honestly returns zero results;
+ * submitAlwenStructuredSearchTurn's existing !results.length branch
+ * already renders that as the honest "no results" message plus the
+ * real "see more in Hire" nudge (renderAlwenContextualActions), never a
+ * fabricated card. */
+function searchAlwenProfessionals() {
+  return [];
 }
 
 function alwenLanguageLabel(code) {
@@ -3933,8 +3831,11 @@ function alwenLanguageLabel(code) {
 
 /** The 3 example prompts shown before the user's first turn — each is a
  * real capability this branch actually implements (translation, live
- * conversation mode, real Explore search, real Hire search), never a
- * placeholder for something unbuilt. */
+ * conversation mode, real Explore search, real hire_service intent
+ * routing), never a placeholder for something unbuilt. The Hire example
+ * genuinely routes through classifyAlwenIntent/submitAlwenStructuredSearchTurn
+ * exactly as typed — it just always finds zero results honestly, since
+ * there is no real professional-listing concept yet (see renderHire()). */
 const ALWEN_CONVERSATION_EXAMPLES = ["alwen.examplePlace", "alwen.exampleHire", "alwen.exampleTranslate", "alwen.exampleLiveTranslate"];
 
 /** Round 2, Part 5 — proactive category starters shown before the user
@@ -4045,12 +3946,11 @@ function renderAlwenStructuredResultMessage(message) {
       </div>
     `;
   }
-  const cards =
-    message.resultType === "place"
-      ? items.map(renderPlaceCardCompact).join("")
-      : message.resultType === "professional"
-        ? items.map(renderProfessional).join("")
-        : "";
+  // resultType "professional" never reaches here with a non-empty items
+  // array — there is no real professional-listing concept yet (see
+  // renderHire()), so searchAlwenProfessionals() always returns [],
+  // which the !items.length branch above already catches honestly.
+  const cards = message.resultType === "place" ? items.map(renderPlaceCardCompact).join("") : "";
   return `
     <div class="alwen-message alwen-message-structured">
       ${message.text ? `<p class="alwen-structured-intro">${escapeHtml(message.text)}</p>` : ""}
@@ -4117,16 +4017,12 @@ function renderAlwenContextualActions(message) {
       </div>
     `;
   }
+  // resultType "professional" never has a result item — there is no real
+  // professional-listing concept yet (see renderHire()), so this is
+  // always the honest "no match, see Hire" nudge, never the
+  // view-profile/message actions a real match would otherwise get.
   if (message.messageType === "structured_result" && message.resultType === "professional") {
-    const item = (message.results || [])[0];
-    if (!item) return `<div class="alwen-contextual-actions"><button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button></div>`;
-    const profileAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire" });
-    return `
-      <div class="alwen-contextual-actions">
-        <button type="button" ${profileAttrs} data-alwen-contextual-action="viewProfile" data-alwen-contextual-result-type="professional">${t("common.viewProfile")}</button>
-        <button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button>
-      </div>
-    `;
+    return `<div class="alwen-contextual-actions"><button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button></div>`;
   }
   return "";
 }
@@ -4552,9 +4448,12 @@ async function clearActiveAlwenConversation() {
 /** Reconstructs one persisted alwen_messages row into the shape the
  * conversation timeline renders. Structured-result rows only ever stored
  * ids (see persistAlwenStructuredSearchTurn) — this re-hydrates them
- * against the live in-memory place/professional lists on every load, so a
- * reopened conversation always shows current data, never a frozen
- * snapshot (a business could have changed since the row was written). */
+ * against the live in-memory place list on every load, so a reopened
+ * conversation always shows current data, never a frozen snapshot (a
+ * business could have changed since the row was written). A historical
+ * "professional" row re-hydrates against no source (there is no real
+ * professional-listing concept — see renderHire()) and so honestly comes
+ * back empty, rather than resurrecting a since-deleted mock person. */
 function mapAlwenMessageRow(row) {
   const base = { id: String(row.id), conversationId: row.conversation_id, role: row.role, messageType: row.message_type || "text", createdAt: row.created_at, status: "success" };
   if (row.message_type === "translation" && row.role === "assistant") {
@@ -4568,7 +4467,7 @@ function mapAlwenMessageRow(row) {
   }
   if (row.message_type === "structured_result" && row.role === "assistant") {
     const ids = Array.isArray(row.result_payload?.ids) ? row.result_payload.ids : [];
-    const source = row.result_type === "place" ? importedBusinesses : row.result_type === "professional" ? serviceProfessionals : [];
+    const source = row.result_type === "place" ? importedBusinesses : [];
     const results = ids.map((id) => source.find((item) => String(item.id) === String(id))).filter(Boolean);
     return { ...base, resultType: row.result_type, results, text: results.length ? "" : t("alwen.noResultsFound") };
   }
@@ -4767,7 +4666,6 @@ const HOME_INTENT_CHIPS = [
   { id: "needHelp", labelKey: "home.intent.intentNeedHelp", view: "community" },
   { id: "findWork", labelKey: "home.intent.intentEarnNearby", view: "contribute" },
   { id: "emergency", labelKey: "home.intent.intentEmergency", view: "explore", seeAllCategory: "Pharmacy" },
-  { id: "nearbyOffers", labelKey: "home.intent.intentNearbyOffers", view: "offers" },
   { id: "plumber", labelKey: "home.intent.intentNeedPlumber", view: "hire" },
   { id: "taxi", labelKey: "home.intent.intentNeedTaxi", view: "explore", seeAllCategory: "Transport" }
 ];
@@ -4793,7 +4691,6 @@ function selectHomeIntentChips(count = 5) {
     emergency: isBadWeather ? 1 : 0,
     weekendPlans: isWeekend ? 1 : 0,
     findWork: hasEarnInventory ? 1 : 0,
-    nearbyOffers: isSignedIn ? 1 : 0,
     taxi: daySuffix === "Evening" ? 1 : 0,
     translate: !isSignedIn ? 1 : 0
   };
@@ -5239,8 +5136,8 @@ function renderHomeAiComposer() {
 }
 
 /** Shared by every non-Home context (create/community/explore/marketplace/
- * contribute/hire/businesses/reservations) — Home has its own dedicated
- * renderHomeAiComposer() above and never calls this. */
+ * contribute/hire) — Home has its own dedicated renderHomeAiComposer()
+ * above and never calls this. */
 function renderAiSearch(context) {
   // Community and Explore each get their own contextual placeholder
   // immediately (the rotation in bindAiSearchPlaceholderRotation() takes
@@ -5474,9 +5371,7 @@ function renderQuickTranslateDock() {
 function renderMatch(match) {
   const visual = match.image
     ? `<img src="${match.image}" alt="" loading="lazy" onerror="this.closest('.match-tile-photo').classList.add('is-fallback')" />`
-    : match.initials
-      ? `<span class="match-tile-initials">${match.initials}</span>`
-      : `<span class="match-tile-fallback-icon">${icon(match.tileIcon || "pin")}</span>`;
+    : `<span class="match-tile-fallback-icon">${icon(match.tileIcon || "pin")}</span>`;
   return `
     <article class="match-row" data-view="${match.action}">
       <div class="match-tile-photo ${match.image ? "" : "is-fallback"}">${visual}</div>
@@ -5490,27 +5385,19 @@ function renderMatch(match) {
   `;
 }
 
-/* type meta drives the post-type label/emoji shown on every card, the
- * filter chips, and which primary action a card offers (the action
- * itself is one of three real, already-existing behaviours — save,
- * share, or reply-in-detail-sheet — not nine bespoke flows; see
- * COMMUNITY_PRIMARY_ACTION_KIND below). */
+/* type meta drives the post-type label/emoji shown on every card and the
+ * filter chips, plus the reply-composer placeholder in the post-detail
+ * sheet (actionKey). */
 const COMMUNITY_POST_TYPE_META = {
-  question: { emoji: "❓", labelKey: "community.postType.question", actionKey: "community.postAction.question" },
-  recommendation: { emoji: "⭐", labelKey: "community.postType.recommendation", actionKey: "community.postAction.recommendation" },
-  alert: { emoji: "🚨", labelKey: "community.postType.alert", actionKey: "community.postAction.alert" },
-  offer: { emoji: "🎁", labelKey: "community.postType.offer", actionKey: "community.postAction.offer" },
-  help: { emoji: "🤝", labelKey: "community.postType.help", actionKey: "community.postAction.help" },
-  lostFound: { emoji: "🐾", labelKey: "community.postType.lostFound", actionKey: "community.postAction.lostFound" },
-  event: { emoji: "📅", labelKey: "community.postType.event", actionKey: "community.postAction.event" },
-  update: { emoji: "📣", labelKey: "community.postType.update", actionKey: "community.postAction.update" },
-  discussion: { emoji: "💬", labelKey: "community.postType.discussion", actionKey: "community.postAction.discussion" }
-};
-
-const COMMUNITY_PRIMARY_ACTION_KIND = {
-  recommendation: "save",
-  alert: "share"
-  // every other type falls back to "reply" (opens the post-detail sheet)
+  question: { emoji: "❓", labelKey: "community.postType.question" },
+  recommendation: { emoji: "⭐", labelKey: "community.postType.recommendation" },
+  alert: { emoji: "🚨", labelKey: "community.postType.alert" },
+  offer: { emoji: "🎁", labelKey: "community.postType.offer" },
+  help: { emoji: "🤝", labelKey: "community.postType.help" },
+  lostFound: { emoji: "🐾", labelKey: "community.postType.lostFound" },
+  event: { emoji: "📅", labelKey: "community.postType.event" },
+  update: { emoji: "📣", labelKey: "community.postType.update" },
+  discussion: { emoji: "💬", labelKey: "community.postType.discussion" }
 };
 
 const COMMUNITY_FILTER_META = [
@@ -5533,89 +5420,89 @@ function communityPostTypeMeta(type) {
  * one place rather than three separate checks scattered through the
  * render path. */
 function visibleFeedPosts() {
-  return feedPosts.filter(
-    (post) => !state.hiddenPostIds.includes(String(post.id)) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.author)
+  return state.communityFeed.posts.filter(
+    (post) => !state.hiddenPostIds.includes(String(post.id)) && !state.mutedTopics.includes(post.type) && !state.blockedPeople.includes(post.authorName)
   );
 }
 
 /* "For you" and "Nearby" both show everything — there's no real
- * personalization or geo-distance signal in this mock data to
- * meaningfully tell them apart yet, so faking a difference between them
- * would be exactly the kind of dishonest signal the rest of this
- * redesign is trying to remove. Every other filter is a genuine
- * post.type match. */
+ * personalization or geo-distance signal on a real post to meaningfully
+ * tell them apart yet, so faking a difference between them would be
+ * exactly the kind of dishonest signal this migration is removing. Every
+ * other filter is a genuine post.type match. */
 function filteredCommunityPosts() {
   const visible = visibleFeedPosts();
   if (state.communityFilter === "forYou" || state.communityFilter === "nearby") return visible;
   return visible.filter((post) => post.type === state.communityFilter);
 }
 
-function renderPulse(post) {
-  const isHelpful = state.helpfulPostIds.includes(String(post.id));
-  const isSaved = state.savedPostIds.includes(String(post.id));
-  const helpfulCount = (post.helpful || 0) + (isHelpful ? 1 : 0);
-  const savesCount = (post.saves || 0) + (isSaved ? 1 : 0);
+/** The one real-post card — every fabricated per-type primary action
+ * (save/share/reply) and every fabricated engagement count (helpful/
+ * replies/saves — none backed by a durable write path, see
+ * HOME_FEED_SOURCE_ADAPTERS.community) is gone.
+ * Only Open (the real post-detail sheet) and Share remain. The "⋯"
+ * overflow menu stays — hide/mute/report/block are genuine client-side
+ * moderation prefs, not engagement numbers, so they're not in scope for
+ * this honesty pass. */
+function renderCommunityPostCard(post) {
   const meta = communityPostTypeMeta(post.type);
-  const primaryKind = COMMUNITY_PRIMARY_ACTION_KIND[post.type] || "reply";
-  const primaryAttrs =
-    primaryKind === "save"
-      ? `data-action="toggle-post-save" data-post-id="${post.id}"`
-      : primaryKind === "share"
-        ? `data-action="share-post" data-post-id="${post.id}"`
-        : `data-action="open-post-detail" data-post-id="${post.id}"`;
+  const postedLabel = post.createdAt ? formatDate(post.createdAt, { dateStyle: "medium" }) : "";
   return `
     <article class="pulse-card visual-pulse-card social-post-card type-${post.type}" data-post-id="${post.id}">
       <div class="pulse-card-header">
-        <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, category: t(meta.labelKey), verified: post.verified, context: "community" })}>
-          <img class="post-avatar" src="${post.avatar || reputationProfile.portrait}" alt="" />
+        <div class="pulse-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, category: t(meta.labelKey), verified: post.authorVerified, context: "community" })}>
+          ${post.authorAvatar ? `<img class="post-avatar" src="${escapeHtml(post.authorAvatar)}" alt="" />` : `<span class="post-avatar post-avatar-fallback">${icon("profile")}</span>`}
           <div class="pulse-author-copy">
-            <span class="pulse-author-name">${escapeHtml(post.author)}${post.verified ? verifiedCheck(t("messages.verified")) : ""}</span>
-            <span class="pulse-meta-line">${escapeHtml(post.area)} · ${escapeHtml(post.time)}</span>
+            <span class="pulse-author-name">${escapeHtml(post.authorName)}${post.authorVerified ? verifiedCheck(t("messages.verified")) : ""}</span>
+            <span class="pulse-meta-line">${joinNonEmpty([escapeHtml(post.neighbourhood), postedLabel])}</span>
           </div>
         </div>
         <span class="post-type-label type-${post.type}">${meta.emoji} ${t(meta.labelKey)}</span>
         <button type="button" class="pulse-overflow" data-action="open-post-actions" data-post-id="${post.id}" aria-label="${t("community.postActionsTitle")}">⋯</button>
       </div>
-      ${post.type === "alert"
-        ? `
-          <div class="pulse-alert-context">
-            <span class="${post.active ? "is-active" : "is-resolved"}">${post.active ? t("community.alertActive") : t("community.alertResolved")}</span>
-            ${post.verified ? `<span class="pulse-alert-source">${t("messages.verified")} · ${escapeHtml(post.author)}</span>` : ""}
-          </div>
-        `
-        : ""}
-      ${post.image ? `<div class="pulse-photo" style="background-image: url('${post.image}')"></div>` : ""}
+      ${post.mediaUrl ? `<div class="pulse-photo" style="background-image: url('${post.mediaUrl}')"></div>` : ""}
       <div class="pulse-content">
-        <h3>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h3>
-        <p>${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
-        ${post.alwenSummaryKey ? `<div class="post-alwen-summary">${icon("spark")}<span>${t(post.alwenSummaryKey)}</span></div>` : ""}
-        <div class="tag-row">${(post.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        <h3>${escapeHtml(post.title)}</h3>
+        <p>${escapeHtml(post.body)}</p>
       </div>
       <div class="post-actions">
-        <button type="button" class="post-primary-action" ${primaryAttrs}>${t(meta.actionKey)}</button>
-        <button type="button" class="post-icon-action ${isHelpful ? "is-active" : ""}" data-action="toggle-helpful" data-post-id="${post.id}" aria-label="${t("common.helpful")}">${icon("star")}<span>${helpfulCount}</span></button>
-        <button type="button" class="post-icon-action" data-action="open-post-detail" data-post-id="${post.id}" aria-label="${t("common.comments")}">${icon("message")}<span>${post.replies || 0}</span></button>
-        <button type="button" class="post-icon-action ${isSaved ? "is-active" : ""}" data-action="toggle-post-save" data-post-id="${post.id}" aria-label="${t("common.favourite")}">${icon("heart")}<span>${savesCount}</span></button>
+        <button type="button" class="post-primary-action" data-action="open-post-detail" data-post-id="${post.id}">${t("common.viewDetails")}</button>
+        <button type="button" class="post-icon-action" data-action="share-post" data-post-id="${post.id}" aria-label="${t("common.share")}">${icon("arrow")}<span>${t("common.share")}</span></button>
       </div>
     </article>
   `;
 }
 
+/** A category filter yielding nothing is a different situation from a
+ * genuinely empty production feed — the former just needs a small
+ * in-context nudge (still filtered, try another chip), the latter is a
+ * brand-new pilot with zero real posts and gets the same premium
+ * renderEmptyState() + Create Post CTA treatment as Marketplace's
+ * zero-listings state. */
 function renderCommunityFeedEmptyState() {
   const isFiltered = state.communityFilter !== "forYou" && state.communityFilter !== "nearby";
+  if (isFiltered) {
+    return `
+      <div class="notification-empty-state">
+        <span class="notification-empty-icon" aria-hidden="true">${icon("people")}</span>
+        <h3>${t("community.emptyFilterTitle")}</h3>
+        <p>${t("community.emptyFilterHint")}</p>
+      </div>
+    `;
+  }
   return `
-    <div class="notification-empty-state">
-      <span class="notification-empty-icon" aria-hidden="true">${icon("people")}</span>
-      <h3>${isFiltered ? t("community.emptyFilterTitle") : t("community.emptyFeedTitle")}</h3>
-      <p>${isFiltered ? t("community.emptyFilterHint") : t("community.emptyFeedHint")}</p>
+    ${renderEmptyState(t("community.emptyFeedTitle"), "people")}
+    <div class="opportunity-post-cta">
+      <p>${t("community.emptyFeedHint")}</p>
+      <button type="button" data-sheet="communityComposer">${t("community.createPost")}</button>
     </div>
   `;
 }
 
 function renderCommunitySignalStrip() {
   const needHelpCount = filteredHelpRequests().length;
-  const newPostsCount = feedPosts.length;
-  const alertsCount = feedPosts.filter((post) => post.type === "alert" && post.active).length;
+  const newPostsCount = state.communityFeed.posts.length;
+  const alertsCount = state.communityFeed.posts.filter((post) => post.type === "alert").length;
   return `
     <div class="community-signal-strip">
       <span class="community-signal-label">${t("community.aroundYouToday")}</span>
@@ -5687,6 +5574,7 @@ function renderCommunityComposerSheet() {
     `;
   }
   const draft = state.communityPostDraft;
+  const isSubmitting = state.communityPostSubmitStatus === "loading";
   return `
     <div class="sheet-backdrop" data-sheet-close="true">
       <section class="selection-sheet community-composer-sheet" aria-label="${t("community.createPost")}">
@@ -5711,7 +5599,8 @@ function renderCommunityComposerSheet() {
             <span>${t("community.composerBodyLabel")}</span>
             <textarea name="body" placeholder="${t("community.composerBodyPlaceholder")}" required>${escapeHtml(draft.body)}</textarea>
           </label>
-          <button type="submit" class="auth-primary-button">${t("community.composerSubmit")}</button>
+          ${state.communityPostSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.communityPostSubmitError)}</p>` : ""}
+          <button type="submit" class="auth-primary-button" ${isSubmitting ? "disabled" : ""}>${isSubmitting ? t("community.composerSubmitting") : t("community.composerSubmit")}</button>
         </form>
       </section>
     </div>
@@ -5721,8 +5610,8 @@ function renderCommunityComposerSheet() {
 function renderPostActionsSheet() {
   const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
-  const isReported = state.reportedPeople.includes(post.author);
-  const isBlocked = state.blockedPeople.includes(post.author);
+  const isReported = state.reportedPeople.includes(post.authorName);
+  const isBlocked = state.blockedPeople.includes(post.authorName);
   const isHidden = state.hiddenPostIds.includes(String(post.id));
   const isMuted = state.mutedTopics.includes(post.type);
   return `
@@ -5746,12 +5635,14 @@ function renderPostActionsSheet() {
   `;
 }
 
-/* The only place a post's full text + replies are shown together —
- * "Answer"/"Offer help"/"I've seen this"/"Join discussion"/"View" all
- * open this same sheet (see COMMUNITY_PRIMARY_ACTION_KIND), since the
- * underlying mechanic for all of them is the same: read the post, reply
- * to it. Replies are a flat list, not threaded — proportionate to a
- * feed that has no comment system anywhere else in the app yet. */
+/* The full-text destination "Open" leads to. There is no real comment/
+ * reply system backing Community posts yet (see the plan's own deferred
+ * "real peer-to-peer messaging" follow-up) — an earlier version of this
+ * sheet let a reply be typed in and pushed straight into an in-memory,
+ * non-durable counter, which is exactly the fabricated engagement this
+ * honesty pass removes. Only real fields (title/body/author) are shown;
+ * Share is the one real action available here, matching the card's own
+ * Open+Share restriction. */
 function renderPostDetailSheet() {
   const post = findCommunityPostById(state.activePostId);
   if (!post) return "";
@@ -5763,27 +5654,12 @@ function renderPostDetailSheet() {
         <div class="sheet-title">
           <div>
             <p class="eyebrow">${meta.emoji} ${t(meta.labelKey)}</p>
-            <h2>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</h2>
+            <h2>${escapeHtml(post.title || "")}</h2>
           </div>
           <button data-sheet-close="true" aria-label="${t("common.close")}">×</button>
         </div>
-        <p class="post-detail-body">${post.bodyKey ? t(post.bodyKey) : escapeHtml(post.body || "")}</p>
-        <div class="post-detail-replies">
-          ${(post.replyList || [])
-            .map(
-              (reply) => `
-                <div class="post-detail-reply">
-                  <strong>${escapeHtml(reply.author)}</strong>
-                  <p>${escapeHtml(reply.text)}</p>
-                </div>
-              `
-            )
-            .join("") || `<p class="post-detail-no-replies">${t("community.emptyFeedHint")}</p>`}
-        </div>
-        <form class="post-detail-composer" data-action="reply-to-post" data-post-id="${post.id}">
-          <input type="text" name="reply" placeholder="${t(meta.actionKey)}…" aria-label="${t(meta.actionKey)}" autocomplete="off" />
-          <button type="submit">${t("messages.send")}</button>
-        </form>
+        <p class="post-detail-body">${escapeHtml(post.body || "")}</p>
+        <button type="button" class="post-icon-action" data-action="share-post" data-post-id="${post.id}" aria-label="${t("common.share")}">${icon("arrow")}<span>${t("common.share")}</span></button>
       </section>
     </div>
   `;
@@ -5843,27 +5719,29 @@ function renderCreate() {
           `).join("")}
         </div>
       </div>
-      ${renderAlwenListingCreator()}
     </section>
   `;
 }
 
 function renderCommunityRail() {
-  const trending = [...visibleFeedPosts()].sort((a, b) => (b.helpful || 0) - (a.helpful || 0)).slice(0, 3);
-  const activeAlerts = visibleFeedPosts().filter((post) => post.type === "alert" && post.active).slice(0, 3);
+  // visibleFeedPosts() is already recency-ordered (fetchCommunityPosts
+  // orders by created_at desc) — real posts have no popularity signal to
+  // sort "trending" by, so recency is the one honest ordering left.
+  const recent = visibleFeedPosts().slice(0, 3);
+  const alerts = visibleFeedPosts().filter((post) => post.type === "alert").slice(0, 3);
   const suggestedPeople = [...new Map(visibleFeedPosts().map((post) => [post.authorId, post])).values()].slice(0, 3);
   return `
     <aside class="community-rail">
       <div class="notification-rail-card">
         <h3>${t("community.trendingNearby")}</h3>
-        ${trending.length
-          ? `<ul class="notification-rail-list">${trending.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+        ${recent.length
+          ? `<ul class="notification-rail-list">${recent.map((post) => `<li>${escapeHtml(post.title)}</li>`).join("")}</ul>`
           : `<p class="notification-rail-empty">${t("community.emptyFeedHint")}</p>`}
       </div>
       <div class="notification-rail-card">
         <h3>${t("community.alertsChip")}</h3>
-        ${activeAlerts.length
-          ? `<ul class="notification-rail-list">${activeAlerts.map((post) => `<li>${post.titleKey ? t(post.titleKey) : escapeHtml(post.title || "")}</li>`).join("")}</ul>`
+        ${alerts.length
+          ? `<ul class="notification-rail-list">${alerts.map((post) => `<li>${escapeHtml(post.title)}</li>`).join("")}</ul>`
           : `<p class="notification-rail-empty">${t("community.alertResolved")}</p>`}
       </div>
       <div class="notification-rail-card">
@@ -5872,9 +5750,9 @@ function renderCommunityRail() {
           ${suggestedPeople
             .map(
               (post) => `
-                <li role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.author, avatar: post.avatar || reputationProfile.portrait, area: post.area, verified: post.verified, context: "community" })}>
-                  <img src="${post.avatar || reputationProfile.portrait}" alt="" />
-                  <span>${escapeHtml(post.author)}<small>${escapeHtml(post.area)}</small></span>
+                <li role="button" tabindex="0" ${publicProfileAttrs({ id: post.authorId, name: post.authorName, avatar: post.authorAvatar, area: post.neighbourhood, verified: post.authorVerified, context: "community" })}>
+                  ${post.authorAvatar ? `<img src="${escapeHtml(post.authorAvatar)}" alt="" />` : `<span class="post-avatar post-avatar-fallback">${icon("profile")}</span>`}
+                  <span>${escapeHtml(post.authorName)}<small>${escapeHtml(post.neighbourhood)}</small></span>
                 </li>
               `
             )
@@ -5895,20 +5773,51 @@ function renderCommunityRail() {
 }
 
 function renderCommunity() {
+  if (state.communityFeed.status === "idle") refreshCommunityFeed();
+  // This page's own embedded "Live Requests" preview reads
+  // filteredHelpRequests(), which is now real (state.opportunityFeed) —
+  // same idle-guard Need Help/Marketplace already use, so landing here
+  // directly (e.g. a direct link) doesn't leave that preview silently
+  // empty for the rest of the session.
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+
+  const hero = `
+    <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
+      <div class="city-hero-copy">
+        <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
+        <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
+        <p>${t("community.communityHeroSubtitle")}</p>
+      </div>
+      <div class="community-header-actions">
+        <button type="button" class="community-header-primary" data-sheet="communityComposer">${t("community.createPost")}</button>
+        <button type="button" class="community-header-secondary" data-alwen-toggle>${t("community.askAlwen")}</button>
+      </div>
+    </section>
+  `;
+
+  if (state.communityFeed.status === "loading") {
+    return `
+      <section class="section-shell community-shell">
+        ${hero}
+        <div class="profile-listing-grid-loading" aria-busy="true"></div>
+      </section>
+    `;
+  }
+
+  if (state.communityFeed.status === "error") {
+    return `
+      <section class="section-shell community-shell">
+        ${hero}
+        ${renderEmptyState(t("opportunities.loadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-community-feed">${t("alwen.alwenChatRetry")}</button>
+      </section>
+    `;
+  }
+
   const posts = filteredCommunityPosts();
   return `
     <section class="section-shell community-shell">
-      <section class="city-hero page-hero community-hero-photo community-header-compact" aria-labelledby="community-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.community")} · ${currentAreaLabel()}</p>
-          <h1 id="community-hero-title">${t("community.communityHeroTitle")}</h1>
-          <p>${t("community.communityHeroSubtitle")}</p>
-        </div>
-        <div class="community-header-actions">
-          <button type="button" class="community-header-primary" data-sheet="communityComposer">${t("community.createPost")}</button>
-          <button type="button" class="community-header-secondary" data-alwen-toggle>${t("community.askAlwen")}</button>
-        </div>
-      </section>
+      ${hero}
       <div class="community-layout">
         <div class="community-main">
           ${renderAiSearch("community")}
@@ -5916,7 +5825,7 @@ function renderCommunity() {
           ${renderCommunitySignalStrip()}
           ${renderCommunityFilterRow()}
           <div class="pulse-list">
-            ${posts.length ? posts.map(renderPulse).join("") : renderCommunityFeedEmptyState()}
+            ${posts.length ? posts.map(renderCommunityPostCard).join("") : renderCommunityFeedEmptyState()}
           </div>
           ${posts.length ? `<p class="community-end-of-feed">${t("community.endOfFeed")}</p>` : ""}
           ${/* Community's own feed and stats are the neighbourhood's actual
@@ -6173,7 +6082,7 @@ function renderMarketplaceMiniCard(item) {
   const isSaved = state.savedListingIds.includes(String(item.id));
   return `
     <article class="market-mini-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0" aria-label="${escapeHtml(`${listingTitle(item)} ${item.price}`)}">
-      <div class="card-photo" style="background-image: url('${item.image}')"></div>
+      <div class="card-photo ${item.image ? "" : "listing-photo-placeholder"}" ${item.image ? `style="background-image: url('${item.image}')"` : ""}>${!item.image ? icon("tag") : ""}</div>
       <button type="button" class="mini-save ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       <span>${categoryLabel(item.type)}</span>
       <h3>${listingTitle(item)}</h3>
@@ -6197,37 +6106,25 @@ function marketplaceListingRail(titleKey, hintKey, items) {
   );
 }
 
+/** Real listings have no genuine popularity/verified-seller/distance/
+ * open-now signal (see shapeListingSummaryForDisplay) — this used to
+ * curate 6 rails from those fields, which would now either be empty or
+ * fabricated for every real row. createdAt is the one signal every real
+ * listing genuinely has, so "Recently Listed" is the only rail left. */
 function renderMarketplaceCollections(items) {
   if (!items.length) return "";
-  const parseCount = (value) => Number.parseInt(String(value).match(/\d+/)?.[0] ?? "0", 10);
-  const parseDistance = (value) => (value === "Remote" ? Infinity : Number.parseFloat(value) || Infinity);
-  const byId = (a, b) => b.id - a.id;
-
-  const trending = [...items].sort((a, b) => parseCount(b.popularity) - parseCount(a.popularity)).slice(0, 6);
-  const recentlyListed = [...items].sort(byId).slice(0, 6);
-  const bestRated = items.filter((item) => item.verifiedSeller).slice(0, 6);
-  const nearby = [...items].sort((a, b) => parseDistance(a.distance) - parseDistance(b.distance)).slice(0, 6);
-  const openNow = items.filter((item) => /open|available|hiring|this week/i.test(item.status)).slice(0, 6);
-  const recommended = [...items].sort((a, b) => byId(a, b)).reverse().slice(0, 6);
-
-  return `
-    ${marketplaceListingRail("home.rail.trendingToday", "home.rail.trendingTodayHint", trending)}
-    ${marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentlyListed)}
-    ${marketplaceListingRail("home.rail.bestRated", "home.rail.bestRatedHint", bestRated)}
-    ${marketplaceListingRail("home.rail.nearbyListings", "home.rail.nearbyListingsHint", nearby)}
-    ${marketplaceListingRail("home.rail.openNowListings", "home.rail.openNowListingsHint", openNow)}
-    ${marketplaceListingRail("home.rail.recommendedForYou", "home.rail.recommendedForYouHint", recommended)}
-  `;
+  const recentlyListed = [...items].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).slice(0, 6);
+  return marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentlyListed);
 }
 
-/** Real counts only — how many listings actually sit in this category
- * ("all" counts every listing), and how many of those read as currently
- * active (same open/available/hiring/this-week signal already used by
- * renderMarketplaceCollections' "Open now" rail, not a separate guess). */
+/** Real count only — how many listings actually sit in this category
+ * ("all" counts every listing in the real pool). Real listings have no
+ * "active/inactive" concept (status is always "published"), so there is
+ * no honest activeCount to show alongside it anymore. */
 function marketplaceCategoryMetadata(categoryId) {
-  const items = categoryId === "all" ? listings : listings.filter((item) => item.type === categoryId);
-  const activeCount = items.filter((item) => /open|available|hiring|this week/i.test(item.status)).length;
-  return { total: items.length, activeCount };
+  const pool = marketplaceListingPool();
+  const items = categoryId === "all" ? pool : pool.filter((item) => item.type === categoryId);
+  return { total: items.length };
 }
 
 /** Same destination-card language as renderExploreHubCard (icon, name,
@@ -6239,7 +6136,7 @@ function marketplaceCategoryMetadata(categoryId) {
  * parallel .marketplace-hub-card class, since the pattern is generic. */
 function renderMarketplaceHubCard(categoryId, index) {
   const isAll = categoryId === "all";
-  const { total, activeCount } = marketplaceCategoryMetadata(categoryId);
+  const { total } = marketplaceCategoryMetadata(categoryId);
   const tone = CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length];
   const label = isAll ? t("common.allCategories") : t(categories.find((category) => category.id === categoryId).labelKey);
   return `
@@ -6248,7 +6145,6 @@ function renderMarketplaceHubCard(categoryId, index) {
       <span class="explore-hub-card-name">${label}</span>
       <span class="explore-hub-card-meta">
         ${total > 0 ? t("marketplace.hub.listingsCount", { count: total }) : t("marketplace.hub.noListingsYet")}
-        ${activeCount > 0 ? `<span class="explore-hub-card-open">${t("marketplace.hub.activeNowCount", { count: activeCount })}</span>` : ""}
       </span>
       <span class="explore-hub-card-arrow" aria-hidden="true">${icon("arrow")}</span>
     </button>
@@ -6273,7 +6169,7 @@ function renderMarketplacePicker() {
         </div>
         ${renderAiSearch("marketplace")}
       </section>
-      ${marketplaceListingRail("home.rail.trendingMarketplace", "home.rail.trendingMarketplaceHint", trendingListingItems(10))}
+      ${marketplaceListingRail("home.rail.recentlyListed", "home.rail.recentlyListedHint", recentListingItems(10))}
       <div class="explore-hub-grid">
         ${["all", ...categories.map((category) => category.id)].map((categoryId, index) => renderMarketplaceHubCard(categoryId, index)).join("")}
       </div>
@@ -6284,19 +6180,43 @@ function renderMarketplacePicker() {
 function renderMarketplace() {
   if (!state.marketplaceCategoryChosen) return renderMarketplacePicker();
 
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
+
+  const hero = `
+    <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
+      <div class="city-hero-copy">
+        <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
+        <h1 id="marketplace-hero-title">${t("marketplace.marketplaceHeroTitle")}</h1>
+        <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
+      </div>
+      ${renderAiSearch("marketplace")}
+    </section>
+  `;
+
+  if (state.opportunityFeed.status === "loading") {
+    return `
+      <section class="section-shell marketplace-shell">
+        ${hero}
+        <div class="profile-listing-grid-loading" aria-busy="true"></div>
+      </section>
+    `;
+  }
+
+  if (state.opportunityFeed.status === "error") {
+    return `
+      <section class="section-shell marketplace-shell">
+        ${hero}
+        ${renderEmptyState(t("opportunities.loadError"), "search")}
+        <button type="button" class="opportunity-primary" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button>
+      </section>
+    `;
+  }
+
   const items = filteredListings();
-  const pros = filteredProfessionals();
 
   return `
     <section class="section-shell adaptive-page adaptive-page-marketplace marketplace-shell">
-      <section class="city-hero page-hero marketplace-hero-photo" aria-labelledby="marketplace-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
-          <h1 id="marketplace-hero-title">${t("marketplace.marketplaceHeroTitle")}</h1>
-          <p>${t("marketplace.marketplaceHeroSubtitle")}</p>
-        </div>
-        ${renderAiSearch("marketplace")}
-      </section>
+      ${hero}
       ${renderCapabilityRail()}
       <div class="need-help-card">
         <div>
@@ -6310,33 +6230,36 @@ function renderMarketplace() {
       ${renderDiscoverToggle()}
       ${renderAiSearchResults(6, "marketplace")}
       ${renderMarketplaceCollections(items)}
-      ${renderAlwenListingCreator()}
       <div class="section-title">
         <div><h2>${t("home.rail.allListings")}</h2><p>${t("home.rail.allListingsHint")}</p></div>
       </div>
       <div class="market-grid">
-        ${items.map(renderMarketplaceListing).join("")}
-      </div>
-      <div class="section-title">
-        <div><h2>${t("common.verifiedPros")}</h2><p>${t("common.verifiedProsHint")}</p></div>
-        <button data-view="needHelp">${t("common.requestQuote")}</button>
-      </div>
-      <div class="pro-list">
-        ${pros.map(renderProfessional).join("")}
+        ${items.length
+          ? items.map(renderMarketplaceListing).join("")
+          : `${renderEmptyState(t("marketplace.marketplaceEmptyTitle"), "tag")}<div class="opportunity-post-cta"><p>${t("marketplace.marketplaceEmptyHint")}</p><button type="button" data-view="createListing">${t("common.sellSomething")}</button></div>`}
       </div>
     </section>
   `;
 }
+/* The "Verified Pros" cross-sell section that used to sit here is gone —
+   it read from the professional-listing mock array, which no longer
+   exists (no real professional-listing concept exists yet, see
+   renderHire()), so it would only ever have rendered a permanently
+   empty grid under a live heading and "Request Quote" button. Need
+   Help's own real, signed-in-gated flow (the .need-help-card section
+   above) is still the one real cross-sell into Hire on this page. */
 
 /** Real signals only — every count here traces to something the user
  * actually did (myListings/myHelpRequests carry a real created_at from
- * Supabase, ownedBusinesses() reflects a real claim, feedPosts is
- * filtered to posts this signed-in user actually composed, saved counts
- * are real toggle state) rather than a fabricated 0-100 "trust score" or
- * percentile claim. No leaderboard exists, so there is no "Top 4%" —
- * that would require knowing every other user's score. */
+ * Supabase, ownedBusinesses() reflects a real claim, community posts are
+ * filtered to the signed-in user's own real authorId within the shared
+ * communityFeed cache — same cap-related caveat as any other capped real
+ * pool in this file, never fabricated — saved counts are real toggle
+ * state) rather than a fabricated 0-100 "trust score" or percentile
+ * claim. No leaderboard exists, so there is no "Top 4%" — that would
+ * require knowing every other user's score. */
 function contributeRealActivityBreakdown(user) {
-  const myPosts = feedPosts.filter((post) => post.author === user.name);
+  const myPosts = state.communityFeed.posts.filter((post) => post.authorId === user.id);
   const savedCount = state.savedListingIds.length + state.savedPlaceIds.length;
   return [
     { key: "marketplace", icon: "tag", count: state.myListings.length, labelKey: "contribute.activity.marketplaceLabel", emptyKey: "contribute.activity.marketplaceEmpty", emptyCtaKey: "contribute.activity.marketplaceEmptyCta", emptyView: "createListing", activeCtaKey: "contribute.activity.marketplaceActiveCta", activeView: "profile" },
@@ -6751,154 +6674,6 @@ function renderCreateListingForm() {
   `;
 }
 
-function renderAlwenListingCreator() {
-  const selections = state.alwenListingSelections || {};
-  const suggestionGroups = [
-    {
-      key: "price",
-      title: t("alwen.listingSuggestionPrice"),
-      options: [
-        { value: "€820", label: t("alwen.listingPriceFast"), meta: t("alwen.listingPriceFastMeta") },
-        { value: "€860", label: t("alwen.listingPriceBalanced"), meta: t("alwen.listingPriceBalancedMeta") },
-        { value: "€890", label: t("alwen.listingPriceMax"), meta: t("alwen.listingPriceMaxMeta") }
-      ]
-    },
-    {
-      key: "delivery",
-      title: t("alwen.listingSuggestionDelivery"),
-      options: [
-        { value: "Pickup today", label: t("alwen.listingDeliveryPickup"), meta: alwenListingDraft.pickupArea },
-        { value: "Courier in Vilnius", label: t("alwen.listingDeliveryCourier"), meta: "€4-7" },
-        { value: "Meet in public place", label: t("alwen.listingDeliveryMeet"), meta: t("alwen.listingRecommended") }
-      ]
-    },
-    {
-      key: "boost",
-      title: t("alwen.listingSuggestionBoost"),
-      options: [
-        { value: "No boost", label: t("alwen.listingBoostNone"), meta: t("alwen.listingBoostNoneMeta") },
-        { value: "48-hour local boost", label: t("alwen.listingBoostLocal"), meta: t("alwen.listingBoostLocalMeta") },
-        { value: "Weekend electronics boost", label: t("alwen.listingBoostWeekend"), meta: t("alwen.listingBoostWeekendMeta") }
-      ]
-    }
-  ];
-  const selectedPrice = selections.price || "€860";
-  const selectedDelivery = selections.delivery || "Pickup today";
-  const selectedBoost = selections.boost || "48-hour local boost";
-  const readinessItems = [
-    [true, t("alwen.listingReadyTitle")],
-    [true, t("alwen.listingReadyPrice")],
-    [true, t("alwen.listingReadyCategory")],
-    [false, t("alwen.listingReadyPhotos")]
-  ];
-  const quickFacts = [
-    ["8 sec", t("alwen.listingTimeSaved")],
-    [alwenListingDraft.nearbyBuyers, t("alwen.listingDemand")],
-    ["92%", t("alwen.listingCompleteness")]
-  ];
-  const smartDrops = [
-    [t("alwen.listingFieldCategory"), alwenListingDraft.marketplaceCategory],
-    [t("field.condition"), alwenListingDraft.condition],
-    [t("alwen.listingFieldBrand"), alwenListingDraft.brand],
-    [t("alwen.listingFieldPickup"), alwenListingDraft.pickupArea],
-    [t("alwen.listingFieldDelivery"), selectedDelivery],
-    [t("alwen.listingFieldBoost"), selectedBoost]
-  ];
-
-  return `
-    <section class="alwen-card alwen-listing-studio">
-      <div class="section-title">
-        <div><h2>${t("alwen.alwenListingTitle")}</h2><p>${t("alwen.alwenListingHint")}</p></div>
-        <span class="alwen-speed-pill">${icon("spark")}${t("alwen.listingAutopilot")}</span>
-      </div>
-      <div class="alwen-create-layout">
-        <div class="alwen-create-copy">
-          <div class="alwen-prompt">${icon("spark")}<div><strong>${t("alwen.listingPromptLabel")}</strong><p>${alwenListingDraft.prompt}</p></div></div>
-          <div class="alwen-workspace-head">
-            <span>${t("alwen.listingDraftStatus")}</span>
-            <h3>${t("alwen.listingReviewHeadline")}</h3>
-            <p>${t("alwen.listingReviewHint")}</p>
-          </div>
-          <div class="alwen-listing-metrics" aria-label="${t("alwen.listingInsights")}">
-            ${quickFacts.map(([value, label]) => `<article><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`).join("")}
-          </div>
-          <div class="alwen-suggestion-board" aria-label="${t("alwen.listingSuggestionBoard")}">
-            ${suggestionGroups.map((group) => `
-              <article class="alwen-suggestion-group">
-                <div>
-                  <strong>${group.title}</strong>
-                  <span>${t("alwen.listingTapToApply")}</span>
-                </div>
-                <div class="alwen-option-stack">
-                  ${group.options.map((option) => {
-                    const isSelected = (selections[group.key] || group.options[1]?.value || group.options[0].value) === option.value;
-                    return `
-                      <button type="button" class="${isSelected ? "is-selected" : ""}" data-action="alwen-listing-suggestion" data-suggestion-group="${group.key}" data-suggestion-value="${escapeHtml(option.value)}">
-                        <span>${escapeHtml(option.label)}</span>
-                        <strong>${escapeHtml(option.value)}</strong>
-                        <em>${escapeHtml(option.meta)}</em>
-                      </button>
-                    `;
-                  }).join("")}
-                </div>
-              </article>
-            `).join("")}
-          </div>
-          <div class="alwen-smart-dropzone">
-            <div>
-              <strong>${t("alwen.listingSmartDropzone")}</strong>
-              <span>${t("alwen.listingSmartDropzoneHint")}</span>
-            </div>
-            <div class="alwen-generated-grid">
-              ${smartDrops.map(([label, value]) => `
-                <article>
-                  <span>${label}</span>
-                  <strong>${escapeHtml(value)}</strong>
-                </article>
-              `).join("")}
-            </div>
-          </div>
-          <div class="alwen-listing-panels">
-            <article class="alwen-photo-card">
-              <strong>${t("alwen.listingPhotoPlan")}</strong>
-              <div class="alwen-photo-plan">
-                ${alwenListingDraft.suggestedPhotos.map((photo, index) => `<span>${index + 1}. ${escapeHtml(photo)}</span>`).join("")}
-              </div>
-            </article>
-            <article class="alwen-readiness-card">
-              <strong>${t("alwen.listingPublishReadiness")}</strong>
-              <div class="alwen-readiness-list">
-                ${readinessItems.map(([done, label]) => `<span class="${done ? "is-done" : ""}">${done ? "✓" : "○"} ${label}</span>`).join("")}
-              </div>
-            </article>
-          </div>
-          <div class="draft-actions"><button>${t("common.publish")}</button><button>${t("common.addPhotos")}</button><button>${t("common.improve")}</button></div>
-        </div>
-        <article class="market-card visual-market-card alwen-preview-card">
-          <div class="market-photo" style="background-image: url('https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=1000&q=80')">
-            <button class="favourite-float" aria-label="${t("common.favourite")}">${icon("heart")}</button>
-          </div>
-          <div class="market-card-body">
-            <span class="ai-verified inline-ai-verified">${icon("spark")}${t("common.createdByAlwen")}</span>
-            <div class="seller-row">
-              <img src="${reputationProfile.portrait}" alt="" />
-              <div><strong>${reputationProfile.name}${verifiedCheck(t("common.verifiedSeller"))}</strong><span>${alwenListingDraft.pickupArea} · ${t("common.verifiedSeller")}</span></div>
-            </div>
-            <h3>${alwenListingDraft.title}</h3>
-            <div class="price-row"><strong>${selectedPrice}</strong><span>${t("common.goodPrice")}</span></div>
-            <p>${alwenListingDraft.summary}</p>
-            <div class="ai-price-pill">${icon("spark")}<span>${escapeHtml(`${selectedDelivery} · ${selectedBoost}`)}</span></div>
-            <div class="alwen-preview-next">
-              <strong>${t("alwen.listingNextBestAction")}</strong>
-              <span>${alwenListingDraft.suggestedImprovements[0]}</span>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-  `;
-}
-
 /** One fixed size within any grid or rail — MarketplaceCard used to vary
  * card height per item.cardSize ("tall"/"wide"/"compact", a Pinterest-
  * style masonry effect via CSS column-count), which is exactly the
@@ -6910,15 +6685,18 @@ function renderMarketplaceListing(item) {
   const personAttrs = publicProfileAttrs({ id: item.sellerId, name: item.seller, avatar: item.sellerAvatar, area: item.area, verified: item.verifiedSeller, context: "marketplace" });
   return `
     <article class="market-card visual-market-card" data-view="listingDetail" data-listing-id="${item.id}" role="button" tabindex="0">
-      <div class="market-photo" style="background-image: url('${item.image}')">
+      <div class="market-photo ${item.image ? "" : "listing-photo-placeholder"}" ${item.image ? `style="background-image: url('${item.image}')"` : ""}>
+        ${!item.image ? icon("tag") : ""}
         <button type="button" class="favourite-float ${isSaved ? "is-active" : ""}" data-action="toggle-listing-save" data-listing-id="${item.id}" aria-label="${t("common.favourite")}">${icon("heart")}</button>
       </div>
       <div class="market-card-body">
+        ${item.seller ? `
         <div class="seller-row" role="button" tabindex="0" ${personAttrs}>
           <img src="${item.sellerAvatar}" alt="" />
           <div><strong>${item.seller}${item.verifiedSeller ? verifiedCheck(t("common.verifiedSeller")) : ""}</strong><span>${joinNonEmpty([item.distance, item.area, item.commute, item.verifiedSeller ? t("common.verifiedSeller") : null])}</span></div>
         </div>
-        <span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>
+        ` : ""}
+        ${item.offerorStatus ? `<span class="badge offeror-status-badge">${item.offerorStatus === "trader" ? "Trader/business" : "Private seller/provider"}</span>` : ""}
         <span class="badge">${categoryLabel(item.type)}</span>
         ${item.workMode ? `<span class="badge badge-workmode">${item.workMode}</span>` : ""}
         <h3>${listingTitle(item)}</h3>
@@ -6935,24 +6713,21 @@ function renderMarketplaceListing(item) {
 }
 
 /** Full listing detail — the card above only ever showed a teaser (photo,
- * truncated title, price) with no way to see the rest. Reuses the same
- * gallery-rail / detail-strip / actions-row markup pattern as
- * renderBusinessProfile above so it reads as the same "detail screen"
- * family rather than a one-off layout. Deep-linkable via WP0's routing
+ * truncated title, price) with no way to see the rest. Deep-linkable via WP0's routing
  * (?view=listingDetail&id=<id>), survives refresh/back per that same
  * mechanism. */
 /** Resolves state.selectedListingId to an item and renders it through the
- * ONE canonical body below — the local `listings` pool (mock seed data +
- * the current user's own real listings, always fully shaped and
- * available synchronously) is checked first; anything not found there
- * (any other user's real, published listing — e.g. reached from the Home
- * Feed) falls through to an async full-record fetch via
- * refreshRemoteListingDetail(), cached in state.remoteListingDetail so a
- * re-render while loading doesn't re-fetch. Both paths render through the
- * exact same renderListingDetailBody() — there is no separate reduced
- * view for real listings. */
+ * ONE canonical body below — myListingsPool (the current user's own real
+ * listings, always fully shaped and available synchronously) is checked
+ * first; anything not found there (any other user's real, published
+ * listing — e.g. reached from the Home Feed) falls through to an async
+ * full-record fetch via refreshRemoteListingDetail(), cached in
+ * state.remoteListingDetail so a re-render while loading doesn't
+ * re-fetch. Both paths render through the exact same
+ * renderListingDetailBody() — there is no separate reduced view for real
+ * listings. */
 function renderListingDetail() {
-  const localItem = listings.find((listing) => String(listing.id) === String(state.selectedListingId));
+  const localItem = myListingsPool.find((listing) => String(listing.id) === String(state.selectedListingId));
   if (localItem) return renderListingDetailBody(localItem);
   return renderRemoteListingDetail();
 }
@@ -7084,28 +6859,7 @@ function renderListingDetailBody(item) {
   `;
 }
 
-function renderProfessional(item) {
-  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-  return `
-    <article class="pro-card">
-      <div class="pro-card-identity" role="button" tabindex="0" ${personAttrs}>
-        <div class="business-logo pro-card-avatar">${initials(item.name)}</div>
-        <div>
-          <h3>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h3>
-          <p>${t(item.categoryKey)} · ${item.area}</p>
-          <div class="pro-card-stats">
-            <span class="pro-stat-rating">${icon("star")} ${item.rating} <small>(${item.reviews})</small></span>
-            <span class="pro-stat-price">${item.price}</span>
-            <span class="pro-stat-availability">${item.availability}</span>
-          </div>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
 function renderHire() {
-  const pros = filteredProfessionals();
   return `
     <section class="section-shell hire-shell">
       ${renderTransactionSafetyNotice()}
@@ -7124,14 +6878,14 @@ function renderHire() {
         ${professionalCategories.map(({ value, labelKey }) => `<button type="button" class="${state.hireCategory === value ? "is-selected" : ""}" data-hire-category="${escapeHtml(value)}">${t(labelKey)}</button>`).join("")}
       </div>
       <div class="pro-list">
-        ${pros.map(renderProfessional).join("") || renderEmptyState(t("common.noResults"), "people")}
+        ${renderEmptyState(t("common.noResults"), "people")}
       </div>
     </section>
   `;
 }
 
 function renderNeedHelp() {
-  const requests = filteredHelpRequests();
+  if (state.opportunityFeed.status === "idle") refreshOpportunityFeed();
   const intent = NEED_HELP_INTENTS.find((item) => item.id === state.needHelpDetectedIntentId) || null;
   const posted = state.helpRequestPosted;
   // TYT_ACTIONS.volunteer also lands here (browse and respond to real
@@ -7164,13 +6918,50 @@ function renderNeedHelp() {
         <article><strong>2</strong><span>${t("common.prosRespond")}</span></article>
         <article><strong>3</strong><span>${t("common.chatAndArrange")}</span></article>
       </div>
-      <div class="section-title">
-        <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
-      </div>
-      <div class="request-list">
-        ${requests.map(renderHelpRequest).join("")}
-      </div>
+      ${renderNeedHelpLiveRequestsSection()}
     </section>
+  `;
+}
+
+/** The read-only browse list at the bottom of Need Help — separate from
+ * the compose flow above it (renderNeedHelpComposer() etc.), which stays
+ * interactive regardless of this section's status so a slow/failed
+ * public fetch never blocks posting a new request. Shares
+ * state.opportunityFeed (idle/loading/loaded/error), the same real cache
+ * Marketplace/Home already read — no second Help Request cache, no
+ * per-render refetch. */
+function renderNeedHelpLiveRequestsSection() {
+  const header = `
+    <div class="section-title">
+      <div><h2>${t("common.liveRequests")}</h2><p>${t("common.liveRequestsHint")}</p></div>
+    </div>
+  `;
+  if (state.opportunityFeed.status === "idle" || state.opportunityFeed.status === "loading") {
+    return `${header}<div class="profile-listing-grid-loading" aria-busy="true"></div>`;
+  }
+  if (state.opportunityFeed.status === "error") {
+    return `
+      ${header}
+      ${renderEmptyState(t("opportunities.loadError"), "search")}
+      <button type="button" class="opportunity-primary" data-action="retry-opportunity-feed">${t("alwen.alwenChatRetry")}</button>
+    `;
+  }
+  const requests = filteredHelpRequests();
+  if (!requests.length) {
+    return `
+      ${header}
+      ${renderEmptyState(t("needHelp.needHelpTitle"), "help")}
+      <div class="opportunity-post-cta">
+        <p>${t("needHelp.emptyRequestsHint")}</p>
+        <button type="button" data-action="focus-help-request-composer">${t("needHelp.needHelpCta")}</button>
+      </div>
+    `;
+  }
+  return `
+    ${header}
+    <div class="request-list">
+      ${requests.map(renderHelpRequest).join("")}
+    </div>
   `;
 }
 
@@ -7310,20 +7101,23 @@ async function refreshOpportunityFeed() {
     console.warn("[opportunityFeed] Failed to load real opportunity data.", error);
     state.opportunityFeed = { status: "error", helpRequests: [], listings: [], loadedAt: state.opportunityFeed.loadedAt };
   }
-  if (["home", "liveOpportunities"].includes(state.activeView)) render();
+  if (["home", "liveOpportunities", "needHelp", "community", "marketplace"].includes(state.activeView)) render();
 }
 
 const COMMUNITY_FEED_FETCH_LIMIT = 20;
 
-/** Maps a raw fetchCommunityPosts() row into the shape renderPostDetailSheet/
- * renderPulse/sharePost already expect from a feedPosts mock entry (.type,
- * .title, .body — never .titleKey/.bodyKey, so those functions' `post.key ?
- * t(key) : plain field` fallback always takes the plain-field branch for a
- * real post). Every nullable real column (neighbourhood, author embed,
- * media) is guarded here once, at the source, rather than at every render
- * call site. No replies/helpful/saves fields are set at all — omitted, not
- * defaulted to 0, so nothing downstream can mistake "field absent" for
- * "zero real engagement" (see HOME_FEED_SOURCE_ADAPTERS.community). */
+/** Maps a raw fetchCommunityPosts() row (or a freshly-inserted
+ * createCommunityPost() row with a synthetic author attached, see
+ * applyCreatedCommunityPost) into the one display shape every Community
+ * consumer reads — renderCommunityPostCard/renderPostDetailSheet/sharePost/
+ * findCommunityPostById/renderCommunityRail. Every nullable real column
+ * (neighbourhood, author embed, media) is guarded here once, at the
+ * source, rather than at every render call site. No replies/helpful/saves
+ * fields are set at all — omitted, not defaulted to 0, so nothing
+ * downstream can mistake "field absent" for "zero real engagement" (see
+ * HOME_FEED_SOURCE_ADAPTERS.community). authorId is the real
+ * author_user_id — the one field needed to link a card back to the
+ * author's real public profile. */
 function shapeCommunityPostForDisplay(row) {
   return {
     id: row.id,
@@ -7332,6 +7126,7 @@ function shapeCommunityPostForDisplay(row) {
     body: row.body || "",
     neighbourhood: row.neighbourhood || "",
     createdAt: row.created_at,
+    authorId: row.author_user_id || null,
     authorName: row.author?.display_name || "",
     authorAvatar: row.author?.avatar_url || "",
     authorVerified: row.author?.verification_status === "verified",
@@ -7341,8 +7136,9 @@ function shapeCommunityPostForDisplay(row) {
 }
 
 /** Same fire-and-forget, idle-guarded convention as refreshOpportunityFeed()
- * above — real Community posts for the Unified Home Feed's Community
- * source. Unauthenticated (published community_posts is public RLS). */
+ * above — real Community posts for both the Unified Home Feed's Community
+ * source and Community's own page. Unauthenticated (published
+ * community_posts is public RLS). */
 async function refreshCommunityFeed() {
   state.communityFeed = { ...state.communityFeed, status: "loading" };
   try {
@@ -7352,38 +7148,54 @@ async function refreshCommunityFeed() {
     console.warn("[communityFeed] Failed to load real community data.", error);
     state.communityFeed = { status: "error", posts: [], loadedAt: state.communityFeed.loadedAt };
   }
-  if (state.activeView === "home") render();
+  if (["home", "community"].includes(state.activeView)) render();
 }
 
-/** Shared lookup for a Community post by id, across BOTH sources — the
- * local feedPosts fixture (Community's own page, numeric ids) and real
- * Community posts loaded via fetchCommunityPosts() (UUID string ids).
- * String()-coerced comparison on both sides, matching the same pattern
- * already used for real listing ids (state.savedListingIds.includes(
- * String(item.id)), see toggle-listing-save) — this is what actually
- * fixes the bug where every one of these lookups used to do
- * `item.id === Number(button.dataset.postId)`: Number() on a real UUID is
- * NaN, so a real post could never be found by id anywhere in this file. */
+/** Maps createCommunityPost()'s raw inserted row (no author embed — a
+ * plain insert, unlike fetchCommunityPosts()'s two-step fetch) through
+ * the same shapeCommunityPostForDisplay() every other post uses, using
+ * the current session's own real profile fields for the author embed
+ * (same convention as shapeListingForDisplay's use of state.auth.user
+ * for a just-created listing). Unshifts into the shared communityFeed
+ * cache so the new post appears immediately without a refetch — mirrors
+ * applyCreatedListing/applyCreatedHelpRequest. */
+function applyCreatedCommunityPost(created) {
+  const user = state.auth.user;
+  const shaped = shapeCommunityPostForDisplay({
+    ...created,
+    author: user ? { user_id: user.id, display_name: user.name, avatar_url: user.avatar, verification_status: user.publicProfile?.verification_status } : null
+  });
+  state.communityFeed = { ...state.communityFeed, posts: [shaped, ...state.communityFeed.posts] };
+  trackEvent("community_post_created", { category: created.category });
+  return shaped;
+}
+
+/** Shared lookup for a Community post by id — real posts loaded via
+ * fetchCommunityPosts()/createCommunityPost() (UUID string ids).
+ * String()-coerced comparison, matching the same pattern already used for
+ * real listing ids (state.savedListingIds.includes(String(item.id)), see
+ * toggle-listing-save) — this is what actually fixes the bug where every
+ * one of these lookups used to do `item.id === Number(button.dataset.postId)`:
+ * Number() on a real UUID is NaN, so a real post could never be found by
+ * id anywhere in this file. */
 function findCommunityPostById(id) {
   if (id == null) return null;
-  return feedPosts.find((item) => String(item.id) === String(id)) || state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
+  return state.communityFeed.posts.find((item) => String(item.id) === String(id)) || null;
 }
 
-/** Shared lookup for a listing by id, across BOTH pools — the local
- * `listings` array (seeded mock rows + the current user's own real
- * listings, merged in by applyCreatedListing/refreshMyListings) and the
- * general public real feed loaded by refreshOpportunityFeed() via
- * fetchPublicListings() (state.opportunityFeed.listings). These are two
- * genuinely different pools: `listings` has the full mock display shape
- * (image, seller, gallery, reputation...) but only ever contains OTHER
- * users' real listings if this viewer happens to already have them
- * merged in; state.opportunityFeed.listings has every published real
- * listing but only the minimal columns fetchPublicListings selects (no
- * seller/image/gallery at all). isReal tells the caller which shape it
- * got back, since they need different rendering. */
+/** Shared lookup for a listing by id, across BOTH pools — myListingsPool
+ * (the current user's own real listings, merged in by
+ * applyCreatedListing/refreshMyListings) and the general public real feed
+ * loaded by refreshOpportunityFeed() via fetchPublicListings()
+ * (state.opportunityFeed.listings). These are two genuinely different
+ * shapes: myListingsPool has the full display shape (image, seller,
+ * gallery, reputation...); state.opportunityFeed.listings has every
+ * published real listing but only the minimal columns fetchPublicListings
+ * selects (no seller/image/gallery at all). isReal tells the caller which
+ * shape it got back, since they need different rendering. */
 function findListingRecordById(id) {
   if (id == null) return { item: null, isReal: false };
-  const local = listings.find((listing) => String(listing.id) === String(id));
+  const local = myListingsPool.find((listing) => String(listing.id) === String(id));
   if (local) return { item: local, isReal: false };
   const real = state.opportunityFeed.listings.find((listing) => String(listing.id) === String(id));
   if (real) return { item: real, isReal: true };
@@ -7461,9 +7273,9 @@ async function refreshRemoteListingDetail(id) {
      interactions         { open, share, like, comment, save } — each true
                            ONLY if backed by a real DB write path that
                            persists across a refresh. Verified empirically
-                           for this PR: state.savedListingIds/savedPostIds/
-                           helpfulPostIds are never written to localStorage
-                           or Supabase anywhere in this file (grepped every
+                           for this PR: state.savedListingIds/savedPostIds
+                           are never written to localStorage or Supabase
+                           anywhere in this file (grepped every
                            writeLocalStorage call site) — pure in-memory,
                            lost on reload. So like/comment/save are false
                            for BOTH enabled sources today, even though the
@@ -8424,11 +8236,10 @@ const HELP_URGENCY_OPTIONS = [
    live AI call per keystroke — a network round-trip per character would
    never feel "smooth", and the real conversational AI (submitAlwenChat)
    is a multi-turn assistant, the wrong shape for instant-typing expansion.
-   matchQuery is the exact string handed to the existing hireCategoryMatches()
-   (used everywhere else in this file for real pro matching) so the pre-submit
-   AI summary, the post-submit results, and the posted help_requests.category
-   all agree on the same real data — never three different numbers for the
-   same request. */
+   matchQuery becomes state.hireCategory (see startNeedHelpTypewriter) and
+   is submitted as the real help_requests.category on post — there is no
+   real professional-matching concept yet (see renderHire()), so this is
+   purely category tagging for the request itself now. */
 const NEED_HELP_INTENTS = [
   { id: "furniture", keywords: ["ikea", "furniture", "assemble", "assembly", "wardrobe"], matchQuery: "ikea assembly", icon: "🪑", chipLabel: "Assemble furniture", sentence: "I need someone to assemble my IKEA wardrobe tomorrow evening." },
   { id: "cleaning", keywords: ["clean", "cleaning", "cleaner", "tidy"], matchQuery: "cleaning", icon: "🧹", chipLabel: "Cleaning", sentence: "I need a trusted cleaner for my apartment this Friday." },
@@ -8457,13 +8268,17 @@ function matchNeedHelpIntent(rawText) {
   return NEED_HELP_INTENTS.find((intent) => intent.keywords.some((keyword) => keyword === trimmed || keyword.startsWith(trimmed) || trimmed.startsWith(keyword))) || null;
 }
 
-function professionalsForIntent(intent) {
-  return serviceProfessionals.filter((item) => hireCategoryMatches(item, intent.matchQuery));
+/** No real professional-listing concept exists yet (see renderHire()) —
+ * always honestly empty. intent is accepted (unused) so every call site
+ * stays unchanged and ready for a real source later. */
+function professionalsForIntent() {
+  return [];
 }
 
-/* Every stat below is computed from the same real serviceProfessionals
-   records hireCategoryMatches() already surfaces elsewhere in this file
-   (renderInlineProSuggestions, filteredProfessionals) — never invented. */
+/* Every stat below is computed from professionalsForIntent(), which is
+   always honestly empty right now — the null-coalescing below (avgResponse,
+   minPrice) already renders that as "—"/a fallback rather than a fabricated
+   number, so this degrades correctly with no code change needed here. */
 function needHelpSummaryStats(intent) {
   const matches = professionalsForIntent(intent);
   const responseTimes = matches.map((item) => parseInt(item.responseTime, 10)).filter((value) => Number.isFinite(value));
@@ -8577,28 +8392,8 @@ function renderNeedHelpSummary(intent) {
   `;
 }
 
-/* Reuses the exact opportunity-card shell (Events/Live Opportunities/
-   Marketplace) — professionals have no photo, so opportunity-cover-avatar
-   swaps the background-image cover for a centered initials circle rather
-   than faking a photo, everything else (price row, meta, trust row, tag
-   chips, dual-action footer) is the same class, same look. */
-function renderProCard(item) {
-  const categoryName = t(item.categoryKey);
-  const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: categoryName, rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-  return `<article class="opportunity-card pro-opportunity-card" role="button" tabindex="0" aria-label="${escapeHtml(`${item.name} ${categoryName}`)}" ${personAttrs}>
-    <div class="opportunity-cover opportunity-cover-avatar"><span class="opportunity-cover-avatar-circle">${initials(item.name)}</span><span>${categoryName}</span></div>
-    <div class="opportunity-body">
-      <div class="opportunity-price-row"><h2>${escapeHtml(item.name)}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h2><b>${item.price}</b></div>
-      <p class="opportunity-meta">${escapeHtml(item.area)}${item.distance ? ` · ${escapeHtml(item.distance)}` : ""} · ${escapeHtml(item.availability)}</p>
-      <div class="opportunity-trust"><span>★ ${item.rating} (${item.reviews})</span>${item.responseTime ? `<span>${t("needHelp.aiSummaryResponseValue", { minutes: parseInt(item.responseTime, 10) })}</span>` : ""}</div>
-      <div class="opportunity-tags">${item.skills.slice(0, 3).map((skill) => `<span>${escapeHtml(skill)}</span>`).join("")}</div>
-    </div>
-  </article>`;
-}
-
 function renderNeedHelpResults(intent) {
   if (!intent) return "";
-  const matches = professionalsForIntent(intent);
   return `
     <section class="need-help-results-reveal">
       <div class="post-request-success need-help-posted-confirmation">
@@ -8607,7 +8402,7 @@ function renderNeedHelpResults(intent) {
         <p>${t("needHelp.postedHint")}</p>
       </div>
       <div class="section-title"><div><h2>${t("common.matchingPros")}</h2><p>${t("common.matchingProsHint")}</p></div></div>
-      <div class="opportunity-feed">${matches.map(renderProCard).join("") || renderEmptyState(t("common.noResults"), "people")}</div>
+      <div class="opportunity-feed">${renderEmptyState(t("common.noResults"), "people")}</div>
       <button type="button" class="auth-primary-button" data-role="post-another-request">${t("needHelp.postAnother")}</button>
     </section>
   `;
@@ -8669,46 +8464,24 @@ function renderPostRequestForm() {
   `;
 }
 
-/* Live preview of matching professionals right where the category chip
-   was clicked — previously the only feedback for picking "Plumber" was
-   the chip itself changing state; the actual matches only showed up in
-   a "Matching pros" list much further down the page, so most users
-   never realized the filter had already worked. */
+/** Live preview of matching professionals right where the category chip
+ * was clicked. There is no real professional-listing concept yet (see
+ * renderHire()), so this always honestly reports zero matches rather
+ * than fabricating a chip. */
 function renderInlineProSuggestions(category) {
   const categoryLabelKey = professionalCategories.find((item) => item.value === category)?.labelKey;
   const categoryName = categoryLabelKey ? t(categoryLabelKey) : category;
-  const matches = serviceProfessionals.filter((item) => hireCategoryMatches(item, category));
-
-  if (!matches.length) {
-    return `<p class="inline-pro-suggestions-empty">${t("needHelp.instantMatchesNone").replace("{category}", categoryName)}</p>`;
-  }
-
-  const top = matches.slice(0, 3);
-  return `
-    <div class="inline-pro-suggestions">
-      <p class="inline-pro-suggestions-label">${t("needHelp.instantMatchesFound").replace("{count}", matches.length).replace("{category}", categoryName)}</p>
-      <div class="inline-pro-suggestions-list">
-        ${top.map((item) => {
-          const personAttrs = publicProfileAttrs({ id: `pro-${item.id}`, name: item.name, area: item.area, category: t(item.categoryKey), rating: item.rating, reviews: item.reviews, verified: item.verified, context: "hire", skills: item.skills, responseTime: item.responseTime, price: item.price, availability: item.availability, distance: item.distance });
-          return `
-            <button type="button" class="inline-pro-chip" ${personAttrs}>
-              <span class="inline-pro-avatar">${initials(item.name)}</span>
-              <span class="inline-pro-chip-body">
-                <strong>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</strong>
-                <small>${icon("star")} ${item.rating} · ${item.availability}</small>
-              </span>
-            </button>
-          `;
-        }).join("")}
-      </div>
-      ${matches.length > top.length ? `<button type="button" class="inline-pro-suggestions-more" data-view="hire">${t("needHelp.instantMatchesSeeAll")} (${matches.length})</button>` : ""}
-    </div>
-  `;
+  return `<p class="inline-pro-suggestions-empty">${t("needHelp.instantMatchesNone").replace("{category}", categoryName)}</p>`;
 }
 
 /** Shared shape for a real help_requests row (whichever path created it —
  * see applyCreatedHelpRequest below) so Hire/Need Help renders it the same
  * way regardless of source. */
+/** budget is always null — help_requests has no price/budget column, so
+ * this is an honest permanent omission (renderHelpRequest()'s `?` guard
+ * simply never shows it), never a fabricated figure. There is likewise
+ * no real "pro responses" concept yet (no quotes/bids table), so no
+ * quotes field is produced here at all — see renderHelpRequest(). */
 function shapeHelpRequestForDisplay(created) {
   const matchedCategory = professionalCategories.find((item) => item.value.toLowerCase() === String(created.category || "").toLowerCase());
   const matchedUrgency = HELP_URGENCY_OPTIONS.find(([value]) => value === created.urgency);
@@ -8719,9 +8492,25 @@ function shapeHelpRequestForDisplay(created) {
     budget: null,
     urgency: t(matchedUrgency?.[1] || "needHelp.urgencyFlexible"),
     status: t(`status.${created.status}`) || t("status.open"),
-    quotes: [],
     category: matchedCategory ? t(matchedCategory.labelKey) : created.category
   };
+}
+
+/** The visible "Live Requests" list — merges the current user's own real
+ * requests (state.myHelpRequests, always the full, freshly-fetched set
+ * from refreshMyHelpRequests()/applyCreatedHelpRequest()) with the
+ * public real feed (state.opportunityFeed.helpRequests, from
+ * refreshOpportunityFeed()), deduplicated by real id so a request never
+ * appears twice after creation. Both real sources map through the same
+ * shapeHelpRequestForDisplay() used for the post-submit confirmation, so
+ * there is exactly one display shape for a real help request — no
+ * second shaper, matching marketplaceListingPool()'s established
+ * own-pool-first, dedupe-by-id pattern. */
+function helpRequestPool() {
+  const ownIds = new Set(state.myHelpRequests.map((item) => String(item.id)));
+  const own = state.myHelpRequests.map(shapeHelpRequestForDisplay);
+  const others = state.opportunityFeed.helpRequests.filter((raw) => !ownIds.has(String(raw.id))).map(shapeHelpRequestForDisplay);
+  return [...own, ...others];
 }
 
 /** Called after a real insert — either the manual Need Help form
@@ -8731,7 +8520,6 @@ function shapeHelpRequestForDisplay(created) {
  * not as a second, differently-shaped kind of card. */
 function applyCreatedHelpRequest(created, { source = "manual" } = {}) {
   const request = shapeHelpRequestForDisplay(created);
-  helpRequests.unshift(request);
   state.myHelpRequests.unshift(created);
   trackEvent("help_request_posted", { hasCategory: Boolean(created.category), urgency: created.urgency, source });
   return request;
@@ -8739,15 +8527,15 @@ function applyCreatedHelpRequest(created, { source = "manual" } = {}) {
 
 /** Fire-and-forget, called both right after sign-in and every time the user
  * opens Profile or Hire — mirrors refreshMyListings() so a transient network
- * hiccup doesn't leave "My Requests" empty for the rest of the session. */
+ * hiccup doesn't leave "My Requests" empty for the rest of the session.
+ * Wholesale-replaces state.myHelpRequests with the fresh fetch — unlike
+ * refreshMyListings()/myListingsPool, there is no separate shaped pool to
+ * keep in sync here: helpRequestPool() derives directly from this array
+ * on every call, so it is always current the moment this assignment
+ * lands, without a second array to maintain. */
 async function refreshMyHelpRequests() {
   try {
     state.myHelpRequests = await fetchMyHelpRequests();
-    for (const item of state.myHelpRequests) {
-      if (!helpRequests.some((existing) => String(existing.id) === String(item.id))) {
-        helpRequests.unshift(shapeHelpRequestForDisplay(item));
-      }
-    }
     // Home never reads state.myHelpRequests (Profile/Contribute do) — see
     // the same note on refreshMyListings() below.
     if (state.activeView !== "home") render();
@@ -8812,18 +8600,14 @@ function formatListingPrice(priceAmount, pricePeriod, currency = "EUR") {
 }
 
 /** Shapes a real listings-table row into whatever renderMarketplaceListing()
- * and friends already expect from the seeded mock data, and adds it to both
- * the local `listings` list (so it appears in Marketplace immediately, same
- * convention as submitHelpRequest()/applyAlwenCreatedHelpRequest() use for
- * Hire) and state.myListings (Profile's "My Listings"). Shared by the manual
- * form below and by Alwen's create_marketplace_listing tool result. */
-/** Shapes a real listings-table row into whatever renderMarketplaceListing()
- * and friends already expect from the seeded mock data. Shared by the
- * manual form/Alwen's tool result (a listing just created THIS session) and
- * refreshMyListings() below (listings created in an earlier session, which
- * otherwise only ever exist in state.myListings and never actually appear
- * anywhere you'd browse them, since the `listings` array driving Marketplace
- * is a plain in-memory array with no database backing of its own). */
+ * and friends already expect, and adds it to both myListingsPool (so it
+ * appears in Marketplace immediately, same convention as
+ * submitHelpRequest()/applyAlwenCreatedHelpRequest() use for Hire) and
+ * state.myListings (Profile's "My Listings"). Shared by the manual form
+ * below, by Alwen's create_marketplace_listing tool result (a listing just
+ * created THIS session), and by refreshMyListings() below (listings
+ * created in an earlier session, which otherwise only ever exist in
+ * state.myListings and never actually appear anywhere you'd browse them). */
 function shapeListingForDisplay(created) {
   const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === created.category) || "buy-sell";
   const user = state.auth.user;
@@ -8861,12 +8645,74 @@ function shapeListingForDisplay(created) {
     popularity: "",
     aiPrice: "",
     aiInsight: "",
-    cardSize: "compact"
+    cardSize: "compact",
+    createdAt: created.created_at || new Date().toISOString()
   };
 }
 
+/** Maps fetchPublicListings()'s lightweight row (no images/owner embed,
+ * see that function's SELECT) into the same display shape as
+ * shapeListingForDisplay above — every field genuinely unavailable at
+ * this projection (image, seller, distance, popularity, aiPrice,
+ * offerorStatus) stays empty/null rather than guessed, so
+ * renderMarketplaceListing/renderMarketplaceMiniCard can omit them
+ * exactly like they already do for any listing missing an optional
+ * field. */
+function shapeListingSummaryForDisplay(raw) {
+  const uiCategory = Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === raw.category) || "buy-sell";
+  return {
+    id: raw.id,
+    sellerId: null,
+    type: uiCategory,
+    title: raw.title,
+    meta: raw.description || "",
+    description: raw.description || "",
+    area: raw.neighbourhood || raw.location_label || "",
+    price: formatListingPrice(raw.price_amount, raw.price_period, raw.price_currency),
+    status: t("status.published"),
+    condition: null,
+    image: "",
+    gallery: [],
+    seller: "",
+    sellerAvatar: "",
+    sellerPhone: null,
+    sellerResponseTime: null,
+    sellerReputation: null,
+    pickupAvailable: false,
+    deliveryAvailable: false,
+    offerorStatus: null,
+    verifiedSeller: false,
+    distance: "",
+    popularity: "",
+    aiPrice: "",
+    aiInsight: "",
+    cardSize: "compact",
+    createdAt: raw.created_at
+  };
+}
+
+/** Replaces the old mock-seeded `listings` array's role as the "my own
+ * real listings" pool (see applyCreatedListing/refreshMyListings below) —
+ * starts empty rather than pre-populated with fake rows. */
+let myListingsPool = [];
+
+/** The full real Marketplace browse pool: the current user's own
+ * listings (full shape, from myListingsPool — has photos/seller identity
+ * since createListing/fetchMyListings return the full row) plus every
+ * other published listing from the shared refreshOpportunityFeed() cache
+ * (light shape, mapped via shapeListingSummaryForDisplay), deduplicated
+ * by id so a listing that is both "mine" and already present in the
+ * general feed never renders twice. Reuses the exact cache Home/Live
+ * Opportunities already fetch — no extra network round trip just for
+ * Marketplace's own page (see renderMarketplace()'s idle guard). */
+function marketplaceListingPool() {
+  const ownIds = new Set(myListingsPool.map((item) => String(item.id)));
+  const others = state.opportunityFeed.listings.filter((raw) => !ownIds.has(String(raw.id))).map(shapeListingSummaryForDisplay);
+  return [...myListingsPool, ...others];
+}
+
 function applyCreatedListing(created) {
-  listings.unshift(shapeListingForDisplay(created));
+  myListingsPool.unshift(shapeListingForDisplay(created));
   state.myListings.unshift(created);
   trackEvent("listing_created", { category: created.category, hasPrice: Boolean(created.price_amount) });
 }
@@ -8882,8 +8728,8 @@ async function refreshMyListings() {
   try {
     state.myListings = await fetchMyListings();
     for (const item of state.myListings) {
-      if (!listings.some((existing) => String(existing.id) === String(item.id))) {
-        listings.unshift(shapeListingForDisplay(item));
+      if (!myListingsPool.some((existing) => String(existing.id) === String(item.id))) {
+        myListingsPool.unshift(shapeListingForDisplay(item));
       }
     }
     // Home never reads state.myListings (Profile/Contribute do). This — and
@@ -8995,15 +8841,11 @@ async function submitListingForm() {
 }
 
 function renderHelpRequest(request) {
-  const title = request.title || t(request.titleKey);
-  const urgency = request.urgency || t(request.urgencyKey);
-  const status = request.status || t(request.statusKey);
   return `
     <article class="request-card">
-      <span class="badge">${escapeHtml(urgency)}</span>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(request.area)}${request.budget ? ` · ${escapeHtml(request.budget)}` : ""} · ${escapeHtml(status)}</p>
-      ${request.quotes.length ? `<div class="quote-list">${request.quotes.map((quote) => `<span>${escapeHtml(quote)}</span>`).join("")}</div>` : ""}
+      <span class="badge">${escapeHtml(request.urgency)}</span>
+      <h3>${escapeHtml(request.title)}</h3>
+      <p>${escapeHtml(request.area)}${request.budget ? ` · ${escapeHtml(request.budget)}` : ""} · ${escapeHtml(request.status)}</p>
     </article>
   `;
 }
@@ -9020,172 +8862,12 @@ function marketplaceCategoryTiles(targetView) {
   ];
 }
 
-function renderCategoryTabs(targetView = "marketplace") {
-  return renderCategoryTileGrid(marketplaceCategoryTiles(targetView));
-}
-
 /** Chip-row version for the full Marketplace results page — the picker
  * screen in front of it already showed the box grid, so repeating it
  * here would read as a second picker rather than a filter on results
  * already in view. See renderCategoryChipRow. */
 function renderMarketplaceCategoryChipRow(targetView = "marketplace") {
   return renderCategoryChipRow(marketplaceCategoryTiles(targetView));
-}
-
-function renderListings() {
-  const items = filteredListings();
-  return `
-    <section class="section-shell adaptive-page adaptive-page-marketplace">
-      <div class="screen-heading">
-        <p class="eyebrow">${currentAreaLabel()}</p>
-        <h1>${t("common.localListings")}</h1>
-      </div>
-      ${renderCategoryTabs("listings")}
-      <div class="stack-list">
-        ${items
-          .map(
-            (item) => `
-            <article class="content-card">
-              <span class="badge">${item.status}</span>
-              <h3>${listingTitle(item)}</h3>
-              <p>${item.area} · ${listingMeta(item)}</p>
-              <div><strong>${item.price}</strong><button>${t("common.view")}</button></div>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderBusinesses() {
-  const items = filteredBusinesses();
-  return `
-    <section class="section-shell adaptive-page adaptive-page-business">
-      <section class="city-hero page-hero businesses-hero-photo" aria-labelledby="businesses-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("home.cityOS")} · ${currentAreaLabel()}</p>
-          <h1 id="businesses-hero-title">${t("common.localPlaces")}</h1>
-          <p>${t("common.localPlacesHint")}</p>
-        </div>
-        ${renderAiSearch("businesses")}
-      </section>
-      ${renderAiSearchResults(6, "businesses")}
-      <div class="visual-business-grid">
-        ${items
-          .map(
-            (item) => `
-            <article class="business-card visual-business-card">
-              <div class="business-photo" style="background-image: url('${item.image}')">
-                <span>${item.hours}</span>
-              </div>
-              <div>
-                <h3>${item.name}${verifiedCheck(t("status.verified"))}</h3>
-                <p>${item.area} · ${item.distance} · ★ ${item.rating}</p>
-                <div class="tag-row">${item.tagKeys.map((tagKey) => `<span>${t(tagKey)}</span>`).join("")}</div>
-                <div class="ai-price-pill">${icon("spark")}<span>${t(item.aiInsightKey)}</span></div>
-                ${item.ecosystem ? `<div class="business-platform">${item.ecosystem.map((capability) => `<span>${capability}</span>`).join("")}</div>` : ""}
-              </div>
-              <div class="market-actions">
-                <button data-view="businessProfile" data-business-id="${item.id}">${t("common.viewProfile")}</button>
-                <button data-view="reservations">${t("common.reserve")}</button>
-              </div>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-const BUSINESS_TYPE_LABEL_KEY = {
-  restaurants: "category.business.bizCatFoodDrink",
-  hotels: "category.business.bizCatHotels",
-  "service-apartments": "category.business.bizCatHotels",
-  pharmacies: "category.business.bizCatPharmacy",
-  clinics: "category.business.bizCatHealthcare",
-  grocery: "category.business.bizCatGroceries",
-  repair: "category.business.bizCatShops",
-  shops: "category.business.bizCatShops"
-};
-
-function businessTypeLabel(type) {
-  const key = BUSINESS_TYPE_LABEL_KEY[type];
-  return key ? t(key) : type;
-}
-
-const OPENING_HOURS_DAY_LABEL_KEY = {
-  "Mon–Fri": "field.days.monFri",
-  "Mon–Sat": "field.days.monSat",
-  Sat: "field.days.sat",
-  "Sat–Sun": "field.days.satSun",
-  "Tue–Sun": "field.days.tueSun",
-  "Every day": "field.days.everyDay"
-};
-
-function openingHoursDayLabel(days) {
-  const key = OPENING_HOURS_DAY_LABEL_KEY[days];
-  return key ? t(key) : days;
-}
-
-function renderBusinessProfile() {
-  const item = businesses.find((business) => business.id === state.selectedBusinessId) || businesses[0];
-  const gallery = [item.image, ...(item.gallery || [])];
-
-  return `
-    <section class="section-shell adaptive-page adaptive-page-business business-profile-shell">
-      <button class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
-      <div class="business-profile-hero" style="background-image: url('${item.image}')">
-        <div class="business-profile-hero-copy">
-          <h1>${item.name}${item.verified ? verifiedCheck(t("status.verified")) : ""}</h1>
-          <p>${item.area} · ${item.distance} · ${icon("star")}${item.rating}</p>
-        </div>
-      </div>
-      ${
-        gallery.length > 1
-          ? `<div class="business-gallery-rail">${gallery.map((photo) => `<div class="business-gallery-photo" style="background-image: url('${photo}')"></div>`).join("")}</div>`
-          : ""
-      }
-      <div class="ai-price-pill">${icon("spark")}<span>${item.aiSummaryKey ? t(item.aiSummaryKey) : t(item.aiInsightKey)}</span></div>
-
-      <div class="business-detail-strip">
-        ${item.type ? `<span class="badge category-chip">${businessTypeLabel(item.type)}</span>` : ""}
-        ${item.address ? `<p class="business-detail-line">${pinIcon()}${escapeHtml(item.address)}</p>` : ""}
-        ${item.phone ? `<a class="business-detail-line business-detail-phone" href="tel:${item.phone}">${phoneIcon()}${escapeHtml(item.phone)}</a>` : ""}
-      </div>
-      ${item.tagKeys?.length ? `<div class="quote-list">${item.tagKeys.map((key) => `<span>${t(key)}</span>`).join("")}</div>` : ""}
-
-      <div class="business-profile-actions">
-        <button type="button" data-view="reservations">${t("common.bookNow")}</button>
-        ${renderDirectionsButton(item)}
-        ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>` : ""}
-      </div>
-      ${
-        item.services
-          ? `<div class="section-title"><h2>${t("common.services")}</h2></div>
-             <div class="business-services-list">${item.services.map((service) => `<div class="business-service-row"><span>${t(service.nameKey)}</span><strong>${service.price}</strong></div>`).join("")}</div>`
-          : ""
-      }
-      ${
-        item.openingHours
-          ? `<div class="section-title"><h2>${t("field.openingHours")}</h2></div>
-             <div class="business-hours-list">${item.openingHours.map((row) => `<div class="business-hours-row"><span>${openingHoursDayLabel(row.days)}</span><strong>${row.hours}</strong></div>`).join("")}</div>`
-          : ""
-      }
-      <div class="section-title"><h2>${t("common.reviews")}</h2></div>
-      <div class="review-grid">
-        ${profileReviews.map((review) => `
-          <article>
-            <div class="review-author-row" role="button" tabindex="0" ${publicProfileAttrs({ id: review.id, name: review.author, avatar: review.avatar, context: "review" })}>
-              <img src="${review.avatar}" alt="" />
-              <div><strong>${review.author}</strong><span>${"★".repeat(review.rating)}</span></div>
-            </div>
-            <p>${t(review.textKey)}</p>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
 }
 
 /* Inbox & Notification Centre — a single hub with two modes (segmented
@@ -9658,117 +9340,6 @@ function renderConversationDetail() {
         <input type="text" id="conversation-composer-input" name="message" placeholder="${t("messages.composerPlaceholder")}" value="${escapeHtml(state.composerDraft)}" aria-label="${t("messages.composerPlaceholder")}" autocomplete="off" ${state.conversationSendStatus === "sending" ? "disabled" : ""} />
         <button type="submit" ${state.conversationSendStatus === "sending" ? "disabled aria-busy=\"true\"" : ""}>${t("messages.send")}</button>
       </form>
-    </section>
-  `;
-}
-
-function renderOffers() {
-  return `
-    <section class="section-shell">
-      ${renderTransactionSafetyNotice()}
-      <div class="screen-heading">
-        <p class="eyebrow">${currentAreaLabel()}</p>
-        <h1>${t("common.localOffers")}</h1>
-      </div>
-      <div class="offer-list">
-        ${offers
-          .map(
-            (offer) => `
-            <article class="offer-card">
-              <span>${offer.expires}</span>
-              <h3>${offer.value}</h3>
-              <p>${t(offer.titleKey)}</p>
-              <small role="button" tabindex="0" ${publicProfileAttrs({ id: `offer-${offer.id}`, name: offer.vendor, area: offer.area, context: "marketplace" })}>${offer.vendor} · ${offer.area}</small>
-              <button>${t("business.claim.claimOffer")}</button>
-            </article>`
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-const RESERVATION_STATUS_TONE = {
-  "Pending confirmation": "status-badge-amber",
-  "Quote requested": "status-badge-sky",
-  "Awaiting slot": "status-badge-muted",
-  Confirmed: "status-badge-green"
-};
-
-const RESERVATION_TYPE_ICON = {
-  Restaurant: "food",
-  "Service apartment": "stay",
-  Service: "tool"
-};
-
-const RESERVATION_BOOKABLE_TYPES = ["restaurants", "hotels", "service-apartments", "repair", "clinics"];
-
-function renderReservationCard(request) {
-  const match = businesses.find((item) => item.name === request.target);
-  return `
-    <article class="reservation-card">
-      <div class="reservation-card-photo" ${match ? `style="background-image: url('${match.image}')"` : ""}>
-        ${!match ? `<span class="reservation-card-icon">${icon(RESERVATION_TYPE_ICON[request.type] || "calendar")}</span>` : ""}
-      </div>
-      <div class="reservation-card-body">
-        <span class="badge ${RESERVATION_STATUS_TONE[request.status] || ""}">${request.status}</span>
-        <h3>${request.target}</h3>
-        <p>${request.type} · ${request.date} · ${request.party}</p>
-      </div>
-      ${match ? `<button data-view="businessProfile" data-business-id="${match.id}">${t("common.viewProfile")}</button>` : ""}
-    </article>
-  `;
-}
-
-function renderReservationSuggestion(item) {
-  return `
-    <article class="reservation-suggestion-card" data-view="businessProfile" data-business-id="${item.id}">
-      <div class="card-photo" style="background-image: url('${item.image}')"></div>
-      <h3>${item.name}</h3>
-      <p>${item.area} · ★ ${item.rating}</p>
-      <button type="button" data-view="businessProfile" data-business-id="${item.id}">${t("common.reserve")}</button>
-    </article>
-  `;
-}
-
-function renderReservations() {
-  const suggestions = businesses.filter((item) => RESERVATION_BOOKABLE_TYPES.includes(item.type));
-  return `
-    <section class="section-shell reservations-shell">
-      <section class="city-hero page-hero reservations-hero-photo" aria-labelledby="reservations-hero-title">
-        <div class="city-hero-copy">
-          <p class="eyebrow">${t("nav.book")} · ${currentAreaLabel()}</p>
-          <h1 id="reservations-hero-title">${t("common.reservationTitle")}</h1>
-          <p>${t("common.reservationHeroSubtitle")}</p>
-        </div>
-        ${renderAiSearch("reservations")}
-      </section>
-
-      ${renderAiSearchResults(6, "reservations")}
-
-      <div class="request-form-card">
-        <h2>${t("common.newRequestTitle")}</h2>
-        <form class="request-form">
-          <label>${icon("shop")}<input placeholder="${t("common.requestPlaceholder")}" /></label>
-          <label>${icon("calendar")}<input placeholder="${t("common.datePlaceholder")}" /></label>
-          <label>${icon("people")}<input placeholder="${t("common.notesPlaceholder")}" /></label>
-          <button type="button">${t("entity.request")}</button>
-        </form>
-      </div>
-
-      <div class="section-title">
-        <div><h2>${t("common.myRequestsTitle")}</h2></div>
-      </div>
-      <div class="reservation-list">
-        ${reservations.map(renderReservationCard).join("")}
-      </div>
-
-      ${suggestions.length ? `
-        <div class="section-title">
-          <div><h2>${t("common.popularToBookTitle")}</h2><p>${t("common.popularToBookHint")}</p></div>
-        </div>
-        ${renderCarousel("popularToBook", "living-rail", suggestions.map(renderReservationSuggestion).join(""))}
-      ` : ""}
     </section>
   `;
 }
@@ -10605,9 +10176,7 @@ function renderTranslation() {
 
 const PUBLIC_PROFILE_CONTEXT_HINT = {
   community: "profile.public.publicProfileContextCommunity",
-  marketplace: "profile.public.publicProfileContextMarketplace",
-  hire: "profile.public.publicProfileContextHire",
-  review: "profile.public.publicProfileContextReview"
+  marketplace: "profile.public.publicProfileContextMarketplace"
 };
 
 /** Everything below reads only real, currently-tracked fields — Supabase
@@ -10745,7 +10314,6 @@ function renderPublicProfile() {
   const metaLine = [person.category, person.area, city.name].filter(Boolean).join(" · ");
   const contextKey = PUBLIC_PROFILE_CONTEXT_HINT[person.context];
   const skillsList = (person.skills || "").split(",").map((skill) => skill.trim()).filter(Boolean);
-  const isHireContext = person.context === "hire";
 
   const stats = [
     person.rating ? { label: t("common.rating"), value: `${icon("star")} ${person.rating}${person.reviews ? ` (${person.reviews})` : ""}` } : null,
@@ -10777,7 +10345,7 @@ function renderPublicProfile() {
       ${contextKey ? `<p class="public-profile-context-hint">${t(contextKey)}</p>` : ""}
 
       <div class="public-profile-primary-actions">
-        <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
+        <button type="button" class="auth-primary-button" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
       ${
@@ -10810,7 +10378,7 @@ function renderPublicProfile() {
       ` : ""}
 
       <div class="public-profile-secondary-actions">
-        <span class="badge offeror-status-badge">${person.context === "hire" ? "Trader/business" : "Private seller/provider"}</span>
+        <span class="badge offeror-status-badge">Private seller/provider</span>
         <button type="button" data-report-target="user" data-report-id="${escapeHtml(person.id)}">Report user</button>
         <button type="button" data-person-action="block" ${isBlocked ? "disabled" : ""}>${isBlocked ? t("common.blockedConfirmation") : t("common.blockPersonCta")}</button>
       </div>
@@ -11328,14 +10896,10 @@ function renderOps() {
       <div class="ops-actions">
         ${[
           ["marketplace", "nav.marketplace"],
-          ["businesses", "nav.businesses"],
           ["hire", "nav.hire"],
-          ["offers", "nav.offers"],
-          ["reservations", "nav.reservations"],
           ["cityImport", "import.cityImport"]
         ].map(([view, labelKey]) => `<button data-view="${view}">${t(labelKey)}<span>${t("common.manage")}</span></button>`).join("")}
       </div>
-      ${renderAlwenBusinessCreator()}
       ${renderCityGraph()}
       ${renderCityImport()}
       <div class="integration-list">
@@ -11354,33 +10918,7 @@ function renderBusinessCreate() {
         <h1>${t("alwen.alwenBusinessTitle")}</h1>
         <p>${t("alwen.alwenBusinessHint")}</p>
       </div>
-      ${renderAlwenBusinessCreator()}
-    </section>
-  `;
-}
-
-function renderAlwenBusinessCreator() {
-  const draftRows = [
-    ["field.name", alwenBusinessDraft.name],
-    ["field.cuisine", alwenBusinessDraft.cuisine],
-    ["field.openingHours", alwenBusinessDraft.openingHours],
-    ["nav.reservations", alwenBusinessDraft.reservationSettings],
-    ["field.location", alwenBusinessDraft.locationPlaceholder],
-    ["business.claim.cta", alwenBusinessDraft.claimStatus]
-  ];
-
-  return `
-    <section class="alwen-card">
-      <div class="section-title">
-        <div><h2>${t("alwen.alwenBusinessTitle")}</h2><p>${t("alwen.alwenBusinessHint")}</p></div>
-      </div>
-      <div class="alwen-prompt">${icon("spark")}<p>${alwenBusinessDraft.prompt}</p></div>
-      <p class="draft-description">${alwenBusinessDraft.description}</p>
-      <div class="draft-grid">${draftRows.map(([label, value]) => `<article><span>${t(label)}</span><strong>${value}</strong></article>`).join("")}</div>
-      <div class="quote-list">${[...alwenBusinessDraft.categories, ...alwenBusinessDraft.popularKeywords].map((item) => `<span>${item}</span>`).join("")}</div>
-      <div class="draft-list"><strong>${t("common.menuSections")}</strong><p>${alwenBusinessDraft.menuSections.join(" · ")}</p></div>
-      <div class="draft-list"><strong>${t("common.suggestedPhotos")}</strong><p>${alwenBusinessDraft.suggestedPhotos.join(" · ")}</p></div>
-      <div class="draft-actions"><button>${t("common.improveWithAlwen")}</button><button>${t("common.reviewPublish")}</button></div>
+      ${renderEmptyState(t("business.createUnavailable"), "building")}
     </section>
   `;
 }
@@ -11555,30 +11093,7 @@ function renderCityImport() {
   `;
 }
 
-/** Wolt-style colourful category grid — a handful of tone tiles cycled
- * across however many categories there are, so the grid reads as
- * scannable/colourful without needing a bespoke colour per category.
- * tiles: [{ label, iconGlyph, isActive, attrs }], attrs is a raw string
- * of data-* attributes (e.g. `data-category="x" data-target-view="y"`)
- * so the existing click handlers for each caller keep working unchanged. */
 const CATEGORY_TILE_TONES = ["mint", "gold", "sky", "rose"];
-
-function renderCategoryTileGrid(tiles) {
-  return `
-    <div class="category-tile-grid" role="list">
-      ${tiles
-        .map(
-          (tile, index) => `
-            <button type="button" class="category-tile tone-${CATEGORY_TILE_TONES[index % CATEGORY_TILE_TONES.length]} ${tile.isActive ? "is-active" : ""}" ${tile.attrs}>
-              <span class="category-tile-icon">${tile.iconGlyph}</span>
-              <span class="category-tile-label">${tile.label}</span>
-            </button>
-          `
-        )
-        .join("")}
-    </div>
-  `;
-}
 
 /** Compact pill-row version of the same tile data — used on the full
  * Marketplace/Explore results pages instead of renderCategoryTileGrid's
@@ -11827,8 +11342,6 @@ function renderPlaceActionButtons(item) {
   const secondary = categoryActionsFor(item)
     .map((action) => {
       if (action === "menu" && item.website) return `<a class="directions-btn" href="${item.website}" target="_blank" rel="noopener noreferrer">${t("common.menu")}</a>`;
-      if (action === "reserve") return `<button data-view="reservations">${t("common.reserve")}</button>`;
-      if (action === "book") return `<button data-view="reservations">${t("nav.book")}</button>`;
       if (action === "hours" && item.openingHours) return `<span class="badge hours-chip">${escapeHtml(item.openingHours)}</span>`;
       if (action === "documents") return `<span class="badge hours-chip">${t("common.documents")}</span>`;
       return "";
@@ -12014,11 +11527,11 @@ function renderBusinessDashboard() {
  * city-import dashboard, which meant every "Own this business" button in
  * the app routed ordinary customers into an unrelated internal admin
  * screen. This wraps the same real 4-step form in its own section with a
- * normal back button, same pattern as renderListingDetail/renderBusinessProfile. */
+ * normal back button, same pattern as renderListingDetail. */
 function renderBusinessClaim() {
   return `
     <section class="section-shell business-claim-shell">
-      <button type="button" class="back-button" data-view="businesses">${icon("arrow")}${t("common.back")}</button>
+      <button type="button" class="back-button" data-view="explore">${icon("arrow")}${t("common.back")}</button>
       ${renderClaimFlow()}
     </section>
   `;
@@ -12321,10 +11834,9 @@ function bindEvents() {
         state.exploreCuisine = "All";
         state.exploreStars = "All";
       }
-      if (button.dataset.businessId) state.selectedBusinessId = Number(button.dataset.businessId);
       if (button.dataset.listingId) {
         state.selectedListingId = button.dataset.listingId;
-        const selected = listings.find((listing) => String(listing.id) === String(button.dataset.listingId));
+        const selected = myListingsPool.find((listing) => String(listing.id) === String(button.dataset.listingId));
         if (selected?.offerorStatus === "trader") loadTraderDisclosure(selected.sellerId);
       }
       if (button.dataset.placeId) state.selectedPlaceId = button.dataset.placeId;
@@ -12703,6 +12215,19 @@ function bindEvents() {
     refreshOpportunityFeed();
   }));
 
+  // Zero-requests empty state's CTA — scrolls to and focuses the same
+  // composer already at the top of Need Help, rather than opening a
+  // second form.
+  document.querySelectorAll('[data-action="focus-help-request-composer"]').forEach((button) => button.addEventListener("click", () => {
+    const composer = document.getElementById("need-help-composer");
+    composer?.scrollIntoView({ behavior: "smooth", block: "center" });
+    composer?.focus();
+  }));
+
+  document.querySelectorAll('[data-action="retry-community-feed"]').forEach((button) => button.addEventListener("click", () => {
+    refreshCommunityFeed();
+  }));
+
   document.querySelectorAll('[data-action="retry-listing-detail"]').forEach((button) => button.addEventListener("click", () => {
     refreshRemoteListingDetail(state.selectedListingId);
     render();
@@ -12727,19 +12252,6 @@ function bindEvents() {
       const item = importedBusinesses.find((business) => business.id === button.dataset.placeId);
       if (item) sharePlace(item);
       trackEvent("place_shared", { placeId: button.dataset.placeId });
-    });
-  });
-
-  document.querySelectorAll('[data-action="toggle-helpful"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      // Raw dataset string, not Number() — real Community posts loaded via
-      // fetchCommunityPosts() have UUID ids; Number() on a UUID is NaN,
-      // which silently broke this toggle for any real post (same class of
-      // bug as toggle-listing-save's own id, see that handler's comment).
-      const id = button.dataset.postId;
-      state.helpfulPostIds = state.helpfulPostIds.includes(id) ? state.helpfulPostIds.filter((existing) => existing !== id) : [...state.helpfulPostIds, id];
-      render();
     });
   });
 
@@ -12781,33 +12293,37 @@ function bindEvents() {
     });
   });
 
-  document.querySelector('[data-action="submit-community-post"]')?.addEventListener("submit", (event) => {
+  document.querySelector('[data-action="submit-community-post"]')?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const title = String(formData.get("title") || "").trim();
     const body = String(formData.get("body") || "").trim();
     if (!title || !body) return;
-    const nextId = feedPosts.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-    feedPosts.unshift({
-      id: nextId,
-      authorId: `community-user-${nextId}`,
-      author: state.auth.user.name,
-      avatar: state.auth.user.avatar || null,
-      area: currentAreaLabel(),
-      time: t("notification.groupNow"),
-      type: state.communityPostDraft.type,
-      verified: false,
-      title,
-      body,
-      tags: [],
-      replies: 0,
-      helpful: 0,
-      saves: 0,
-      replyList: []
-    });
-    state.communityPostDraft = { title: "", body: "", type: "discussion" };
-    state.activeSheet = null;
-    trackEvent("community_post_created", { type: feedPosts[0].type });
+    if (state.auth.status !== "signedIn") {
+      state.communityPostSubmitStatus = "error";
+      state.communityPostSubmitError = t("community.composerSignInHint");
+      render();
+      return;
+    }
+    state.communityPostSubmitStatus = "loading";
+    state.communityPostSubmitError = null;
+    render();
+    try {
+      const created = await createCommunityPost({
+        title,
+        body,
+        category: state.communityPostDraft.type,
+        neighbourhood: state.area === "All" ? null : state.area
+      });
+      applyCreatedCommunityPost(created);
+      state.communityPostDraft = { title: "", body: "", type: "discussion" };
+      state.communityPostSubmitStatus = "idle";
+      state.activeSheet = null;
+    } catch (error) {
+      console.warn("[community] Failed to create post.", error);
+      state.communityPostSubmitStatus = "error";
+      state.communityPostSubmitError = error?.message || t("community.postError");
+    }
     render();
   });
 
@@ -12845,28 +12361,13 @@ function bindEvents() {
 
   document.querySelector('[data-action="report-post-author"]')?.addEventListener("click", () => {
     const post = findCommunityPostById(state.activePostId);
-    if (post && !state.reportedPeople.includes(post.author)) state.reportedPeople.push(post.author);
+    if (post && !state.reportedPeople.includes(post.authorName)) state.reportedPeople.push(post.authorName);
     render();
   });
 
   document.querySelector('[data-action="block-post-author"]')?.addEventListener("click", () => {
     const post = findCommunityPostById(state.activePostId);
-    if (post && !state.blockedPeople.includes(post.author)) state.blockedPeople.push(post.author);
-    render();
-  });
-
-  document.querySelector('[data-action="reply-to-post"]')?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const text = String(formData.get("reply") || "").trim();
-    if (!text) return;
-    const post = findCommunityPostById(form.dataset.postId);
-    if (post) {
-      post.replyList = post.replyList || [];
-      post.replyList.push({ author: t("common.you"), text });
-      post.replies = (post.replies || 0) + 1;
-    }
+    if (post && !state.blockedPeople.includes(post.authorName)) state.blockedPeople.push(post.authorName);
     render();
   });
 

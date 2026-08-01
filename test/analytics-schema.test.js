@@ -79,7 +79,7 @@ test("rejects undeclared extra fields — the schema is a real contract, not a s
   assert.match(result.reason, /undeclared field/);
 });
 
-test("session_started exists for the question this task named", () => {
+test("session_started exists for the week-2-return question this task named", () => {
   assert.equal(validateEventPayload(ANALYTICS_EVENTS.SESSION_STARTED, {}).ok, true);
 });
 

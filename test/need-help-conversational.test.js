@@ -36,10 +36,8 @@ test("ten curated intents exist with real matchQuery values, no live AI call per
   for (const id of ids) {
     assert.match(main, new RegExp(`id: "${id}"`), `intent ${id} must exist`);
   }
-  // Every intent's matchQuery must be the string actually filtered against
-  // serviceProfessionals via the existing hireCategoryMatches — not a
-  // disconnected label that would make the AI summary and the results
-  // list disagree.
+  // Every intent's matchQuery becomes the real help_requests.category on
+  // submit (see startNeedHelpTypewriter) — not a disconnected label.
   const intentsBlock = main.slice(main.indexOf("const NEED_HELP_INTENTS = ["), main.indexOf("];", main.indexOf("const NEED_HELP_INTENTS = [")));
   assert.match(intentsBlock, /matchQuery: "ikea assembly"/);
   assert.match(intentsBlock, /matchQuery: "cleaning"/);
@@ -51,28 +49,20 @@ test("matchNeedHelpIntent only fires on short keyword-like input, never on a ful
   assert.match(helper, /trimmed\.length > 24/);
 });
 
-test("the AI summary is computed from real professionals via hireCategoryMatches, not fabricated", () => {
+test("the AI summary is honestly always empty — there is no real professional-listing concept yet", () => {
   const helper = extractFunction(main, "needHelpSummaryStats");
   assert.match(helper, /professionalsForIntent\(intent\)/);
   const professionalsForIntent = extractFunction(main, "professionalsForIntent");
-  assert.match(professionalsForIntent, /hireCategoryMatches\(item, intent\.matchQuery\)/);
-  // Response time and price are parsed from the real fields, not hardcoded.
+  assert.match(professionalsForIntent, /return \[\];/, "professionalsForIntent must always be honestly empty, never fabricated");
+  // Response time and price are still parsed from whatever real fields a
+  // future real source would provide, not hardcoded.
   assert.match(helper, /parseInt\(item\.responseTime, 10\)/);
   assert.match(helper, /String\(item\.price\)\.match\(\/\\d\+\/\)/);
   assert.match(helper, /verifiedCount: matches\.filter\(\(item\) => item\.verified\)\.length/);
 });
 
-test("every serviceProfessionals record has responseTime so no summary stat silently goes blank", () => {
-  const ids = [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511];
-  for (const id of ids) {
-    const recordStart = mockData.indexOf(`id: ${id},`);
-    assert.ok(recordStart !== -1, `professional ${id} must exist`);
-    const recordEnd = mockData.indexOf("},", recordStart);
-    const record = mockData.slice(recordStart, recordEnd);
-    assert.match(record, /responseTime: "\d+ min"/, `professional ${id} must have a real responseTime`);
-  }
-  // The flagship "paint" example must have a real match, not a 0-result summary.
-  assert.match(mockData, /skills: \["painter", "painting"/);
+test("mockData.js no longer exports serviceProfessionals", () => {
+  assert.doesNotMatch(mockData, /export const serviceProfessionals/);
 });
 
 test("submitting sets state.hireCategory to the same matchQuery the summary/results already used", () => {
@@ -101,30 +91,18 @@ test("the CTA reads Find professionals and the transition stays in-place (no dat
   assert.match(renderNeedHelp, /renderNeedHelpResults\(intent\)/);
 });
 
-test("professional cards reuse the exact opportunity-card premium shell, not a lookalike", () => {
-  const card = extractFunction(main, "renderProCard");
-  assert.match(card, /class="opportunity-card pro-opportunity-card"/);
-  assert.match(card, /class="opportunity-cover opportunity-cover-avatar"/);
-  assert.match(card, /class="opportunity-price-row"/);
-  assert.match(card, /class="opportunity-meta"/);
-  assert.match(card, /class="opportunity-trust"/);
-  assert.match(card, /class="opportunity-tags"/);
-  // Book/Contact were removed — serviceProfessionals is fabricated placeholder
-  // data with no real user account behind it, so there's nothing real to
-  // message; the old buttons fired the deleted mock-conversation system.
-  assert.doesNotMatch(card, /data-action="start-pro-conversation"/);
-  assert.doesNotMatch(card, /class="opportunity-actions"/);
-
-  const results = extractFunction(main, "renderNeedHelpResults");
-  assert.match(results, /class="opportunity-feed"/);
-  assert.match(results, /matches\.map\(renderProCard\)/);
+test("renderProCard/renderProfessional and the fabricated-conversation start-pro-conversation handler are fully removed, not just unused", () => {
+  assert.doesNotMatch(main, /function renderProCard\(/);
+  assert.doesNotMatch(main, /function renderProfessional\(/);
+  assert.doesNotMatch(main, /startProfessionalConversation\(/, "the deleted mock-conversation function must not be reintroduced");
+  assert.doesNotMatch(main, /data-action="start-pro-conversation"/);
 });
 
-test("pro cards are keyboard accessible", () => {
-  const card = extractFunction(main, "renderProCard");
-  assert.match(card, /role="button" tabindex="0"/);
-  const bindPublicProfileEvents = extractFunction(main, "bindPublicProfileEvents");
-  assert.match(bindPublicProfileEvents, /event\.key !== "Enter" && event\.key !== " " && event\.key !== "Spacebar"/);
+test("Need Help results after posting show the real, always-honest empty state — never a fabricated pro card", () => {
+  const results = extractFunction(main, "renderNeedHelpResults");
+  assert.match(results, /class="opportunity-feed"/);
+  assert.match(results, /renderEmptyState\(t\("common\.noResults"\), "people"\)/);
+  assert.doesNotMatch(results, /renderProCard/);
 });
 
 test("resetting the draft also clears the new intent/typewriter state", () => {

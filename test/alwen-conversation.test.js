@@ -100,12 +100,15 @@ test("searchAlwenPlaces saves and restores every Explore filter field it touches
   assert.match(fn, /return filteredImportedBusinesses\(\)\.slice\(0, 5\)/, "must reuse the real Explore filter and cap at 5");
 });
 
-test("searchAlwenProfessionals saves and restores Hire filter state in a finally block, capped at 5", () => {
+test("searchAlwenProfessionals is always honestly empty — no real professional-listing concept exists yet, and hire_service intent routing still reaches it exactly as before (Phase 7)", () => {
   const fn = extractFunction(main, "searchAlwenProfessionals");
-  assert.match(fn, /previousQuery = state\.query/);
-  assert.match(fn, /previousCategory = state\.hireCategory/);
-  assert.match(fn, /try \{[\s\S]*\} finally \{/);
-  assert.match(fn, /return filteredProfessionals\(\)\.slice\(0, 5\)/);
+  assert.match(fn, /return \[\];/);
+  assert.doesNotMatch(fn, /serviceProfessionals|filteredProfessionals|hireCategoryForQuery/);
+});
+
+test("filteredProfessionals and hireCategoryForQuery are fully deleted — topMatches()'s proMatches branch and Alwen's Hire search no longer depend on a professional-listing helper that only ever returned [] (Phase 7)", () => {
+  assert.doesNotMatch(main, /function filteredProfessionals\(/);
+  assert.doesNotMatch(main, /function hireCategoryForQuery\(/);
 });
 
 test("submitAlwenStructuredSearchTurn never calls the AI chat client — place/hire search is deterministic-first", () => {
@@ -351,10 +354,11 @@ test("loadAlwenConversation re-checks convo.loaded after each await, so a clear 
   assert.match(afterSecondAwait, /if \(convo\.loaded\) return;/, "must re-check convo.loaded immediately after the second await too, before assigning convo.id/messages");
 });
 
-test("mapAlwenMessageRow re-hydrates structured results from live data by id, never a frozen snapshot", () => {
+test("mapAlwenMessageRow re-hydrates structured results from live data by id, never a frozen snapshot — and a historical 'professional' row honestly resolves empty rather than resurrecting a mock person", () => {
   const fn = extractFunction(main, "mapAlwenMessageRow");
   assert.match(fn, /source\.find\(\(item\) => String\(item\.id\) === String\(id\)\)/);
-  assert.match(fn, /row\.result_type === "place" \? importedBusinesses : row\.result_type === "professional" \? serviceProfessionals/);
+  assert.match(fn, /row\.result_type === "place" \? importedBusinesses : \[\]/);
+  assert.doesNotMatch(fn, /serviceProfessionals/);
 });
 
 test("persistAlwenStructuredSearchTurn is best-effort — a persistence failure is logged, never thrown to the caller", () => {

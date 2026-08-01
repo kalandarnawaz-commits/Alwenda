@@ -180,8 +180,9 @@ test("adaptive page wrappers separate mobile and desktop layout without duplicat
   assert.match(extractFunction(main, "renderRealHelpRequestDetail"), /adaptive-page adaptive-page-help-request/);
   assert.match(extractFunction(main, "renderMarketplace"), /adaptive-page adaptive-page-marketplace marketplace-shell/);
   assert.match(extractFunction(main, "renderListingDetailBody"), /adaptive-page adaptive-page-marketplace listing-detail-shell/);
-  assert.match(extractFunction(main, "renderBusinesses"), /adaptive-page adaptive-page-business/);
-  assert.match(extractFunction(main, "renderBusinessProfile"), /adaptive-page adaptive-page-business business-profile-shell/);
+  // renderBusinesses/renderBusinessProfile were deleted along with the rest
+  // of the fake Businesses/Reservations system — no adaptive wrapper to
+  // assert on anymore (see production-honesty-guard.test.js).
   assert.match(extractFunction(main, "renderProfile"), /adaptive-page adaptive-page-profile profile-panel identity-profile/);
   assert.match(extractFunction(main, "renderUserProfile"), /adaptive-page adaptive-page-profile profile-panel user-profile-shell/);
   assert.match(styles, /\.adaptive-page\s*\{[\s\S]*1280px/, "desktop adaptive pages should constrain content around 1280px");

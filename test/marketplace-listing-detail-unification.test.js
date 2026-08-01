@@ -292,7 +292,7 @@ test("seller messaging is real (Supabase-backed), not the old simulated-reply fl
 --------------------------------------------------------------------- */
 
 test("listingDetail stays a real id-linked, deep-linkable view — direct-link restoration for a real (non-local) listing id is unaffected by this correction", () => {
-  assert.match(main, /const ID_LINKED_VIEWS = new Set\(\["publicProfile", "userProfile", "businessProfile", "listingDetail"/);
+  assert.match(main, /const ID_LINKED_VIEWS = new Set\(\["publicProfile", "userProfile", "listingDetail"/);
   // The generic [data-view] handler sets state.selectedListingId as a
   // plain string (no Number() cast) — already UUID-safe, untouched here.
   assert.match(main, /if \(button\.dataset\.listingId\) \{\s*\n\s*state\.selectedListingId = button\.dataset\.listingId;/);

@@ -168,7 +168,6 @@ test("deep-link allowlist protects launch-critical routes that already exist", a
   const requiredExistingRoutes = [
     "home",
     "marketplace",
-    "businessProfile",
     "translate",
     "messages",
     "notifications",
