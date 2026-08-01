@@ -17,16 +17,15 @@ test("the fake in-app booking-confirmation flow is fully removed from the Hire/N
   assert.doesNotMatch(main, /status: "Confirmed"/, "no code path may fabricate a confirmed booking status");
 });
 
-test("the Hire public-profile Book button opens a real conversation instead of a fake confirmation sheet", async () => {
+test("the Hire public-profile Book button is fully removed, not routed to any fake or real flow", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /data-person-action="request-booking"/);
+  // serviceProfessionals is fabricated placeholder data with no real user
+  // account behind it — there is nothing real to book or message, so the
+  // honest choice (same reasoning applied to the pro-card Book/Contact
+  // buttons) is to remove the CTA outright rather than route it anywhere.
+  assert.doesNotMatch(main, /data-person-action="request-booking"/);
   assert.doesNotMatch(main, /data-person-action="book"/, "the old fake-booking action name must not remain anywhere");
-
-  const handlerStart = main.indexOf('querySelector(\'[data-person-action="request-booking"]\')');
-  assert.ok(handlerStart > -1, "expected a querySelector click handler bound to the request-booking action");
-  const handlerSection = main.slice(handlerStart);
-  const handlerBody = handlerSection.slice(0, handlerSection.indexOf("});") + 3);
-  assert.match(handlerBody, /startProfessionalConversation\(/, "clicking Book must route through the same honest, message-based flow as the pro cards");
+  assert.doesNotMatch(main, /startProfessionalConversation\(/, "the deleted mock-conversation function must not be reintroduced");
 });
 
 test("common.bookPay no longer implies Alwenda handles in-app payment", async () => {

@@ -109,9 +109,11 @@ test("professional cards reuse the exact opportunity-card premium shell, not a l
   assert.match(card, /class="opportunity-meta"/);
   assert.match(card, /class="opportunity-trust"/);
   assert.match(card, /class="opportunity-tags"/);
-  assert.match(card, /class="opportunity-actions"/);
-  // Book/Contact reuse the existing conversation-starting handler — no new one.
-  assert.match(card, /data-action="start-pro-conversation"/);
+  // Book/Contact were removed — serviceProfessionals is fabricated placeholder
+  // data with no real user account behind it, so there's nothing real to
+  // message; the old buttons fired the deleted mock-conversation system.
+  assert.doesNotMatch(card, /data-action="start-pro-conversation"/);
+  assert.doesNotMatch(card, /class="opportunity-actions"/);
 
   const results = extractFunction(main, "renderNeedHelpResults");
   assert.match(results, /class="opportunity-feed"/);

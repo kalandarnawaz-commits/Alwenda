@@ -79,9 +79,12 @@ test("rejects undeclared extra fields — the schema is a real contract, not a s
   assert.match(result.reason, /undeclared field/);
 });
 
-test("business_contacted and session_started exist for the two questions this task named", () => {
-  assert.equal(validateEventPayload(ANALYTICS_EVENTS.BUSINESS_CONTACTED, { businessId: "b1" }).ok, true);
+test("session_started exists for the question this task named", () => {
   assert.equal(validateEventPayload(ANALYTICS_EVENTS.SESSION_STARTED, {}).ok, true);
+});
+
+test("business_contacted no longer exists — its sole firer (the mock business-messaging flow) was removed when Business/Professional messaging were dropped for having no real recipient to message", () => {
+  assert.equal(ANALYTICS_EVENTS.BUSINESS_CONTACTED, undefined);
 });
 
 test("buildAnalyticsEventRecord stamps a stable anonymous/session id and the right shape for the analytics_events table", () => {
@@ -102,11 +105,11 @@ test("buildAnalyticsEventRecord allows a null user_id for anonymous/pre-login ac
   assert.equal(record.user_id, null);
 });
 
-test("main.js wires the typed schema into trackEvent, ships to Supabase, and fires business_contacted/session_started", async () => {
+test("main.js wires the typed schema into trackEvent, ships to Supabase, and fires session_started", async () => {
   const main = await readRepoFile("src/main.js");
   assert.match(main, /import \{ validateEventPayload, buildAnalyticsEventRecord, AnalyticsSchemaError \} from "\.\/services\/analytics\.js/);
   assert.match(main, /recordAnalyticsEvent\(record\)/);
-  assert.match(main, /trackEvent\("business_contacted", \{ businessId: String\(item\.id\) \}\)/);
+  assert.doesNotMatch(main, /trackEvent\("business_contacted"/);
   assert.match(main, /function trackSessionStartedOncePerDay\(\)/);
   assert.match(main, /trackSessionStartedOncePerDay\(\);/);
 });

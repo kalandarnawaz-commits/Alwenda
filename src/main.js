@@ -17,7 +17,6 @@ import {
   liveAroundYou,
   livingCitySignals,
   marketplaceCapabilities,
-  messageThreads,
   neighbourhoods,
   NOTIFICATION_FILTERS,
   notifications,
@@ -113,8 +112,14 @@ import {
   fetchBlockedUserIds,
   blockUser,
   unblockUser,
+  fetchProfilesByIds,
+  findOrCreateConversation,
+  fetchMyConversations,
+  fetchLatestMessagesByConversationIds,
+  fetchConversationMessages,
+  sendMessage,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=home-feed-2";
+} from "./services/auth/supabaseClient.js?v=help-request-messaging-1";
 import {
   orderedCategoryIds,
   orderedStarterCategoryIds,
@@ -262,7 +267,19 @@ const state = {
   selectedOpportunityId: null,
   selectedEventId: null,
   savedEventIds: [],
+  /* Real (Supabase-backed) 1:1 messaging — activeConversationId is now a
+     real conversation UUID (set by openRealConversation()), not a mock
+     integer id. inbox is the Inbox tab's list cache; conversationDetail is
+     the currently-open conversation's message history + the other
+     participant's profile + a human-readable label for what it's about
+     (a listing or a help request). status: "idle" | "loading" | "loaded" |
+     "error" throughout, matching the convention used by
+     remoteListingDetail/remoteHelpRequestDetail above. */
   activeConversationId: null,
+  inbox: { status: "idle", conversations: [], previews: new Map(), loadedAt: null },
+  conversationDetail: { status: "idle", id: null, otherUserId: null, otherProfile: null, contextType: null, contextId: null, contextLabel: null, messages: [] },
+  conversationSendStatus: "idle",
+  conversationSendError: null,
   composerDraft: "",
   notificationFilter: "all",
   savedPlaceIds: [],
@@ -4107,7 +4124,6 @@ function renderAlwenContextualActions(message) {
     return `
       <div class="alwen-contextual-actions">
         <button type="button" ${profileAttrs} data-alwen-contextual-action="viewProfile" data-alwen-contextual-result-type="professional">${t("common.viewProfile")}</button>
-        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact" data-alwen-contextual-action="message" data-alwen-contextual-result-type="professional">${t("common.message")}</button>
         <button type="button" data-view="hire" data-alwen-contextual-action="seeMoreInHire" data-alwen-contextual-result-type="professional">${t("alwen.seeMoreInHire")}</button>
       </div>
     `;
@@ -7084,8 +7100,6 @@ function renderProfessional(item) {
           </div>
         </div>
       </div>
-      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
-      <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
     </article>
   `;
 }
@@ -8001,7 +8015,11 @@ function renderRealHelpRequestDetail(record) {
           <p>${escapeHtml(request.description || request.title)}</p>
         </div>
         <div class="opportunity-detail-actions">
-          ${state.auth.status !== "signedIn" ? `<button type="button" class="opportunity-primary" data-view="auth">${t("common.signIn")}</button>` : `<button type="button" class="opportunity-primary" disabled aria-disabled="true">${t("opportunities.replyComingSoon")}</button>`}
+          ${state.auth.status !== "signedIn"
+            ? `<button type="button" class="opportunity-primary" data-view="auth">${t("common.signIn")}</button>`
+            : state.auth.user?.id === request.author.userId
+              ? ""
+              : `<button type="button" class="opportunity-primary" data-action="message-help-request-author" data-help-request-id="${escapeHtml(request.id)}">${t("common.message")}</button>`}
           ${authorTarget ? `<button type="button" data-user-profile-target="${authorTarget}">${t("common.viewProfile")}</button>` : ""}
           <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
         </div>
@@ -8133,7 +8151,6 @@ function renderLiveOpportunityDetail() {
   const time = opportunityText(item, "time");
   const requester = opportunityText(item, "requester");
   const description = opportunityText(item, "description");
-  const action = opportunityText(item, "action");
   const image = resolveHelpRequestImage(item);
   const related = LIVE_OPPORTUNITIES
     .filter((candidate) => candidate.id !== item.id && (candidate.category === item.category || candidate.today === item.today))
@@ -8170,9 +8187,7 @@ function renderLiveOpportunityDetail() {
         </div>
         <div class="opportunity-tags">${opportunityTags(item).map((tag) => `<span>${tag}</span>`).join("")}</div>
         <div class="opportunity-detail-actions">
-          <button type="button" class="opportunity-primary" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${action}</button>
-          <button type="button" data-action="start-opportunity-conversation" data-opportunity-id="${item.id}">${t("common.message")}</button>
-          <button type="button" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
+          <button type="button" class="opportunity-primary" data-view="needHelp">${t("needHelp.needHelpCta")}</button>
         </div>
       </div>
     </article>
@@ -8577,10 +8592,6 @@ function renderProCard(item) {
       <p class="opportunity-meta">${escapeHtml(item.area)}${item.distance ? ` · ${escapeHtml(item.distance)}` : ""} · ${escapeHtml(item.availability)}</p>
       <div class="opportunity-trust"><span>★ ${item.rating} (${item.reviews})</span>${item.responseTime ? `<span>${t("needHelp.aiSummaryResponseValue", { minutes: parseInt(item.responseTime, 10) })}</span>` : ""}</div>
       <div class="opportunity-tags">${item.skills.slice(0, 3).map((skill) => `<span>${escapeHtml(skill)}</span>`).join("")}</div>
-      <div class="opportunity-actions">
-        <button type="button" class="opportunity-primary" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="book">${t("nav.book")}</button>
-        <button type="button" data-action="start-pro-conversation" data-pro-id="${item.id}" data-conversation-mode="contact">${t("common.contact")}</button>
-      </div>
     </div>
   </article>`;
 }
@@ -9148,7 +9159,6 @@ function renderBusinessProfile() {
         <button type="button" data-view="reservations">${t("common.bookNow")}</button>
         ${renderDirectionsButton(item)}
         ${item.phone ? `<a class="directions-btn" href="tel:${item.phone}">${phoneIcon()}${t("common.call")}</a>` : ""}
-        <button type="button" data-action="start-business-conversation" data-business-id="${item.id}">${t("common.message")}</button>
       </div>
       ${
         item.services
@@ -9197,18 +9207,14 @@ const NOTIFICATION_TYPE_META = {
   system: { emoji: "⚙️", labelKey: "notification.category.system" }
 };
 
-const CONVERSATION_TYPE_META = {
-  professional: { emoji: "🛠️", labelKey: "messages.conversationTypeProfessional" },
-  business: { emoji: "🏢", labelKey: "messages.conversationTypeBusiness" },
-  marketplace: { emoji: "🛍️", labelKey: "messages.conversationTypeMarketplace" },
-  alwen: { emoji: "✨", labelKey: "messages.conversationTypeAlwen" }
-};
-
-const CONVERSATION_CONTEXT_LABEL_KEY = {
-  quote: "messages.contextQuote",
-  booking: "messages.contextBooking",
-  listing: "messages.contextListing",
-  plan: "messages.contextPlan"
+/* Real (Supabase-backed) conversation context types — conversations.context_type
+   is either "listing" (Marketplace) or "help_request" (Need Help); both are
+   real recipients (a listing's real owner_user_id / a help request's real
+   requester_user_id), unlike the deleted mock system's fabricated
+   "professional"/"business" conversation types. */
+const CONVERSATION_CONTEXT_META = {
+  listing: { emoji: "🛍️", labelKey: "messages.conversationTypeMarketplace", contextLabelKey: "messages.contextListing" },
+  help_request: { emoji: "🤝", labelKey: "messages.conversationTypeHelpRequest", contextLabelKey: "messages.contextHelpRequest" }
 };
 
 const NOTIFICATION_PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, success: 3 };
@@ -9250,125 +9256,135 @@ function markAllNotificationsRead() {
   notifications.forEach((item) => { item.unread = false; });
 }
 
-function archiveConversation(id) {
-  const index = messageThreads.findIndex((thread) => thread.id === Number(id));
-  if (index !== -1) messageThreads.splice(index, 1);
+/** Shared by startListingConversation/startHelpRequestConversation below —
+ * finds-or-creates the real conversation, then opens it exactly like the
+ * old mock system did (state.activeView = "conversation", already a
+ * protected view and already excluded from URL restoration — no routing
+ * change needed), and kicks off loading its message history. */
+async function openRealConversation({ contextType, contextId, recipientUserId }) {
+  try {
+    const conversation = await findOrCreateConversation({ contextType, contextId, recipientUserId });
+    state.activeConversationId = conversation.id;
+    state.activeView = "conversation";
+    state.activeSheet = null;
+    render();
+    await loadConversationDetail(conversation.id);
+  } catch (error) {
+    console.error("openRealConversation failed", error);
+  }
 }
 
-function toggleConversationRead(id) {
-  const thread = messageThreads.find((entry) => entry.id === Number(id));
-  if (thread) thread.unread = thread.unread > 0 ? 0 : 1;
+async function startListingConversation(listingId) {
+  if (state.auth.status !== "signedIn") return;
+  const item = state.remoteListingDetail.item && String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null;
+  const recipientUserId = item?.sellerId;
+  if (!recipientUserId || recipientUserId === state.auth.user.id) return;
+  await openRealConversation({ contextType: "listing", contextId: listingId, recipientUserId });
 }
 
-function createConversationNotification(thread, title, summary) {
-  notifications.unshift({
-    id: Date.now() + 1,
-    type: thread.type === "professional" ? "booking" : thread.type === "marketplace" ? "marketplace" : thread.type === "business" ? "business" : "system",
-    priority: "normal",
-    title,
-    summary,
-    timeKey: "notification.groupNow",
-    timeGroup: "now",
-    unread: true,
-    completed: false,
-    primaryActionKey: "messages.messages",
-    primaryActionView: "conversation",
-    conversationId: thread.id
-  });
+/** The Help Request detail page's "Message" action (renderRealHelpRequestDetail
+ * below) — finds the real requester_user_id from the already-loaded detail
+ * record via publicHelpRequestAuthor(), same shape used for the "View
+ * profile" link on that page. */
+async function startHelpRequestConversation(helpRequestId) {
+  if (state.auth.status !== "signedIn") return;
+  const record = String(state.remoteHelpRequestDetail.id) === String(helpRequestId) ? state.remoteHelpRequestDetail.item : null;
+  const author = record ? publicHelpRequestAuthor(record) : null;
+  if (!author?.userId || author.userId === state.auth.user.id) return;
+  await openRealConversation({ contextType: "help_request", contextId: helpRequestId, recipientUserId: author.userId });
 }
 
-function openGeneratedConversation({ type, participant, verified = false, preview, contextKind, contextTitle, contextMeta, firstMessage, userMessage }) {
-  const id = Date.now();
-  const thread = {
-    id,
-    type,
-    participant,
-    verified,
-    preview,
-    unread: 1,
-    timeKey: "notification.groupNow",
-    context: { kind: contextKind, title: contextTitle, meta: contextMeta },
-    messages: [
-      { from: "me", text: userMessage, time: t("notification.groupNow") },
-      { from: "them", text: firstMessage, time: t("notification.groupNow") }
-    ]
-  };
-  messageThreads.unshift(thread);
-  createConversationNotification(thread, contextTitle, preview);
-  state.activeConversationId = id;
-  state.activeView = "conversation";
-  state.activeSheet = null;
+/** Loads (or reloads) the open conversation's message history, the other
+ * participant's public profile, and a human-readable context label (the
+ * listing's title or the help request's title) via the same detail
+ * fetchers those pages already use — fetchListingById/fetchHelpRequestById
+ * — rather than a new context-specific fetcher. */
+async function loadConversationDetail(conversationId) {
+  const conversation = (state.inbox.conversations || []).find((entry) => String(entry.id) === String(conversationId));
+  state.conversationDetail = { ...state.conversationDetail, status: "loading", id: conversationId };
+  render();
+  try {
+    const [messages, contextRecord] = await Promise.all([
+      fetchConversationMessages(conversationId),
+      conversation?.context_type === "listing"
+        ? fetchListingById(conversation.context_id)
+        : conversation?.context_type === "help_request"
+          ? fetchHelpRequestById(conversation.context_id)
+          : Promise.resolve(null)
+    ]);
+    let otherUserId = conversation?.otherUserId || null;
+    if (!otherUserId) {
+      const messageSenderIds = [...new Set(messages.map((message) => message.sender_user_id))].filter((id) => id !== state.auth.user?.id);
+      otherUserId = messageSenderIds[0] || null;
+    }
+    const otherProfile = otherUserId ? (await fetchProfilesByIds([otherUserId]))[0] || null : null;
+    const contextLabel = contextRecord ? (conversation?.context_type === "listing" ? listingTitle(contextRecord) : contextRecord.description || contextRecord.category) : null;
+    state.conversationDetail = {
+      status: "loaded",
+      id: conversationId,
+      otherUserId,
+      otherProfile,
+      contextType: conversation?.context_type || null,
+      contextId: conversation?.context_id || null,
+      contextLabel,
+      messages
+    };
+  } catch (error) {
+    state.conversationDetail = { ...state.conversationDetail, status: "error" };
+    console.error("loadConversationDetail failed", error);
+  }
   render();
 }
 
-function startListingConversation(listingId) {
-  const item =
-    listings.find((listing) => String(listing.id) === String(listingId)) ||
-    (String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null);
-  if (!item) return;
-  const title = listingTitle(item);
-  openGeneratedConversation({
-    type: "marketplace",
-    participant: item.seller || t("common.verifiedSeller"),
-    verified: Boolean(item.verifiedSeller),
-    preview: `New message about ${title}`,
-    contextKind: "listing",
-    contextTitle: title,
-    contextMeta: `${item.price} · ${item.area || city.name}`,
-    userMessage: `Hi, I'm interested in ${title}. Is it still available?`,
-    firstMessage: `Thanks for your message. I can confirm availability, pickup, and any details here.`
-  });
+/** Inbox tab's list load — idle/loading/loaded/error, matching the
+ * established convention (e.g. remoteListingDetail above). Batches the
+ * other-participant profile lookups and latest-message previews in two
+ * calls rather than one per row. */
+async function refreshInbox() {
+  if (state.auth.status !== "signedIn") return;
+  state.inbox = { ...state.inbox, status: "loading" };
+  render();
+  try {
+    const conversations = await fetchMyConversations();
+    const otherUserIds = [...new Set(conversations.map((c) => c.otherUserId).filter(Boolean))];
+    const [profiles, latestMessages] = await Promise.all([
+      fetchProfilesByIds(otherUserIds),
+      fetchLatestMessagesByConversationIds(conversations.map((c) => c.id))
+    ]);
+    const profileByUserId = new Map(profiles.map((profile) => [profile.user_id, profile]));
+    const previews = new Map(conversations.map((conversation) => [
+      conversation.id,
+      { otherProfile: profileByUserId.get(conversation.otherUserId) || null, latestMessage: latestMessages.get(conversation.id) || null }
+    ]));
+    state.inbox = { status: "loaded", conversations, previews, loadedAt: Date.now() };
+  } catch (error) {
+    state.inbox = { ...state.inbox, status: "error" };
+    console.error("refreshInbox failed", error);
+  }
+  render();
 }
 
-function startOpportunityConversation(opportunityId) {
-  const item = findOpportunityById(opportunityId);
-  if (!item) return;
-  const title = opportunityText(item, "title");
-  const requester = opportunityText(item, "requester");
-  openGeneratedConversation({
-    type: "professional",
-    participant: requester,
-    verified: true,
-    preview: `You responded to ${title}`,
-    contextKind: "quote",
-    contextTitle: title,
-    contextMeta: `${item.priceLabel} · ${opportunityText(item, "time")} · ${opportunityText(item, "category")}`,
-    userMessage: `Hi, I can help with ${title}. I’m available to discuss details.`,
-    firstMessage: `Great — share your availability and any quote details here so we can confirm.`
-  });
-}
-
-function startProfessionalConversation(personId, mode = "contact") {
-  const pro = serviceProfessionals.find((item) => String(item.id) === String(personId));
-  if (!pro) return;
-  openGeneratedConversation({
-    type: "professional",
-    participant: pro.name,
-    verified: Boolean(pro.verified),
-    preview: mode === "book" ? `Booking request sent to ${pro.name}` : `New conversation with ${pro.name}`,
-    contextKind: mode === "book" ? "booking" : "quote",
-    contextTitle: t(pro.categoryKey),
-    contextMeta: `${pro.price} · ${pro.availability} · ${pro.distance}`,
-    userMessage: mode === "book" ? `Hi ${pro.name}, I’d like to book your service.` : `Hi ${pro.name}, I’d like to ask about your service.`,
-    firstMessage: `Thanks — send your preferred time, location, and any details here.`
-  });
-}
-
-function startBusinessConversation(businessId) {
-  const item = businesses.find((business) => String(business.id) === String(businessId)) || importedBusinesses.find((business) => String(business.id) === String(businessId));
-  if (!item) return;
-  openGeneratedConversation({
-    type: "business",
-    participant: item.name,
-    verified: Boolean(item.verified || item.verificationStatus === "Verified"),
-    preview: `New conversation with ${item.name}`,
-    contextKind: "booking",
-    contextTitle: item.name,
-    contextMeta: joinNonEmpty([businessCategoryLabel(item.category || item.type), item.area || item.neighbourhood || city.name]),
-    userMessage: `Hi, I’d like to ask about ${item.name}.`,
-    firstMessage: `Thanks for contacting us. Tell us what you need and we’ll help from here.`
-  });
-  trackEvent("business_contacted", { businessId: String(item.id) });
+/** The open conversation's reply composer submit — mirrors the
+ * applyCreatedHelpRequest-style "merge the created row locally, no
+ * refetch" convention used throughout this app's other real create flows. */
+async function sendConversationMessage(body) {
+  const trimmed = String(body || "").trim();
+  const conversationId = state.activeConversationId;
+  if (!trimmed || !conversationId || state.conversationSendStatus === "sending") return;
+  state.conversationSendStatus = "sending";
+  state.conversationSendError = null;
+  state.composerDraft = "";
+  render();
+  try {
+    const created = await sendMessage({ conversationId, body: trimmed });
+    state.conversationDetail = { ...state.conversationDetail, messages: [...state.conversationDetail.messages, created] };
+    state.conversationSendStatus = "idle";
+  } catch (error) {
+    state.conversationSendStatus = "idle";
+    state.conversationSendError = error?.message || t("messages.sendError");
+    state.composerDraft = trimmed;
+  }
+  render();
 }
 
 /* Swipe-to-act wrapper shared by notification cards and conversation
@@ -9491,35 +9507,39 @@ function renderNotificationsBody() {
   `;
 }
 
-function renderConversationRow(thread) {
-  const meta = CONVERSATION_TYPE_META[thread.type] || CONVERSATION_TYPE_META.business;
-  const initials = thread.participant.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
+function renderConversationRow(conversation) {
+  const meta = CONVERSATION_CONTEXT_META[conversation.context_type] || CONVERSATION_CONTEXT_META.listing;
+  const preview = state.inbox.previews.get(conversation.id) || {};
+  const otherProfile = preview.otherProfile;
+  const participantName = otherProfile?.display_name || otherProfile?.handle || t("messages.participantUnknown");
+  const initials = participantName.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
+  const isUnread = Boolean(preview.latestMessage && preview.latestMessage.sender_user_id !== state.auth.user?.id);
   return `
-    <article class="conversation-row ${thread.unread ? "is-unread" : ""}" data-view="conversation" data-conversation-id="${thread.id}">
-      <div class="conversation-avatar ${thread.type === "alwen" ? "is-alwen" : ""}">
-        ${thread.type === "alwen" ? brandIconMarkup("app-icon") : `<span>${escapeHtml(initials)}</span>`}
+    <article class="conversation-row ${isUnread ? "is-unread" : ""}" data-view="conversation" data-conversation-id="${escapeHtml(conversation.id)}">
+      <div class="conversation-avatar">
+        ${otherProfile?.avatar_url ? `<img src="${escapeHtml(otherProfile.avatar_url)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials)}</span>`}
       </div>
       <div class="conversation-body">
         <div class="conversation-top">
-          <h3>${escapeHtml(thread.participant)}${thread.verified ? verifiedCheck(t("messages.verified")) : ""}</h3>
-          <span class="conversation-time">${t(thread.timeKey)}</span>
+          <h3>${escapeHtml(participantName)}${otherProfile?.verification_status === "verified" ? verifiedCheck(t("messages.verified")) : ""}</h3>
+          <span class="conversation-time">${preview.latestMessage ? escapeHtml(helpRequestRelativePostedLabel(preview.latestMessage.created_at)) : ""}</span>
         </div>
-        <p class="conversation-preview">${escapeHtml(thread.preview)}</p>
+        <p class="conversation-preview">${preview.latestMessage ? escapeHtml(preview.latestMessage.body) : ""}</p>
         <div class="conversation-meta-row">
           <span class="conversation-type-tag">${meta.emoji} ${t(meta.labelKey)}</span>
-          ${thread.unread ? `<span class="conversation-unread-count">${thread.unread}</span>` : ""}
         </div>
       </div>
     </article>
   `;
 }
 
-function renderConversationRowSwipeable(thread) {
-  return renderSwipeRow("conversation", thread.id, "✓", "🗑️", renderConversationRow(thread));
-}
 
 function renderInboxBody() {
-  if (!messageThreads.length) {
+  if (state.inbox.status === "idle") refreshInbox();
+  if (state.inbox.status === "loading") {
+    return `<div class="conversation-list-loading" aria-busy="true"></div>`;
+  }
+  if (!state.inbox.conversations.length) {
     return `
       <div class="notification-empty-state">
         <span class="notification-empty-icon" aria-hidden="true">${icon("message")}</span>
@@ -9528,12 +9548,15 @@ function renderInboxBody() {
       </div>
     `;
   }
-  return `<div class="conversation-list">${messageThreads.map(renderConversationRowSwipeable).join("")}</div>`;
+  return `<div class="conversation-list">${state.inbox.conversations.map(renderConversationRow).join("")}</div>`;
 }
 
 function renderNotificationHeader(isInbox) {
   const unreadNotifications = notifications.filter((item) => item.unread).length;
-  const unreadMessages = messageThreads.reduce((sum, thread) => sum + thread.unread, 0);
+  const unreadMessages = (state.inbox.conversations || []).reduce((sum, conversation) => {
+    const preview = state.inbox.previews.get(conversation.id);
+    return sum + (preview?.latestMessage && preview.latestMessage.sender_user_id !== state.auth.user?.id ? 1 : 0);
+  }, 0);
   const actionCount = notifications.filter((item) => !item.completed && (item.priority === "urgent" || item.priority === "high")).length;
   return `
     <div class="notification-header">
@@ -9588,45 +9611,52 @@ function renderNotificationsHub() {
 }
 
 function renderConversationDetail() {
-  const thread = messageThreads.find((entry) => entry.id === state.activeConversationId);
-  if (!thread) {
+  if (state.conversationDetail.status === "idle" || String(state.conversationDetail.id) !== String(state.activeConversationId)) {
+    if (state.activeConversationId) loadConversationDetail(state.activeConversationId);
+  }
+  if (!state.activeConversationId || state.conversationDetail.status === "error") {
     state.activeView = "messages";
     return renderNotificationsHub();
   }
-  const meta = CONVERSATION_TYPE_META[thread.type] || CONVERSATION_TYPE_META.business;
-  const initials = thread.participant.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
+  if (state.conversationDetail.status === "loading" || String(state.conversationDetail.id) !== String(state.activeConversationId)) {
+    return `<section class="section-shell conversation-detail-shell" aria-busy="true"></section>`;
+  }
+  const detail = state.conversationDetail;
+  const meta = CONVERSATION_CONTEXT_META[detail.contextType] || CONVERSATION_CONTEXT_META.listing;
+  const participantName = detail.otherProfile?.display_name || detail.otherProfile?.handle || t("messages.participantUnknown");
+  const initials = participantName.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
   return `
     <section class="section-shell conversation-detail-shell">
       <div class="conversation-detail-header">
         <button type="button" class="conversation-back" data-view="messages" aria-label="${t("messages.backToInbox")}">${icon("arrow")}</button>
-        <div class="conversation-avatar ${thread.type === "alwen" ? "is-alwen" : ""}">
-          ${thread.type === "alwen" ? brandIconMarkup("app-icon") : `<span>${escapeHtml(initials)}</span>`}
+        <div class="conversation-avatar">
+          ${detail.otherProfile?.avatar_url ? `<img src="${escapeHtml(detail.otherProfile.avatar_url)}" alt="" loading="lazy" />` : `<span>${escapeHtml(initials)}</span>`}
         </div>
         <div class="conversation-detail-identity">
-          <h2>${escapeHtml(thread.participant)}${thread.verified ? verifiedCheck(t("messages.verified")) : ""}</h2>
+          <h2>${escapeHtml(participantName)}${detail.otherProfile?.verification_status === "verified" ? verifiedCheck(t("messages.verified")) : ""}</h2>
           <span class="conversation-type-tag">${meta.emoji} ${t(meta.labelKey)}</span>
         </div>
       </div>
-      ${thread.context ? `
+      ${detail.contextLabel ? `
         <div class="conversation-context-card">
-          <span class="conversation-context-kind">${t(CONVERSATION_CONTEXT_LABEL_KEY[thread.context.kind] || "messages.contextPlan")}</span>
-          <h3>${thread.context.titleKey ? t(thread.context.titleKey) : escapeHtml(thread.context.title || "")}</h3>
-          <p>${thread.context.metaKey ? t(thread.context.metaKey) : escapeHtml(thread.context.meta || "")}</p>
+          <span class="conversation-context-kind">${t(meta.contextLabelKey)}</span>
+          <h3>${escapeHtml(detail.contextLabel)}</h3>
         </div>
       ` : ""}
       ${renderTransactionSafetyNotice()}
-      <button type="button" class="settings-row-button" data-report-target="user" data-report-id="${thread.id}">Report user</button>
+      ${detail.otherUserId ? `<button type="button" class="settings-row-button" data-report-target="user" data-report-id="${escapeHtml(detail.otherUserId)}">Report user</button>` : ""}
       <div class="conversation-history">
-        ${thread.messages.map((message) => `
-          <div class="conversation-message ${message.from === "me" ? "is-me" : "is-them"}">
-            <p>${message.textKey ? t(message.textKey) : escapeHtml(message.text)}</p>
-            <span>${message.timeKey ? t(message.timeKey) : escapeHtml(message.time || "")}</span>
+        ${detail.messages.length ? detail.messages.map((message) => `
+          <div class="conversation-message ${message.sender_user_id === state.auth.user?.id ? "is-me" : "is-them"}">
+            <p>${escapeHtml(message.body)}</p>
+            <span>${escapeHtml(helpRequestRelativePostedLabel(message.created_at))}</span>
           </div>
-        `).join("")}
+        `).join("") : `<p>${t("messages.emptyHint")}</p>`}
       </div>
-      <form class="conversation-composer" data-action="send-message" data-conversation-id="${thread.id}">
-        <input type="text" id="conversation-composer-input" name="message" placeholder="${t("messages.composerPlaceholder")}" value="${escapeHtml(state.composerDraft)}" aria-label="${t("messages.composerPlaceholder")}" autocomplete="off" />
-        <button type="submit">${t("messages.send")}</button>
+      ${state.conversationSendError ? `<p class="auth-error" role="alert">${escapeHtml(state.conversationSendError)}</p>` : ""}
+      <form class="conversation-composer" data-action="send-message">
+        <input type="text" id="conversation-composer-input" name="message" placeholder="${t("messages.composerPlaceholder")}" value="${escapeHtml(state.composerDraft)}" aria-label="${t("messages.composerPlaceholder")}" autocomplete="off" ${state.conversationSendStatus === "sending" ? "disabled" : ""} />
+        <button type="submit" ${state.conversationSendStatus === "sending" ? "disabled aria-busy=\"true\"" : ""}>${t("messages.send")}</button>
       </form>
     </section>
   `;
@@ -10747,7 +10777,6 @@ function renderPublicProfile() {
       ${contextKey ? `<p class="public-profile-context-hint">${t(contextKey)}</p>` : ""}
 
       <div class="public-profile-primary-actions">
-        ${isHireContext ? `<button type="button" class="auth-primary-button" data-person-action="request-booking">${t("nav.book")}</button>` : ""}
         <button type="button" class="${isHireContext ? "auth-link" : "auth-primary-button"}" data-person-action="message">${t("common.messagePersonCta")}</button>
       </div>
 
@@ -12126,11 +12155,9 @@ function bindSwipeRows() {
       const id = row.dataset.swipeId;
       if (deltaX <= -THRESHOLD) {
         if (type === "notification") dismissNotification(id);
-        else if (type === "conversation") archiveConversation(id);
         render();
       } else if (deltaX >= THRESHOLD) {
         if (type === "notification") toggleNotificationRead(id);
-        else if (type === "conversation") toggleConversationRead(id);
         render();
       }
       deltaX = 0;
@@ -12438,27 +12465,11 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll('[data-action="start-opportunity-conversation"]').forEach((button) => {
+  document.querySelectorAll('[data-action="message-help-request-author"]').forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      startOpportunityConversation(button.dataset.opportunityId);
-    });
-  });
-
-  document.querySelectorAll('[data-action="start-pro-conversation"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      startProfessionalConversation(button.dataset.proId, button.dataset.conversationMode || "contact");
-    });
-  });
-
-  document.querySelectorAll('[data-action="start-business-conversation"]').forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      startBusinessConversation(button.dataset.businessId);
+      startHelpRequestConversation(button.dataset.helpRequestId);
     });
   });
 
@@ -12506,15 +12517,7 @@ function bindEvents() {
   document.querySelector('[data-action="send-message"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const text = String(formData.get("message") || "").trim();
-    if (!text) return;
-    const thread = messageThreads.find((entry) => entry.id === Number(event.currentTarget.dataset.conversationId));
-    if (thread) {
-      thread.messages.push({ from: "me", text, time: t("notification.groupNow") });
-      thread.unread = 0;
-    }
-    state.composerDraft = "";
-    render();
+    sendConversationMessage(String(formData.get("message") || ""));
   });
 
   bindSwipeRows();
@@ -13649,11 +13652,6 @@ function bindPublicProfileEvents() {
         element.click();
       });
     }
-  });
-
-  document.querySelector('[data-person-action="request-booking"]')?.addEventListener("click", () => {
-    const personId = state.publicProfile?.id || "";
-    startProfessionalConversation(personId.replace(/^pro-/, ""), "book");
   });
 
   document.querySelector('[data-person-action="message"]')?.addEventListener("click", () => {

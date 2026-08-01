@@ -11504,6 +11504,14 @@ strong:has(> .verified-check) {
   gap: var(--sp-8);
 }
 
+.conversation-list-loading {
+  height: 240px;
+  border-radius: var(--radius-lg, 20px);
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: profile-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
 /* Priority accent — a thin left border + tinted icon badge, never a
    full-card fill (kept subtle per the "premium, not loud" brief). */
 .notification-card {
