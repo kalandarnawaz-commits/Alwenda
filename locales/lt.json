@@ -1612,6 +1612,8 @@
   "createListing": {
     "createListingTitle": "Sukurti skelbimą apie pardavimą ar nuomą",
     "createListingHint": "Tai iškart paskelbs tikrą skelbimą Prekyvietėje.",
+    "editTitle": "Redaguoti skelbimą",
+    "editSubmitCta": "Išsaugoti pakeitimus",
     "titlePlaceholder": "pvz., Trek kalnų dviratis, beveik nenaudotas",
     "descriptionPlaceholder": "Pridėkite būklę, dydį ar kitą svarbią informaciją pirkėjui.",
     "priceLabel": "Kaina (neprivaloma)",

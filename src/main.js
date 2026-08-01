@@ -54,6 +54,9 @@ import {
   ensureUserProfiles,
   completeUserProfile,
   createListing,
+  updateListing,
+  fetchListingImages,
+  deleteListingImage,
   getMyOfferorStatus,
   confirmOfferorStatus,
   getMyTraderVerification,
@@ -109,7 +112,7 @@ import {
   fetchConversationMessages,
   sendMessage,
   AUTH_CALLBACK_PATH
-} from "./services/auth/supabaseClient.js?v=help-request-messaging-1";
+} from "./services/auth/supabaseClient.js?v=listing-edit-1";
 import {
   orderedCategoryIds,
   orderedStarterCategoryIds,
@@ -337,7 +340,9 @@ const state = {
     deliveryAvailable: false,
     offerorStatus: "",
     tags: "",
-    photoFiles: []
+    photoFiles: [],
+    editingListingId: null,
+    existingPhotos: []
   },
   listingSubmitStatus: "idle",
   listingSubmitError: null,
@@ -569,18 +574,13 @@ function openPublicProfileById(id) {
    Backed by real public_profiles/profile_follows/trust_scores/profile_reviews
    rows via supabase/migrations/202607240001_profile_social_identity.sql. */
 
-/* "Saved" is deliberately not a tab yet — there is no
+/* "Saved" is deliberately not included yet — there is no
    fetchSavedListingsForUser function backing it, and shipping a visible
-   tab that always renders an unrelated empty state would be dishonest.
-   Add it back once a real owner-only saved-listings query exists. Own and
-   public tab sets are identical for now but kept as separate constants
-   since they're expected to diverge again once Saved is real. */
-const OWN_USER_PROFILE_TABS = ["listings", "reviews", "activity", "about"];
-const PUBLIC_USER_PROFILE_TABS = ["listings", "reviews", "activity", "about"];
-
-function currentUserProfileTabs() {
-  return state.userProfile?.isOwn ? OWN_USER_PROFILE_TABS : PUBLIC_USER_PROFILE_TABS;
-}
+   section that always renders an unrelated empty state would be dishonest.
+   Add it back once a real owner-only saved-listings query exists. Sections
+   render in this fixed order for both own and public profiles — stacked,
+   always visible, no tab-switching (see renderUserProfileSections). */
+const USER_PROFILE_SECTIONS = ["listings", "reviews", "activity", "about"];
 
 /** Opens /profile/:handle or /profile/:id. Always fetches a real row —
  * never fabricates a profile for a handle/id that doesn't exist, so an
@@ -607,7 +607,6 @@ async function openUserProfile(handleOrId) {
     isFollowing: false,
     followActionPending: false,
     trust: null,
-    activeTab: "listings",
     listings: [],
     listingsStatus: "idle",
     reviews: [],
@@ -640,11 +639,15 @@ async function openUserProfile(handleOrId) {
     state.userProfile.verificationStatus = profile.verification_status || "unverified";
     state.userProfile.createdAt = profile.created_at || null;
     state.userProfile.isOwn = Boolean(currentUserId && currentUserId === profile.user_id);
-    state.userProfile.activeTab = state.userProfile.isOwn ? "listings" : "listings";
     render();
     loadTraderDisclosure(profile.user_id);
     loadUserProfileSocialData(profile.user_id);
-    loadUserProfileTabData(profile.user_id, state.userProfile.activeTab);
+    // Sections render stacked and always-visible now (no tab-switching), so
+    // every section with a real fetch behind it loads eagerly here — not
+    // just the first one. Activity/About derive from listings/reviews
+    // already in state, so they need no fetch of their own.
+    loadUserProfileTabData(profile.user_id, "listings");
+    loadUserProfileTabData(profile.user_id, "reviews");
   } catch {
     if (state.userProfile?.requested === requested) {
       state.userProfile.status = "error";
@@ -670,13 +673,6 @@ async function loadUserProfileSocialData(userId) {
   state.userProfile.trust = trust;
   state.userProfile.isBlocked = blockedIds.includes(userId);
   render();
-}
-
-async function switchUserProfileTab(tab) {
-  if (!state.userProfile || !currentUserProfileTabs().includes(tab)) return;
-  state.userProfile.activeTab = tab;
-  render();
-  loadUserProfileTabData(state.userProfile.userId, tab);
 }
 
 async function loadUserProfileTabData(userId, tab) {
@@ -6537,7 +6533,8 @@ function renderCreateListingForm() {
   // from a category-hub tap rather than a TYT tile — LISTING_INTENT_COPY
   // itself is untouched, still the source of truth for TYT's 4 intents.
   const categoryPosting = !intentCopy && draft.categoryId ? categoryConfigFor(draft.categoryId).posting : null;
-  const heroTitle = intentCopy?.heroTitleKey ? t(intentCopy.heroTitleKey) : t("createListing.createListingTitle");
+  const isEditing = Boolean(draft.editingListingId);
+  const heroTitle = isEditing ? t("createListing.editTitle") : intentCopy?.heroTitleKey ? t(intentCopy.heroTitleKey) : t("createListing.createListingTitle");
   const titlePlaceholder = intentCopy?.titlePlaceholderKey
     ? t(intentCopy.titlePlaceholderKey)
     : categoryPosting?.titlePlaceholderKey
@@ -6644,6 +6641,19 @@ function renderCreateListingForm() {
         <div class="auth-field">
           <label>${t("createListing.photosLabel")}</label>
           ${
+            isEditing && draft.existingPhotos.length
+              ? `<div class="create-listing-photo-grid">${draft.existingPhotos
+                  .map(
+                    (photo) => `
+                <div class="create-listing-photo-thumb">
+                  <img src="${escapeHtml(photo.publicUrl)}" alt="" />
+                  <button type="button" data-role="remove-existing-listing-photo" data-photo-id="${photo.id}" data-storage-path="${escapeHtml(photo.storage_path)}" aria-label="${t("common.remove")}">×</button>
+                </div>`
+                  )
+                  .join("")}</div>`
+              : ""
+          }
+          ${
             draft.photoFiles.length
               ? `<div class="create-listing-photo-grid">${draft.photoFiles
                   .map(
@@ -6657,7 +6667,7 @@ function renderCreateListingForm() {
               : ""
           }
           ${
-            draft.photoFiles.length < LISTING_MAX_PHOTOS
+            draft.existingPhotos.length + draft.photoFiles.length < LISTING_MAX_PHOTOS
               ? `<label class="claim-file-label">
                    <span>${t("createListing.addPhotosCta")}</span>
                    <input type="file" accept="image/*" multiple data-role="listing-photos-input" />
@@ -6668,7 +6678,7 @@ function renderCreateListingForm() {
 
         ${state.listingSubmitStatus === "error" ? `<p class="auth-error">${escapeHtml(state.listingSubmitError)}</p>` : ""}
 
-        <button type="submit" class="auth-primary-button" ${isLoading || ((state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified") ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : t("createListing.publishButton")}</button>
+        <button type="submit" class="auth-primary-button" ${isLoading || ((state.offerorStatus?.offeror_status || draft.offerorStatus) === "trader" && state.traderVerification?.status !== "verified") ? "disabled" : ""}>${isLoading ? t("createListing.publishing") : isEditing ? t("createListing.editSubmitCta") : t("createListing.publishButton")}</button>
       </form>
     </section>
   `;
@@ -8717,6 +8727,56 @@ function applyCreatedListing(created) {
   trackEvent("listing_created", { category: created.category, hasPrice: Boolean(created.price_amount) });
 }
 
+/** Merges an updateListing() result back into both real-data caches — same
+ * "merge locally, no refetch" convention as applyCreatedListing above.
+ * images comes from the draft's already-loaded existingPhotos (plus any
+ * newly uploaded ones appended by submitListingForm) so the Marketplace
+ * pool entry's photo stays in sync without a second network round trip. */
+function applyUpdatedListing(updated, images) {
+  const index = state.myListings.findIndex((item) => String(item.id) === String(updated.id));
+  if (index !== -1) state.myListings[index] = { ...state.myListings[index], ...updated };
+  const poolIndex = myListingsPool.findIndex((item) => String(item.id) === String(updated.id));
+  if (poolIndex !== -1) myListingsPool[poolIndex] = shapeListingForDisplay({ ...updated, images: images || [] });
+}
+
+/** Enters edit mode on an already-published listing: seeds state.listingDraft
+ * from the real row already in state.myListings (same shape createListing/
+ * fetchMyListings return), then asynchronously loads its existing photos —
+ * mirrors the codebase's other "populate draft from a real record" helper,
+ * resetBusinessDraftFromItem(). */
+async function startEditListing(listingId) {
+  const item = state.myListings.find((listing) => String(listing.id) === String(listingId));
+  if (!item) return;
+  const metadata = item.metadata || {};
+  state.listingDraft = {
+    title: item.title || "",
+    description: item.description || "",
+    category: Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === item.category) || "buy-sell",
+    categoryId: item.category_id || null,
+    priceAmount: item.price_amount != null ? String(item.price_amount) : "",
+    pricePeriod: item.price_period || "one_time",
+    neighbourhood: item.neighbourhood || item.location_label || "",
+    condition: metadata.condition || "",
+    pickupAvailable: Boolean(metadata.pickupAvailable),
+    deliveryAvailable: Boolean(metadata.deliveryAvailable),
+    offerorStatus: state.offerorStatus?.offeror_status || "",
+    tags: (item.tags || []).join(", "),
+    photoFiles: [],
+    editingListingId: item.id,
+    existingPhotos: []
+  };
+  state.listingSubmitStatus = "idle";
+  state.listingSubmitError = null;
+  state.activeView = "createListing";
+  render();
+  try {
+    state.listingDraft.existingPhotos = await fetchListingImages(item.id);
+  } catch (error) {
+    console.warn("[listings] Failed to load existing photos", error);
+  }
+  render();
+}
+
 /** Fire-and-forget, called both right after sign-in and every time the
  * user opens Profile or Marketplace — a transient network hiccup on the
  * sign-in call previously left "My Listings" empty for the rest of the
@@ -8776,7 +8836,7 @@ async function submitListingForm() {
 
   try {
     state.offerorStatus = await confirmOfferorStatus({ status: draft.offerorStatus, termsVersion: LEGAL_POLICY_VERSION, reason: "Confirmed before listing publication" });
-    const created = await createListing({
+    const fields = {
       title,
       description: draft.description.trim(),
       category: LISTING_CATEGORY_TO_DB[draft.category] || "buy_sell",
@@ -8791,25 +8851,34 @@ async function submitListingForm() {
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean)
-    });
+    };
+    const record = draft.editingListingId
+      ? await updateListing({ id: draft.editingListingId, ...fields })
+      : await createListing(fields);
 
-    // The listing itself already exists at this point regardless of what
-    // happens next — a photo upload failing shouldn't undo that or block
-    // the user from seeing their (photo-less) listing; it's only ever
-    // logged, never surfaced as the whole submission having failed.
+    // The listing itself already exists/is updated at this point regardless
+    // of what happens next — a photo upload failing shouldn't undo that or
+    // block the user from seeing their listing; it's only ever logged,
+    // never surfaced as the whole submission having failed.
+    let uploadedImages = [];
     if (draft.photoFiles.length) {
       const uploads = await Promise.allSettled(
-        draft.photoFiles.map((file, index) => uploadListingPhoto({ listingId: created.id, file, sortOrder: index }))
+        draft.photoFiles.map((file, index) => uploadListingPhoto({ listingId: record.id, file, sortOrder: draft.existingPhotos.length + index }))
       );
-      created.images = uploads.filter((result) => result.status === "fulfilled").map((result) => result.value);
+      uploadedImages = uploads.filter((result) => result.status === "fulfilled").map((result) => result.value);
       uploads
         .filter((result) => result.status === "rejected")
         .forEach((result) => console.warn("[listings] Photo upload failed", result.reason));
     }
 
-    applyCreatedListing(created);
+    if (draft.editingListingId) {
+      applyUpdatedListing(record, [...draft.existingPhotos, ...uploadedImages]);
+    } else {
+      record.images = uploadedImages;
+      applyCreatedListing(record);
+      if (draft.categoryId) trackEvent("category_post_submitted", { categoryId: draft.categoryId, surface: state.opportunityFilter.surface });
+    }
     state.listingSubmitStatus = "success";
-    if (draft.categoryId) trackEvent("category_post_submitted", { categoryId: draft.categoryId, surface: state.opportunityFilter.surface });
     // Not part of listingDraft itself, but this success path (unlike every
     // other exit from this form) sets state.activeView directly rather
     // than through a [data-view] click, so it's the one place that
@@ -8829,10 +8898,12 @@ async function submitListingForm() {
       deliveryAvailable: false,
       offerorStatus: "",
       tags: "",
-      photoFiles: []
+      photoFiles: [],
+      editingListingId: null,
+      existingPhotos: []
     };
     state.activeView = "listingDetail";
-    state.selectedListingId = created.id;
+    state.selectedListingId = record.id;
   } catch (error) {
     state.listingSubmitStatus = "error";
     state.listingSubmitError = error?.message || t("createListing.genericError");
@@ -10589,14 +10660,6 @@ function renderUserProfileAbout(profile) {
   `;
 }
 
-function renderUserProfileTabPanel(profile) {
-  if (profile.activeTab === "listings") return renderUserProfileListingGrid(profile);
-  if (profile.activeTab === "reviews") return renderUserProfileReviews(profile);
-  if (profile.activeTab === "activity") return renderUserProfileActivity(profile);
-  if (profile.activeTab === "about") return renderUserProfileAbout(profile);
-  return "";
-}
-
 const USER_PROFILE_TAB_LABEL = {
   listings: "userProfile.tabListings",
   reviews: "userProfile.tabReviews",
@@ -10604,20 +10667,24 @@ const USER_PROFILE_TAB_LABEL = {
   about: "userProfile.tabAbout"
 };
 
-function renderUserProfileTabs(profile) {
-  const tabs = currentUserProfileTabs();
-  return `
-    <div class="profile-tabs" role="tablist" aria-label="${t("userProfile.tabsLabel")}">
-      ${tabs.map((tab) => `
-        <button type="button" role="tab" id="profile-tab-${tab}" aria-selected="${profile.activeTab === tab}" aria-controls="profile-tabpanel" class="${profile.activeTab === tab ? "is-active" : ""}" data-user-profile-tab="${tab}">
-          ${t(USER_PROFILE_TAB_LABEL[tab])}
-        </button>
-      `).join("")}
-    </div>
-    <div id="profile-tabpanel" role="tabpanel" aria-labelledby="profile-tab-${profile.activeTab}" tabindex="0">
-      ${renderUserProfileTabPanel(profile)}
-    </div>
-  `;
+const USER_PROFILE_SECTION_RENDERER = {
+  listings: renderUserProfileListingGrid,
+  reviews: renderUserProfileReviews,
+  activity: renderUserProfileActivity,
+  about: renderUserProfileAbout
+};
+
+/** All four sections stacked and always visible — no tab-switching. Reuses
+ * the .settings-section card convention renderProfile() already uses for
+ * its own stacked sections (Trust/Activity/Achievements), so no new CSS
+ * is needed here. */
+function renderUserProfileSections(profile) {
+  return USER_PROFILE_SECTIONS.map((key) => `
+    <section class="settings-section">
+      <h3>${t(USER_PROFILE_TAB_LABEL[key])}</h3>
+      ${USER_PROFILE_SECTION_RENDERER[key](profile)}
+    </section>
+  `).join("");
 }
 
 function userProfileTrustStatusLabel(trust) {
@@ -10767,7 +10834,7 @@ function renderUserProfile() {
 
       ${renderUserProfileMetrics(profile)}
       ${renderUserProfileReputation(profile)}
-      ${renderUserProfileTabs(profile)}
+      ${renderUserProfileSections(profile)}
 
       ${profile.followersDialog ? renderUserProfileFollowListDialog("followers", profile.followersDialog) : ""}
       ${profile.followingDialog ? renderUserProfileFollowListDialog("following", profile.followingDialog) : ""}
@@ -10813,21 +10880,7 @@ function renderMyListings() {
   return `
     <div class="settings-section">
       <h3>${t("createListing.myListingsTitle")}</h3>
-      <div class="my-business-list">
-        ${state.myListings
-          .map(
-            (item) => `
-          <button type="button" class="my-business-row" data-view="listingDetail" data-listing-id="${item.id}">
-            <div>
-              <strong>${escapeHtml(item.title)}</strong>
-              <span>${categoryLabel(Object.keys(LISTING_CATEGORY_TO_DB).find((key) => LISTING_CATEGORY_TO_DB[key] === item.category) || "buy-sell")} · ${t(`status.${item.status}`) || item.status}</span>
-            </div>
-            ${icon("arrow")}
-          </button>
-        `
-          )
-          .join("")}
-      </div>
+      <div class="profile-listing-grid">${state.myListings.map((item) => renderUserProfileListingCard(item, true)).join("")}</div>
     </div>
   `;
 }
@@ -11816,6 +11869,9 @@ function bindEvents() {
         else if (button.dataset.view === "needHelp") state.helpRequestDraft.categoryId = button.dataset.categoryId;
         trackEvent("category_post_started", { categoryId: button.dataset.categoryId, surface: state.opportunityFilter.surface });
       }
+      if (button.dataset.view === "createListing" && button.dataset.editListingId) {
+        startEditListing(button.dataset.editListingId);
+      }
       // Retries on every visit rather than relying solely on the one
       // fire-and-forget call at sign-in, which left "My Listings" — and any
       // real listing created in an earlier session — silently stuck empty
@@ -12660,13 +12716,27 @@ function bindEvents() {
   });
   document.querySelector('[data-role="listing-photos-input"]')?.addEventListener("change", (event) => {
     const incoming = Array.from(event.target.files || []);
-    state.listingDraft.photoFiles = [...state.listingDraft.photoFiles, ...incoming].slice(0, LISTING_MAX_PHOTOS);
+    const remainingSlots = Math.max(0, LISTING_MAX_PHOTOS - state.listingDraft.existingPhotos.length);
+    state.listingDraft.photoFiles = [...state.listingDraft.photoFiles, ...incoming].slice(0, remainingSlots);
     render();
   });
   document.querySelectorAll('[data-role="remove-listing-photo"]').forEach((button) => {
     button.addEventListener("click", () => {
       state.listingDraft.photoFiles = state.listingDraft.photoFiles.filter((_, index) => index !== Number(button.dataset.index));
       render();
+    });
+  });
+  document.querySelectorAll('[data-role="remove-existing-listing-photo"]').forEach((button) => {
+    button.addEventListener("click", async () => {
+      const photoId = button.dataset.photoId;
+      const storagePath = button.dataset.storagePath;
+      try {
+        await deleteListingImage({ id: photoId, storagePath });
+        state.listingDraft.existingPhotos = state.listingDraft.existingPhotos.filter((photo) => String(photo.id) !== String(photoId));
+        render();
+      } catch (error) {
+        console.warn("[listings] Failed to remove photo", error);
+      }
     });
   });
   document.querySelector('[data-role="create-listing-form"]')?.addEventListener("submit", (event) => {
@@ -13181,10 +13251,6 @@ function bindUserProfileEvents() {
       closeUserProfileFollowDialog("following");
       openUserProfile(element.dataset.userProfileTarget);
     });
-  });
-
-  document.querySelectorAll("[data-user-profile-tab]").forEach((button) => {
-    button.addEventListener("click", () => switchUserProfileTab(button.dataset.userProfileTab));
   });
 
   document.querySelectorAll("[data-user-profile-dialog]").forEach((button) => {

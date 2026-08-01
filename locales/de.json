@@ -1612,6 +1612,8 @@
   "createListing": {
     "createListingTitle": "Etwas zum Verkauf oder zur Miete anbieten",
     "createListingHint": "Dies veröffentlicht sofort ein echtes Inserat im Marktplatz.",
+    "editTitle": "Inserat bearbeiten",
+    "editSubmitCta": "Änderungen speichern",
     "titlePlaceholder": "z. B. Trek Mountainbike, kaum benutzt",
     "descriptionPlaceholder": "Zustand, Größe oder andere wichtige Infos für Käufer hinzufügen.",
     "priceLabel": "Preis (optional)",
