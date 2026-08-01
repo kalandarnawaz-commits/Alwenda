@@ -201,7 +201,9 @@ const ALLOWED_MOCKDATA_EXPORTS = new Set([
   "professionalCategories", // static Hire category taxonomy (Phase 6 confirmed real)
   "notifications", // real, live Notification Centre feature, deferred conversion
   "NOTIFICATION_FILTERS", // static filter taxonomy
-  "messageThreads", // real, live Inbox feature, deferred conversion
+  // messageThreads was converted to real, persisted Supabase conversations
+  // (conversations/conversation_participants/messages) and fully deleted —
+  // see test/real-messaging.test.js.
   "adminStats" // internal Ops dashboard only
 ]);
 
@@ -260,7 +262,7 @@ test("no locale carries a mock.biz/offer/repProfile/listing/review namespace (Ph
       elsewhere. Found via this phase's own "grep for deleted mock
       symbols" validation step. */
 
-test("every notification's primaryActionView (and messageThreads context routing, same shape) points at a view that is still in DEEP_LINK_VIEWS or INTERNAL_URL_VIEWS — no dangling reference to a route deleted earlier in this migration", () => {
+test("every notification's primaryActionView points at a view that is still in DEEP_LINK_VIEWS or INTERNAL_URL_VIEWS — no dangling reference to a route deleted earlier in this migration", () => {
   const deepLinkViewsMatch = main.match(/const DEEP_LINK_VIEWS = new Set\(\[([\s\S]*?)\]\);/);
   const internalUrlViewsMatch = main.match(/const INTERNAL_URL_VIEWS = new Set\(\[([\s\S]*?)\]\);/);
   assert.ok(deepLinkViewsMatch && internalUrlViewsMatch, "DEEP_LINK_VIEWS/INTERNAL_URL_VIEWS must exist");

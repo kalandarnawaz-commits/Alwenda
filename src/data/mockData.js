@@ -420,65 +420,6 @@ export const notifications = [
 
 export const NOTIFICATION_FILTERS = ["needsAction", "alwen", "booking", "marketplace", "business", "community", "tyt", "payment", "profile", "system"];
 
-export const messageThreads = [
-  {
-    id: 901,
-    type: "professional",
-    participant: "Mantas Home Fix",
-    verified: true,
-    preview: "I can assemble the IKEA wardrobe tomorrow at 18:30 for €75.",
-    unread: 2,
-    timeKey: "mock.thread.thread1Time",
-    context: { kind: "quote", titleKey: "mock.thread.thread1ContextTitle", metaKey: "mock.thread.thread1ContextMeta" },
-    messages: [
-      { from: "them", textKey: "mock.thread.thread1Msg1", timeKey: "mock.thread.thread1Msg1Time" },
-      { from: "me", textKey: "mock.thread.thread1Msg2", timeKey: "mock.thread.thread1Msg2Time" },
-      { from: "them", textKey: "mock.thread.thread1Msg3", timeKey: "mock.thread.thread1Msg3Time" }
-    ]
-  },
-  {
-    id: 902,
-    type: "business",
-    participant: "Paupys Bistro",
-    verified: true,
-    preview: "We can hold a table for six until 17:00.",
-    unread: 1,
-    timeKey: "mock.thread.thread2Time",
-    context: { kind: "booking", titleKey: "mock.thread.thread2ContextTitle", metaKey: "mock.thread.thread2ContextMeta" },
-    messages: [
-      { from: "them", textKey: "mock.thread.thread2Msg1", timeKey: "mock.thread.thread2Msg1Time" },
-      { from: "them", textKey: "mock.thread.thread2Msg2", timeKey: "mock.thread.thread2Msg2Time" }
-    ]
-  },
-  {
-    id: 903,
-    type: "marketplace",
-    participant: "Nearby buyer",
-    verified: false,
-    preview: "Is the iPhone still available for pickup today?",
-    unread: 0,
-    timeKey: "mock.thread.thread3Time",
-    context: { kind: "listing", titleKey: "mock.thread.thread3ContextTitle", metaKey: "mock.thread.thread3ContextMeta" },
-    messages: [
-      { from: "them", textKey: "mock.thread.thread3Msg1", timeKey: "mock.thread.thread3Msg1Time" },
-      { from: "me", textKey: "mock.thread.thread3Msg2", timeKey: "mock.thread.thread3Msg2Time" }
-    ]
-  },
-  {
-    id: 904,
-    type: "alwen",
-    participant: "Alwen",
-    verified: true,
-    preview: "I grouped your city setup tasks and can complete the next three after approval.",
-    unread: 0,
-    timeKey: "mock.thread.thread4Time",
-    context: { kind: "plan", titleKey: "mock.thread.thread4ContextTitle", metaKey: "mock.thread.thread4ContextMeta" },
-    messages: [
-      { from: "them", textKey: "mock.thread.thread4Msg1", timeKey: "mock.thread.thread4Msg1Time" }
-    ]
-  }
-];
-
 export const adminStats = [
   { labelKey: "admin.adminListings", value: 128, trend: "+18%" },
   { labelKey: "admin.adminBusinesses", value: 84, trend: "+9%" },

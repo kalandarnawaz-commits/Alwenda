@@ -94,7 +94,7 @@ test("the CTA reads Find professionals and the transition stays in-place (no dat
 test("renderProCard/renderProfessional and the fabricated-conversation start-pro-conversation handler are fully removed, not just unused", () => {
   assert.doesNotMatch(main, /function renderProCard\(/);
   assert.doesNotMatch(main, /function renderProfessional\(/);
-  assert.doesNotMatch(main, /function startProfessionalConversation\(/);
+  assert.doesNotMatch(main, /startProfessionalConversation\(/, "the deleted mock-conversation function must not be reintroduced");
   assert.doesNotMatch(main, /data-action="start-pro-conversation"/);
 });
 

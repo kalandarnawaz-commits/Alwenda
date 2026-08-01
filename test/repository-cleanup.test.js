@@ -154,10 +154,15 @@ test("profile.public.publicProfileContextHire and publicProfileContextReview are
   }
 });
 
-test("mock.notif, mock.thread, and other still-consumed mock namespaces are untouched — this cleanup only removed namespaces with zero remaining readers", () => {
+test("mock.notif and other still-consumed mock namespaces are untouched — this cleanup only removed namespaces with zero remaining readers", () => {
   for (const dict of [en, lt, de]) {
     assert.ok(dict.mock?.notif, "mock.notif must remain — feeds the still-real notifications inbox");
-    assert.ok(dict.mock?.thread, "mock.thread must remain — feeds the still-real message threads inbox");
+  }
+});
+
+test("mock.thread is fully removed — messageThreads (its sole consumer) was converted to real, persisted Supabase conversations, not deferred", () => {
+  for (const dict of [en, lt, de]) {
+    assert.equal(dict.mock?.thread, undefined, "mock.thread must not remain — the mock Inbox it fed was replaced by real conversations");
   }
 });
 

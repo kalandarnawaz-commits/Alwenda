@@ -83,6 +83,10 @@ test("session_started exists for the week-2-return question this task named", ()
   assert.equal(validateEventPayload(ANALYTICS_EVENTS.SESSION_STARTED, {}).ok, true);
 });
 
+test("business_contacted no longer exists — its sole firer (the mock business-messaging flow) was removed when Business/Professional messaging were dropped for having no real recipient to message", () => {
+  assert.equal(ANALYTICS_EVENTS.BUSINESS_CONTACTED, undefined);
+});
+
 test("buildAnalyticsEventRecord stamps a stable anonymous/session id and the right shape for the analytics_events table", () => {
   const record = buildAnalyticsEventRecord(ANALYTICS_EVENTS.BUSINESS_VIEWED, { businessId: "b1" }, { userId: "user-1", appEnv: "test", appRelease: "1.0.0" });
   assert.equal(record.name, ANALYTICS_EVENTS.BUSINESS_VIEWED);
@@ -105,6 +109,7 @@ test("main.js wires the typed schema into trackEvent, ships to Supabase, and fir
   const main = await readRepoFile("src/main.js");
   assert.match(main, /import \{ validateEventPayload, buildAnalyticsEventRecord, AnalyticsSchemaError \} from "\.\/services\/analytics\.js/);
   assert.match(main, /recordAnalyticsEvent\(record\)/);
+  assert.doesNotMatch(main, /trackEvent\("business_contacted"/);
   assert.match(main, /function trackSessionStartedOncePerDay\(\)/);
   assert.match(main, /trackSessionStartedOncePerDay\(\);/);
 });

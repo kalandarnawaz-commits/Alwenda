@@ -21,7 +21,7 @@ test("the Hire public-profile Book button (and its underlying fake-professional 
   const main = await readRepoFile("src/main.js");
   assert.doesNotMatch(main, /data-person-action="request-booking"/);
   assert.doesNotMatch(main, /data-person-action="book"/, "the old fake-booking action name must not remain anywhere");
-  assert.doesNotMatch(main, /function startProfessionalConversation\(/);
+  assert.doesNotMatch(main, /startProfessionalConversation\(/, "the deleted mock-conversation function must not be reintroduced");
   assert.doesNotMatch(main, /isHireContext/, "the public-profile view no longer branches on a hire-professional identity that can't exist");
 });
 

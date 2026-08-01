@@ -6,9 +6,9 @@
  * producing unusable analytics data later.
  *
  * Every event name below is a real, already-existing call site in
- * src/main.js (found by grep across the whole file), plus session_started
- * — needed to answer "did a user come back in week 2", which nothing
- * previously tracked at all.
+ * src/main.js (found by grep across the whole file), plus one new one
+ * this task added: session_started — needed to answer "did a user come
+ * back in week 2", which nothing previously tracked at all.
  *
  * Field types: "string" | "number" | "boolean". A field name suffixed
  * with "?" is optional. Extra keys not listed for an event are rejected —
