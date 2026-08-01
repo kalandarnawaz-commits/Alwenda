@@ -1186,7 +1186,8 @@
     "conversationTypeHelpRequest": "Help Request",
     "contextHelpRequest": "Help Request",
     "participantUnknown": "Someone",
-    "sendError": "Could not send your message. Try again."
+    "sendError": "Could not send your message. Try again.",
+    "openError": "Could not open this conversation. Try again."
   },
   "business": {
     "dashboard": {

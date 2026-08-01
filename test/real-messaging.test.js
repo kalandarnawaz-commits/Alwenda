@@ -54,6 +54,27 @@ function extractExportedAsyncFunction(source, name) {
   throw new Error(`Could not find end of function ${name}`);
 }
 
+/** Like extractFunction, but safe for a destructured-object parameter (e.g.
+ * async function foo({ a, b })) — extractFunction's naive brace counting
+ * would otherwise close on the destructuring's own braces before ever
+ * reaching the real function body. Skips past the matching ")" first. */
+function extractFunctionWithDestructuredParams(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start !== -1, `function ${name} must exist`);
+  const signatureEnd = source.indexOf(")", start);
+  assert.ok(signatureEnd !== -1, `function ${name} must have a complete signature`);
+  let depth = 0;
+  for (let i = signatureEnd + 1; i < source.length; i += 1) {
+    if (source[i] === "{") {
+      depth += 1;
+    } else if (source[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`Could not find end of function ${name}`);
+}
+
 let main;
 let mockData;
 let supabaseClient;
@@ -164,6 +185,19 @@ test("startHelpRequestConversation also resolves a request rendered from the loa
   // null and the Message button silently do nothing.
   const fn = extractFunction(main, "startHelpRequestConversation");
   assert.match(fn, /findLoadedHelpRequestById\(helpRequestId\)/);
+});
+
+test("openRealConversation surfaces a real error to the user instead of only console.error, which previously made a real failure look like the Message button silently doing nothing", () => {
+  const fn = extractFunctionWithDestructuredParams(main, "openRealConversation");
+  assert.match(fn, /state\.conversationOpenError = null;/, "must clear any stale error at the start of every attempt");
+  assert.match(fn, /catch \(error\) \{[\s\S]*console\.error\("openRealConversation failed", error\);[\s\S]*state\.conversationOpenError = error\?\.message \|\| t\("messages\.openError"\);[\s\S]*render\(\);[\s\S]*\}/, "the catch block must set a visible error and re-render, not just log it");
+});
+
+test("state.conversationOpenError renders inline on both the listing and help-request detail pages, next to the Message button", () => {
+  const listingBody = extractFunction(main, "renderListingDetailBody");
+  assert.match(listingBody, /state\.conversationOpenError \? `<p class="auth-error" role="alert">\$\{escapeHtml\(state\.conversationOpenError\)\}<\/p>` : ""/);
+  const helpRequestBody = extractFunction(main, "renderRealHelpRequestDetail");
+  assert.match(helpRequestBody, /state\.conversationOpenError \? `<p class="auth-error" role="alert">\$\{escapeHtml\(state\.conversationOpenError\)\}<\/p>` : ""/);
 });
 
 /* ---------------------------------------------------------------------
