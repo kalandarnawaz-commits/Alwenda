@@ -872,6 +872,151 @@ export async function fetchMyHelpRequests() {
   return data || [];
 }
 
+/* ---- Real (Supabase-backed) 1:1 messaging. Separate from alwen_conversations/
+   alwen_messages above (the AI chat system) — these back user-to-user
+   conversations about a real listing or help request via the conversations/
+   conversation_participants/messages tables and their existing RLS
+   (202607150001_production_foundation.sql), plus the context_type
+   'help_request' + uniqueness added in
+   202608010001_help_request_messaging.sql. ---- */
+
+/** Finds the signed-in user's existing conversation with recipientUserId
+ * about this specific context (a listing or a help request), or creates
+ * one. Atomic against double-clicks/two tabs via the
+ * conversations_context_creator_unique_idx unique index + upsert: a racing
+ * second call resolves to the same row instead of a duplicate. Both
+ * participant rows are inserted by the creator in one call — allowed
+ * because "Conversation creators add participants" checks
+ * conversations.created_by = auth.uid(), not the participant row's own
+ * user_id, so the creator may add the recipient too. */
+export async function findOrCreateConversation({ contextType, contextId, recipientUserId, subject = null }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  if (user.id === recipientUserId) throw new Error("Cannot start a conversation with yourself.");
+
+  const { data: existing, error: findError } = await supabase
+    .from("conversations")
+    .select("id, created_by, subject, context_type, context_id, created_at, updated_at, conversation_participants!inner(user_id)")
+    .eq("context_type", contextType)
+    .eq("context_id", contextId)
+    .eq("conversation_participants.user_id", recipientUserId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (findError) throwIfError(findError, "findOrCreateConversation.find");
+  if (existing) {
+    return { id: existing.id, created_by: existing.created_by, subject: existing.subject, context_type: existing.context_type, context_id: existing.context_id, created_at: existing.created_at, updated_at: existing.updated_at };
+  }
+
+  const { data: created, error: createError } = await supabase
+    .from("conversations")
+    .upsert(
+      { created_by: user.id, subject, context_type: contextType, context_id: contextId },
+      { onConflict: "context_type,context_id,created_by" }
+    )
+    .select("id, created_by, subject, context_type, context_id, created_at, updated_at")
+    .single();
+  if (createError) throwIfError(createError, "findOrCreateConversation.create");
+
+  const { error: participantsError } = await supabase
+    .from("conversation_participants")
+    .upsert(
+      [
+        { conversation_id: created.id, user_id: user.id, role: "participant" },
+        { conversation_id: created.id, user_id: recipientUserId, role: "participant" }
+      ],
+      { onConflict: "conversation_id,user_id", ignoreDuplicates: true }
+    );
+  if (participantsError) throwIfError(participantsError, "findOrCreateConversation.participants");
+
+  return created;
+}
+
+/** Every conversation the signed-in user belongs to, newest activity first,
+ * with the other participant's id attached (this app is 1:1-only, so
+ * exactly one "other" participant per conversation). No last-message
+ * preview here — fetchLatestMessagesByConversationIds() below fills that
+ * in separately, since there's no single-call "latest row per group"
+ * query available here. */
+export async function fetchMyConversations() {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const { data: own, error: ownError } = await supabase
+    .from("conversation_participants")
+    .select("conversation_id")
+    .eq("user_id", user.id);
+  if (ownError) throwIfError(ownError, "fetchMyConversations.own");
+  const conversationIds = (own || []).map((row) => row.conversation_id);
+  if (!conversationIds.length) return [];
+
+  const [{ data: conversations, error: conversationsError }, { data: others, error: othersError }] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("id, subject, context_type, context_id, created_at, updated_at")
+      .in("id", conversationIds)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("conversation_participants")
+      .select("conversation_id, user_id")
+      .in("conversation_id", conversationIds)
+      .neq("user_id", user.id)
+  ]);
+  if (conversationsError) throwIfError(conversationsError, "fetchMyConversations.conversations");
+  if (othersError) throwIfError(othersError, "fetchMyConversations.others");
+
+  const otherByConversation = new Map((others || []).map((row) => [row.conversation_id, row.user_id]));
+  return (conversations || []).map((conversation) => ({ ...conversation, otherUserId: otherByConversation.get(conversation.id) || null }));
+}
+
+/** Latest message per conversation id, for inbox row previews. Fetches all
+ * messages across the given (already access-controlled) conversation ids
+ * and reduces to one per conversation client-side — bounded to the
+ * signed-in user's own conversations, so this stays small. */
+export async function fetchLatestMessagesByConversationIds(conversationIds) {
+  if (!conversationIds.length) return new Map();
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("conversation_id, sender_user_id, body, created_at")
+    .in("conversation_id", conversationIds)
+    .order("created_at", { ascending: false });
+  if (error) throwIfError(error, "fetchLatestMessagesByConversationIds");
+  const latestByConversation = new Map();
+  for (const message of data || []) {
+    if (!latestByConversation.has(message.conversation_id)) latestByConversation.set(message.conversation_id, message);
+  }
+  return latestByConversation;
+}
+
+export async function fetchConversationMessages(conversationId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, conversation_id, sender_user_id, body, attachments, created_at, read_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) throwIfError(error, "fetchConversationMessages");
+  return data || [];
+}
+
+export async function sendMessage({ conversationId, body }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+  const trimmed = String(body || "").trim();
+  if (!trimmed) throw new Error("Message body is required.");
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_user_id: user.id, body: trimmed })
+    .select("id, conversation_id, sender_user_id, body, attachments, created_at, read_at")
+    .single();
+  if (error) throwIfError(error, "sendMessage");
+  return data;
+}
+
 /** Best-effort write to the real analytics destination (see
  * src/services/analytics.js for the typed event schema this record must
  * already satisfy). A no-op when Supabase isn't configured, and callers

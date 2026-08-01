@@ -274,14 +274,16 @@ test("startListingConversation resolves a real listing reached only via the remo
   assert.match(fn, /state\.remoteListingDetail\.item/);
 });
 
-test("seller messaging is the same pre-existing simulated-conversation flow used everywhere in Marketplace — no new sign-in gate or Home-Feed-specific messaging behaviour was invented", () => {
-  // startListingConversation's openGeneratedConversation call (a simulated
-  // reply, not a real send) is genuinely how EVERY listing's "Message"
-  // button already behaves, mock or real — confirmed before this PR. This
-  // correction keeps that one consistent limitation across all entry
-  // points rather than inventing a different behaviour for real listings.
+test("seller messaging is real (Supabase-backed), not the old simulated-reply flow — sign-in gated, and never lets a seller message themselves", () => {
+  // startListingConversation now finds-or-creates a real conversation row
+  // (conversations/conversation_participants/messages) with the listing's
+  // real owner_user_id, via the shared openRealConversation() helper also
+  // used by Help Requests. No more fabricated instant reply.
   const fn = extractFunction(main, "startListingConversation");
-  assert.match(fn, /openGeneratedConversation\(/);
+  assert.doesNotMatch(fn, /openGeneratedConversation\(/, "the deleted mock-conversation function must not be reintroduced");
+  assert.match(fn, /state\.auth\.status !== "signedIn"/, "must gate on being signed in before resolving a recipient");
+  assert.match(fn, /recipientUserId === state\.auth\.user\.id/, "must not let a seller open a conversation with themselves");
+  assert.match(fn, /openRealConversation\(/);
 });
 
 /* ---------------------------------------------------------------------
