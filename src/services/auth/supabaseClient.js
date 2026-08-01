@@ -602,6 +602,52 @@ export async function createListing({
   return data;
 }
 
+export async function updateListing({
+  id,
+  title,
+  description,
+  category,
+  categoryId,
+  priceAmount,
+  priceCurrency,
+  pricePeriod,
+  neighbourhood,
+  condition,
+  pickupAvailable,
+  deliveryAvailable,
+  tags
+}) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const { data, error } = await supabase
+    .from("listings")
+    .update({
+      title,
+      description: description || null,
+      category,
+      category_id: categoryId || null,
+      price_amount: priceAmount || null,
+      price_currency: priceCurrency || "EUR",
+      price_period: pricePeriod || null,
+      location_label: neighbourhood || null,
+      neighbourhood: neighbourhood || null,
+      tags: tags && tags.length ? tags : [],
+      metadata: {
+        ...(condition ? { condition } : {}),
+        pickupAvailable: Boolean(pickupAvailable),
+        deliveryAvailable: Boolean(deliveryAvailable)
+      }
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throwIfError(error, "updateListing");
+  return data;
+}
+
 export async function getMyOfferorStatus() {
   const supabase = await getClient();
   const user = await getCurrentUser();
@@ -768,6 +814,18 @@ export async function fetchListingImages(listingId) {
     .order("sort_order", { ascending: true });
   if (error) throwIfError(error, "fetchListingImages");
   return (data || []).map((row) => ({ ...row, publicUrl: supabase.storage.from("listing-photos").getPublicUrl(row.storage_path).data.publicUrl }));
+}
+
+export async function deleteListingImage({ id, storagePath }) {
+  const supabase = await getClient();
+  const user = await getCurrentUser();
+  if (!user) throw new AuthNotConfiguredError();
+
+  const { error: storageError } = await supabase.storage.from("listing-photos").remove([storagePath]);
+  if (storageError) throwIfError(storageError, "deleteListingImage.storage");
+
+  const { error } = await supabase.from("listing_images").delete().eq("id", id);
+  if (error) throwIfError(error, "deleteListingImage");
 }
 
 export async function fetchMyListings() {

@@ -86,7 +86,11 @@ test("applyCreatedListing merges a freshly-created listing into myListingsPool i
 
 test("submitListingForm calls applyCreatedListing on success — the create-and-merge path is actually wired, not just defined", () => {
   const fn = extractFunction(main, "submitListingForm");
-  assert.match(fn, /applyCreatedListing\(created\)/);
+  // submitListingForm also branches into an edit/update path (applyUpdatedListing)
+  // when state.listingDraft.editingListingId is set — the create path below
+  // (record comes from createListing(), not updateListing()) still runs
+  // applyCreatedListing exactly as before.
+  assert.match(fn, /applyCreatedListing\(record\)/);
 });
 
 /* ---------------------------------------------------------------------

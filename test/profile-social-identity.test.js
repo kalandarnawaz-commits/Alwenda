@@ -166,21 +166,20 @@ test("follow counts come from a real fetchFollowCounts call, never computed clie
   assert.match(fn, /fetchFollowCounts\(userId\)/);
 });
 
-test("Saved is not a visible profile tab anywhere — there is no real saved-listings query backing it yet", async () => {
+test("Saved is not a visible profile section anywhere — there is no real saved-listings query backing it yet", async () => {
   const main = await readRepoFile("src/main.js");
-  assert.match(main, /const OWN_USER_PROFILE_TABS = \["listings", "reviews", "activity", "about"\];/);
-  assert.match(main, /const PUBLIC_USER_PROFILE_TABS = \["listings", "reviews", "activity", "about"\];/);
-  // Neither the tab-switch/data-loading logic nor the listing-grid/tab-panel
-  // render logic references "saved" anymore — a dead tab that always shows
+  assert.match(main, /const USER_PROFILE_SECTIONS = \["listings", "reviews", "activity", "about"\];/);
+  // Neither the data-loading logic nor the listing-grid/section render
+  // logic references "saved" anymore — a dead section that always shows
   // an unrelated empty state must not ship. (Contribute's own, unrelated
   // "saved places" activity row elsewhere in this file is out of scope and
   // untouched — this checks only the userProfile functions.)
   const loadTabData = extractFunction(main, "loadUserProfileTabData");
   const listingGrid = extractFunction(main, "renderUserProfileListingGrid");
-  const tabPanel = extractFunction(main, "renderUserProfileTabPanel");
+  const sections = extractFunction(main, "renderUserProfileSections");
   const tabLabelStart = main.indexOf("const USER_PROFILE_TAB_LABEL = {");
   const tabLabelBlock = main.slice(tabLabelStart, main.indexOf("};", tabLabelStart));
-  for (const block of [loadTabData, listingGrid, tabPanel, tabLabelBlock]) {
+  for (const block of [loadTabData, listingGrid, sections, tabLabelBlock]) {
     assert.doesNotMatch(block, /"saved"/);
   }
 });
@@ -202,14 +201,26 @@ test("own-profile actions differ from another account's actions on the hero", as
   assert.match(fn, /data-user-profile-block="true"/);
 });
 
-test("profile tabs are a real WAI-ARIA tablist with keyboard-reachable, labelled tabs", async () => {
+test("profile sections are stacked and always visible — no tab-switching", async () => {
   const main = await readRepoFile("src/main.js");
-  const fn = extractFunction(main, "renderUserProfileTabs");
-  assert.match(fn, /role="tablist"/);
-  assert.match(fn, /role="tab"/);
-  assert.match(fn, /aria-selected="\$\{profile\.activeTab === tab\}"/);
-  assert.match(fn, /aria-controls="profile-tabpanel"/);
-  assert.match(fn, /role="tabpanel"/);
+  const fn = extractFunction(main, "renderUserProfileSections");
+  // No tab-switching semantics remain — every section renders unconditionally,
+  // driven by the fixed USER_PROFILE_SECTIONS order rather than one active tab.
+  assert.doesNotMatch(fn, /role="tablist"/);
+  assert.doesNotMatch(fn, /role="tab"/);
+  assert.doesNotMatch(fn, /data-user-profile-tab/);
+  assert.match(fn, /USER_PROFILE_SECTIONS\.map/);
+  assert.match(fn, /class="settings-section"/);
+  assert.match(fn, /USER_PROFILE_SECTION_RENDERER\[key\]\(profile\)/);
+
+  const rendererStart = main.indexOf("const USER_PROFILE_SECTION_RENDERER = {");
+  const rendererBlock = main.slice(rendererStart, main.indexOf("};", rendererStart));
+  for (const key of ["listings", "reviews", "activity", "about"]) {
+    assert.match(rendererBlock, new RegExp(`${key}: renderUserProfile`), `${key} must map to a real render function`);
+  }
+
+  assert.doesNotMatch(main, /function switchUserProfileTab\(/);
+  assert.doesNotMatch(main, /data-user-profile-tab/);
 });
 
 test("each listing card in the grid navigates to its own real listing detail view", async () => {

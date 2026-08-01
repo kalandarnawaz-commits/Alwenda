@@ -1612,6 +1612,8 @@
   "createListing": {
     "createListingTitle": "List something to sell or rent",
     "createListingHint": "This publishes a real listing to Marketplace right away.",
+    "editTitle": "Edit your listing",
+    "editSubmitCta": "Save changes",
     "titlePlaceholder": "e.g. Trek mountain bike, barely used",
     "descriptionPlaceholder": "Add condition, size, or anything a buyer should know.",
     "priceLabel": "Price (optional)",
