@@ -9029,7 +9029,15 @@ async function openRealConversation({ contextType, contextId, recipientUserId })
 
 async function startListingConversation(listingId) {
   if (state.auth.status !== "signedIn") return;
-  const item = state.remoteListingDetail.item && String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null;
+  // Resolve the item the exact same way renderListingDetail() does — the
+  // local pool (myListingsPool, which also carries other users' real
+  // listings merged in by refreshMyListings()) is checked first, and only
+  // an unmatched remoteListingDetail fetch is used as a fallback. Reading
+  // only remoteListingDetail here (as before) silently failed to find a
+  // seller for any listing actually rendered from the local pool branch —
+  // the common case — leaving the Message button a no-op.
+  const item = myListingsPool.find((listing) => String(listing.id) === String(listingId))
+    || (state.remoteListingDetail.item && String(state.remoteListingDetail.id) === String(listingId) ? state.remoteListingDetail.item : null);
   const recipientUserId = item?.sellerId;
   if (!recipientUserId || recipientUserId === state.auth.user.id) return;
   await openRealConversation({ contextType: "listing", contextId: listingId, recipientUserId });
@@ -9041,7 +9049,15 @@ async function startListingConversation(listingId) {
  * profile" link on that page. */
 async function startHelpRequestConversation(helpRequestId) {
   if (state.auth.status !== "signedIn") return;
-  const record = String(state.remoteHelpRequestDetail.id) === String(helpRequestId) ? state.remoteHelpRequestDetail.item : null;
+  // Resolve the record the exact same way renderLiveOpportunityDetail() does
+  // — findLoadedHelpRequestById() (the already-loaded opportunity feed) is
+  // checked first, and only an unmatched remoteHelpRequestDetail fetch is
+  // used as a fallback. Reading only remoteHelpRequestDetail here (as
+  // before) silently failed to find an author for any request actually
+  // rendered from the feed-cache branch — the common case — leaving the
+  // Message button a no-op.
+  const record = findLoadedHelpRequestById(helpRequestId)
+    || (String(state.remoteHelpRequestDetail.id) === String(helpRequestId) ? state.remoteHelpRequestDetail.item : null);
   const author = record ? publicHelpRequestAuthor(record) : null;
   if (!author?.userId || author.userId === state.auth.user.id) return;
   await openRealConversation({ contextType: "help_request", contextId: helpRequestId, recipientUserId: author.userId });

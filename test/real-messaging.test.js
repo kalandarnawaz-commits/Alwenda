@@ -152,6 +152,20 @@ test("startHelpRequestConversation resolves the real author id from the loaded d
   assert.match(fn, /openRealConversation\(/);
 });
 
+test("startHelpRequestConversation also resolves a request rendered from the loaded opportunity-feed branch, not only the remote-cache branch — the Message button silently no-opped for any request reached that way", () => {
+  // renderLiveOpportunityDetail() resolves a record from
+  // findLoadedHelpRequestById() (state.opportunityFeed.helpRequests) FIRST
+  // and only falls back to state.remoteHelpRequestDetail when not found
+  // there — the exact same "local cache first" router pattern
+  // renderListingDetail() uses for listings. startHelpRequestConversation
+  // previously only ever read state.remoteHelpRequestDetail, so any
+  // request actually displayed via the feed-cache branch (the common
+  // case — anything reached from Live Opportunities/Home) had record stay
+  // null and the Message button silently do nothing.
+  const fn = extractFunction(main, "startHelpRequestConversation");
+  assert.match(fn, /findLoadedHelpRequestById\(helpRequestId\)/);
+});
+
 /* ---------------------------------------------------------------------
    4. The old mock messaging system is fully deleted, not left half-used.
 --------------------------------------------------------------------- */

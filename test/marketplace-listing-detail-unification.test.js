@@ -274,6 +274,19 @@ test("startListingConversation resolves a real listing reached only via the remo
   assert.match(fn, /state\.remoteListingDetail\.item/);
 });
 
+test("startListingConversation also resolves a listing rendered from the local myListingsPool branch, not only the remote-cache branch — the Message button silently no-opped for any listing reached that way", () => {
+  // renderListingDetail() resolves an item from myListingsPool FIRST (see
+  // "renderListingDetail() is a thin router" above) and only falls back to
+  // state.remoteListingDetail when not found there. startListingConversation
+  // previously only ever read state.remoteListingDetail, so any listing
+  // actually displayed via the myListingsPool branch (the common case —
+  // includes other users' real listings merged in by refreshMyListings())
+  // had item stay null, recipientUserId stay undefined, and the Message
+  // button silently do nothing.
+  const fn = extractFunction(main, "startListingConversation");
+  assert.match(fn, /myListingsPool\.find\(\(listing\) => String\(listing\.id\) === String\(listingId\)\)/);
+});
+
 test("seller messaging is real (Supabase-backed), not the old simulated-reply flow — sign-in gated, and never lets a seller message themselves", () => {
   // startListingConversation now finds-or-creates a real conversation row
   // (conversations/conversation_participants/messages) with the listing's
