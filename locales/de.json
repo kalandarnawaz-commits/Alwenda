@@ -1186,7 +1186,8 @@
     "conversationTypeHelpRequest": "Hilfeanfrage",
     "contextHelpRequest": "Hilfeanfrage",
     "participantUnknown": "Jemand",
-    "sendError": "Nachricht konnte nicht gesendet werden. Bitte versuche es erneut."
+    "sendError": "Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "openError": "Dieses Gespräch konnte nicht geöffnet werden. Bitte versuche es erneut."
   },
   "business": {
     "dashboard": {
